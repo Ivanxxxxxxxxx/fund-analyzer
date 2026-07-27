@@ -1,0 +1,19 @@
+[Unit]
+Description=Fund Portfolio Analyzer (腾讯云 Lighthouse)
+After=network.target
+
+[Service]
+Type=simple
+# Lighthouse Ubuntu 系统镜像默认 python3 在 /usr/bin/python3；其他镜像请用 `which python3` 替换
+User=root
+WorkingDirectory=/opt/fund-analyzer
+# 监听端口：8000（防火墙放行即可）；若要直接 http://IP 免端口，改成 80（root 可绑）
+Environment=PORT=8000
+ExecStart=/usr/bin/python3 /opt/fund-analyzer/app.py
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/fund-analyzer.log
+StandardError=append:/var/log/fund-analyzer.log
+
+[Install]
+WantedBy=multi-user.target

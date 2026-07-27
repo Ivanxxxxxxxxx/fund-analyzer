@@ -1,0 +1,19 @@
+#!/bin/bash
+# 腾讯云 SCF Web 函数启动文件（必须叫 scf_bootstrap，且需可执行权限 755）
+# Web 函数要求 Web Server 监听 9000 端口
+set -e
+cd /var/user
+export PORT=9000
+# 优先用平台 PATH 中的 python3，逐层兜底常见绝对路径
+if command -v python3 >/dev/null 2>&1; then
+  PY=python3
+elif command -v python >/dev/null 2>&1; then
+  PY=python
+else
+  PY=/var/lang/python39/bin/python3.9
+fi
+echo "scf_bootstrap: using interpreter=$PY cwd=$(pwd) PORT=$PORT"
+echo "scf_bootstrap: listing /var/user ->"
+ls -la /var/user
+# exec 让 app.py 接管当前进程（前台运行，平台据此认为服务已就绪）
+exec "$PY" app.py

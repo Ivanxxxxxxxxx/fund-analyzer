@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: fund-analyzer
+    runtime: python
+    plan: free
+    branch: main
+    startCommand: python app.py
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        runTimeValue: true

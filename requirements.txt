@@ -1,0 +1,2 @@
+# 本项目仅使用 Python 标准库，无第三方依赖。
+# 云平台无需 pip install 任何包，直接 `python app.py` 即可启动。
