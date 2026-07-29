@@ -1110,6 +1110,162 @@ def _build_reasons(fac, verdict, cap, amount, capital, p1, p3, p6, p12):
     return r
 
 
+# ---------------- 一键配资 / 可执行优化方案 ----------------
+def _fund_returns(code, days=730):
+    """返回基金最近 250 个交易日的日收益率（与 _compute_factors 共用 history 缓存）。"""
+    try:
+        hist = get_history(code, days)
+        data = hist.get("data") or []
+        closes = [d["nav"] for d in data if d.get("nav") is not None]
+        rets = [closes[i] / closes[i - 1] - 1 for i in range(1, len(closes))]
+        return rets[-250:]
+    except Exception:
+        return []
+
+
+def _corr(a, b):
+    n = min(len(a), len(b))
+    if n < 20:
+        return None
+    a, b = a[-n:], b[-n:]
+    ma, mb = _mean(a), _mean(b)
+    da = [x - ma for x in a]
+    db = [x - mb for x in b]
+    cov = _mean([da[i] * db[i] for i in range(n)])
+    va, vb = _std(a), _std(b)
+    if va == 0 or vb == 0:
+        return None
+    return cov / (va * vb)
+
+
+# 各资产大类对应的 rankhandler ft（用于寻找低相关替代基金）
+_REPL_FT = {"股票型": ["gp", "hh", "zs"], "债券型": ["zq"],
+            "海外(QDII)": ["qdii"], "黄金": [], "货币型": []}
+
+
+def _find_replacement(repl, keep, codes, rets_map, topn=8):
+    """为相关性过高的 repl 找一个与 keep 低相关的同类替代基金。"""
+    asset = repl.get("asset")
+    fts = _REPL_FT.get(asset, [])
+    if not fts:
+        return None
+    have = set(codes) | {repl.get("code")}
+    cands = []
+    for ft in fts:
+        try:
+            rows = get_rank_list(ft, 40)
+        except Exception:
+            rows = []
+        for code, name, y1, ed in rows:
+            if code in have or y1 < 0:
+                continue
+            cands.append((code, name, y1))
+    if not cands:
+        return None
+    cands.sort(key=lambda x: x[2], reverse=True)
+    keep_rets = rets_map.get(keep.get("code"), [])
+    best = None
+    for code, name, y1 in cands[:topn]:
+        cr = _corr(_fund_returns(code, 730), keep_rets)
+        if cr is None:
+            continue
+        if best is None or cr < best[1]:
+            best = ((code, name, y1), cr)
+    if not best:
+        return None
+    (code, name, y1), cr = best
+    return {"code": code, "name": name, "corr": round(cr, 2),
+            "reason": "近1年收益 +%.0f%%，与保留基金相关系数仅 %.2f，分散效果显著优于原基金。" % (y1, cr)}
+
+
+def build_allocate(funds, principal):
+    """一键配资核心：返回配置金额、相关性矩阵、可执行优化（含具体替换方案）、买入方案。
+    funds: [{code,name,weight,asset}]；principal: 本金（元）。"""
+    items, rets_map = [], {}
+    total_w = sum(float(f.get("weight") or 0) for f in funds)
+    for f in funds:
+        code = f.get("code")
+        if not code:
+            continue
+        w = (float(f.get("weight") or 0) / total_w) if total_w else (1.0 / max(1, len(funds)))
+        amount = round(principal * w, 2)
+        try:
+            fac = _compute_factors(code)
+        except Exception:
+            fac = None
+        rets_map[code] = _fund_returns(code, 730)
+        items.append({"code": code, "name": f.get("name"), "asset": f.get("asset"),
+                      "weight": round(w, 4), "amount": amount,
+                      "type": (fac or {}).get("type", ""), "composite": (fac or {}).get("composite"),
+                      "valPct": (fac or {}).get("valPct")})
+    codes = [it["code"] for it in items]
+    corr = {}
+    for i in range(len(codes)):
+        for j in range(i + 1, len(codes)):
+            c = _corr(rets_map[codes[i]], rets_map[codes[j]])
+            if c is not None:
+                corr["%s|%s" % (codes[i], codes[j])] = round(c, 3)
+
+    # 可执行优化：高相关性对 → 具体替换方案
+    opts = []
+    handled = set()
+    for c, (a, b) in sorted(((v, k) for k, v in corr.items()), reverse=True):
+        if c < 0.8:
+            break
+        if a in handled or b in handled:
+            continue
+        fa = next(x for x in items if x["code"] == a)
+        fb = next(x for x in items if x["code"] == b)
+        sa = fa.get("composite") or 50
+        sb = fb.get("composite") or 50
+        keep, repl = (fa, fb) if sa >= sb else (fb, fa)
+        rep = _find_replacement(repl, keep, codes, rets_map)
+        handled.add(keep["code"]); handled.add(repl["code"])
+        if rep:
+            opts.append({"type": "corr", "level": "warn",
+                "text": "%s 与 %s 相关系数 %.2f，几乎同涨同跌，持有两只等于押注同一方向。"
+                         % (fa["name"], fb["name"], c),
+                "replace": {"from": {"code": repl["code"], "name": repl["name"]},
+                            "to": {"code": rep["code"], "name": rep["name"], "corr": rep["corr"],
+                                   "link": "https://fund.eastmoney.com/%s.html" % rep["code"]},
+                            "oldCorr": round(c, 2), "newCorr": rep["corr"], "reason": rep["reason"]}})
+        else:
+            opts.append({"type": "corr", "level": "warn",
+                "text": "%s 与 %s 相关系数 %.2f，相关性偏高，建议二选一保留（保留评分更高者），或手动调入低相关品种。"
+                         % (fa["name"], fb["name"], c)})
+
+    # 集中度预警
+    by_asset = {}
+    for it in items:
+        by_asset[it["asset"]] = by_asset.get(it["asset"], 0) + it["weight"]
+    for asset, w in by_asset.items():
+        if w > 0.6 and asset in ("股票型", "海外(QDII)"):
+            opts.append({"type": "concentration", "level": "warn",
+                "text": "%s 占组合 %.0f%%，过于集中。建议降至 60%% 以内，将约 %s 调仓至债券型 / 货币型等防御资产。"
+                         % (asset, w * 100, "¥" + format(round(principal * (w - 0.6)), ","))})
+
+    # 买入方案（具体到金额 + 估值策略 + 购买入口）
+    buy = []
+    for it in items:
+        vp = it.get("valPct")
+        if vp is None:
+            strat = "估值分位数据不足，建议按周定投、分批建仓以平滑成本。"
+        elif vp > 70:
+            strat = "估值分位 %.0f%% 偏高，宜分 3 批逢回调买入，切忌一次性追高。" % vp
+        elif vp < 30:
+            strat = "估值分位 %.0f%% 偏低，具备布局价值，可一次性或加大建仓。" % vp
+        else:
+            strat = "估值分位 %.0f%% 中性，建议按周定投分批买入。" % vp
+        buy.append({"code": it["code"], "name": it["name"], "asset": it["asset"], "type": it["type"],
+                    "weight": it["weight"], "amount": it["amount"], "strategy": strat,
+                    "verdict": None, "composite": it["composite"],
+                    "link": "https://fund.eastmoney.com/%s.html" % it["code"]})
+
+    return {"ok": True, "principal": principal, "items": items, "corr": corr,
+            "optimizations": opts, "buyPlan": buy,
+            "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+
 def advise_fund(code, capital=100000):
     fac = _compute_factors(code)
     if fac is None:
@@ -1249,6 +1405,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # SPA 兜底：其余未匹配路径（兼容函数 URL 可能带上的路径前缀）统一返回首页
         with open(os.path.join(BASE, "index.html"), "rb") as f:
             self._send(200, f.read(), "text/html; charset=utf-8")
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            body = json.loads(raw or b"{}")
+        except Exception:
+            body = {}
+        try:
+            if path == "/api/allocate":
+                funds = body.get("funds") or []
+                try:
+                    principal = float(body.get("principal") or 0)
+                except Exception:
+                    principal = 0.0
+                data = build_allocate(funds, principal)
+            elif path == "/api/optimize":
+                # 组合诊断：用现有持仓权重（无权重则等权），principal=0 仅算相关性与替换方案
+                funds = body.get("funds") or []
+                data = build_allocate(funds, 0)
+            else:
+                data = {"ok": False, "error": "unknown endpoint"}
+            self._send(200, json.dumps(data, ensure_ascii=False))
+        except Exception as e:
+            self._send(200, json.dumps({"ok": False, "error": str(e)}))
 
     def log_message(self, *a):
         pass
