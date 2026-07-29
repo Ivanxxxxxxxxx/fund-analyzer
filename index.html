@@ -479,7 +479,7 @@ let donutChart = null;
 function loadHoldings(){ try{return JSON.parse(localStorage.getItem("fp_holdings")||"[]")}catch(e){return[]} }
 function saveHoldings(){ localStorage.setItem("fp_holdings", JSON.stringify(holdings)) }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
-async function api(path, timeout=120000){
+async function api(path, timeout=180000){
   const ctrl=new AbortController();
   const tid=setTimeout(()=>ctrl.abort(), timeout);
   try{
@@ -1038,7 +1038,7 @@ function renderTrend(dates, portCum, benchCum, benchName){
 async function loadRecommend(){
   const box=document.getElementById("recoBox");
   box.innerHTML='<div class="empty">🔄 正在动态扫描全市场基金（实时榜单＋多因子精评）…首次约需 30-60 秒，结果缓存 30 分钟。</div>';
-  const d=await api("/api/recommend", 120000).catch(e=>({ok:false,error:String(e)}));
+  const d=await api("/api/recommend", 180000).catch(e=>({ok:false,error:String(e)}));
   if(!d.ok){ box.innerHTML='<div class="empty">推荐生成失败：'+(d.error||"")+'</div>'; return; }
   const env=d.env||{};
   const regimeTxt = env.ok ? (env.regime+"（市场温度 "+env.score+"）") : "市场数据获取受限";
