@@ -110,6 +110,11 @@ def _std(xs):
     return (sum((x - m) ** 2 for x in xs) / (len(xs) - 1)) ** 0.5
 
 
+def _s(x):
+    """带符号百分比格式化（小数→字符串）。"""
+    return ("+%.1f%%" % (x * 100)) if x >= 0 else ("%.1f%%" % (x * 100))
+
+
 # ---------------- 天天基金接口封装 ----------------
 
 def search_fund(key):
@@ -225,11 +230,49 @@ def _extract_var(txt, var):
     return None
 
 
+def _extract_perf_eval(txt):
+    """东方财富五维评分：选证能力/收益率/抗风险/稳定性/择时能力 + 综合分 avr。"""
+    m = re.search(r'Data_performanceEvaluation\s*=\s*(\{.*?\});', txt, re.S)
+    if not m:
+        return None
+    try:
+        d = json.loads(m.group(1))
+        dims = dict(zip((d.get("categories") or []), (d.get("data") or [])))
+        avr = d.get("avr")
+        try:
+            avr = float(avr)
+        except Exception:
+            avr = 0.0
+        return {"avr": avr, "dims": dims}
+    except Exception:
+        return None
+
+
+def _extract_managers(txt):
+    """现任基金经理：名称 + 任职起始日（用于计算任职年限）。"""
+    m = re.search(r'Data_currentFundManager\s*=\s*(\[.*?\]);', txt, re.S)
+    if not m:
+        return []
+    try:
+        arr = json.loads(m.group(1))
+        out = []
+        for x in arr:
+            if not isinstance(x, dict):
+                continue
+            name = x.get("name") or x.get("xm") or ""
+            sdate = x.get("sdate") or x.get("beginDate") or ""
+            out.append({"name": name, "sdate": str(sdate)})
+        return out
+    except Exception:
+        return []
+
+
 def _get_detail_raw(code):
-    """基金档案：名称/类型/最新净值+涨跌/资产配置/前十大持仓。"""
+    """基金档案：名称/类型/最新净值+涨跌/资产配置/前十大持仓/五维评分/经理。"""
     res = {"ok": True, "code": code, "name": "", "type": "", "nav": None,
            "navDate": None, "changePct": None,
-           "assetAllocation": [], "industry": [], "holdings": []}
+           "assetAllocation": [], "industry": [], "holdings": [],
+           "perfEval": None, "managers": []}
     txt = None
     for host in ("https://fund.eastmoney.com", "https://fundf10.eastmoney.com"):
         try:
@@ -306,6 +349,16 @@ def _get_detail_raw(code):
         res["industryBasis"] = "基于前十大重仓股(证监会行业)，覆盖约 %.0f%% 仓位" % (total_pct * 100)
     else:
         res["industry"] = []
+    # 东方财富五维评分（选证/收益/抗风险/稳定/择时 + 综合分）
+    try:
+        res["perfEval"] = _extract_perf_eval(txt)
+    except Exception:
+        res["perfEval"] = None
+    # 现任基金经理（名称 + 任职起始日）
+    try:
+        res["managers"] = _extract_managers(txt)
+    except Exception:
+        res["managers"] = []
     return res
 
 
@@ -341,7 +394,9 @@ def _get_fund_raw(code):
             "assetAllocation": detail.get("assetAllocation") or [],
             "industry": detail.get("industry") or [],
             "industryBasis": detail.get("industryBasis") or "",
-            "holdings": detail.get("holdings") or []}
+            "holdings": detail.get("holdings") or [],
+            "perfEval": detail.get("perfEval") or None,
+            "managers": detail.get("managers") or []}
 
 
 def _get_history_raw(code, days=365):
@@ -556,9 +611,32 @@ def _get_index_series(secid, days=800):
     return {"dates": dates, "values": values}
 
 
+def _bench_daily_returns(days=730):
+    """沪深300 日收益率序列（用于 Alpha/Beta/信息比率计算），日频缓存。"""
+    rows = _get_index_kline("1.000300", days)
+    if len(rows) < 2:
+        return []
+    return [rows[i] / rows[i - 1] - 1 for i in range(1, len(rows))]
+
+
+def _index_valuation_percentile(secid, years=5):
+    """指数估值分位：以近 N 年收盘价的百分位近似（海外节点取不到官方 PE 序列时的稳健代理）。
+    返回 0-100，越高越贵；样本不足返回 None。"""
+    rows = _get_index_kline(secid, max(60, int(years * 252)))
+    if len(rows) < 60:
+        return None
+    cur = rows[-1]
+    below = sum(1 for x in rows if x <= cur)
+    return round(below / len(rows) * 100, 1)
+
+
 def _compute_market_env():
+    domestic = ["沪深300", "中证500", "创业板指"]
     closes = {}
-    for name, secid in INDEX_MAP.items():
+    for name in domestic:
+        secid = INDEX_MAP.get(name)
+        if not secid:
+            continue
         try:
             rows = _get_index_kline(secid, 300)
             if len(rows) >= 60:
@@ -571,121 +649,355 @@ def _compute_market_env():
     n = len(hs)
 
     def ret(k):
-        return hs[-1] / hs[-1 - k] - 1 if n > k else None
+        return hs[-1] / hs[-1 - k] - 1 if n > k else 0.0
 
     r20, r60, r120, r250 = ret(20), ret(60), ret(120), ret(250)
     rets = [hs[i] / hs[i - 1] - 1 for i in range(1, n)]
     vol = _std(rets) * _sqrt(252)
     peak = max(hs[-min(250, n):])
     dd = hs[-1] / peak - 1
-    # 市场温度：动量 + 回撤综合（0-100）
+
+    # 多指数综合动量 / 波动 / 回撤
+    moms, vols, dds = [], [], []
+    indices = {}
+    for name, rows in closes.items():
+        m = len(rows)
+
+        def rr(k):
+            return rows[-1] / rows[-1 - k] - 1 if m > k else 0.0
+
+        r120i, r250i = rr(120), rr(250)
+        ri = [rows[i] / rows[i - 1] - 1 for i in range(1, m)]
+        voli = _std(ri) * _sqrt(252)
+        pi = max(rows[-min(250, m):])
+        ddi = rows[-1] / pi - 1
+        moms.append(r120i)
+        vols.append(voli)
+        dds.append(ddi)
+        indices[name] = {"r120": round(r120i, 4), "r250": round(r250i, 4),
+                         "vol": round(voli, 4), "dd": round(ddi, 4)}
+    mom = _mean(moms)
+    vol_avg = _mean(vols)
+    dd_avg = _mean(dds)
+
+    # 市场温度：综合动量 + 回撤 + 波动惩罚（0-100）
     score = 50
-    if r120 is not None:
-        score += 20 if r120 > 0.10 else (-20 if r120 < -0.10 else 0)
-    if dd is not None:
-        score += 10 if dd > -0.10 else (-15 if dd < -0.25 else 0)
-    score = max(0, min(100, score))
+    score += 25 if mom > 0.10 else (-25 if mom < -0.10 else 0)
+    score += 10 if dd_avg > -0.10 else (-15 if dd_avg < -0.25 else 0)
+    score += -8 if vol_avg > 0.25 else 0
+    score = max(0, min(100, int(score)))
+
+    # 估值分位（近5年价格百分位代理；海外节点取不到官方 PE 序列时的稳健替代）
+    valuation = {}
+    for name in domestic:
+        secid = INDEX_MAP.get(name)
+        if not secid:
+            continue
+        try:
+            vp = cached("val", secid, _daily_ttl(),
+                        lambda s=secid: _index_valuation_percentile(s, 5))
+            if vp is not None:
+                valuation[name] = vp
+        except Exception:
+            pass
+
     regime = "牛市氛围" if score >= 65 else ("熊市氛围" if score <= 35 else "震荡市")
     return {"ok": True, "regime": regime, "score": score,
             "r20": r20, "r60": r60, "r120": r120, "r250": r250,
-            "vol": vol, "dd": dd, "available": list(closes.keys())}
+            "vol": vol, "dd": dd, "mom": round(mom, 4),
+            "indices": indices, "valuation": valuation,
+            "available": list(closes.keys())}
 
 
 def get_market_env():
     return cached("market", "env", _daily_ttl(), _compute_market_env)
 
 
-# 精选基金（按类别，给出备选代码，工具会实时校验名称后展示）
-CURATED = {
-    "沪深300指数": ["110020", "000051"],
-    "中证500指数": ["000008", "001556"],
-    "债券型(稳健)": ["110017", "000191"],
+# 基金池：覆盖主要资产类别的候选标的，工具实时拉取多因子数据、按类别筛选 Top N
+UNIVERSE = {
+    "沪深300": ["110020", "000051", "050002"],
+    "中证500": ["000008", "001556", "161017"],
+    "创业板": ["110026", "003765"],
+    "中证红利": ["100032", "009051"],
+    "债券型": ["110017", "000191", "050011"],
     "货币基金": ["000198"],
-    "海外(QDII)": ["161130", "270042"],
-    "黄金": ["000216"],
+    "海外(QDII)": ["161130", "270042", "161128"],
+    "黄金": ["000216", "518880"],
+}
+# 类别 → 大类资产配置桶
+_ASSET = {
+    "沪深300": "股票型", "中证500": "股票型", "创业板": "股票型", "中证红利": "股票型",
+    "债券型": "债券型", "货币基金": "货币型", "海外(QDII)": "海外(QDII)", "黄金": "黄金",
 }
 
 
 def recommend_portfolio():
     env = get_market_env()
+    # 大类资产配置（含估值分位微调）
     if not env.get("ok"):
-        alloc = {"股票型": 0.35, "海外(QDII)": 0.20, "债券型": 0.30, "货币型": 0.15}
-        note = "市场指数数据获取受限，采用均衡默认配置（股35/海外20/债30/货15），请以实际行情为准。"
+        alloc = {"股票型": 0.35, "海外(QDII)": 0.18, "债券型": 0.30, "货币型": 0.12, "黄金": 0.05}
+        note = "市场指数数据获取受限，采用均衡默认配置，请以实际行情为准。"
     else:
-        r120 = env.get("r120") or 0
-        vol = env.get("vol") or 0.20
-        dd = env.get("dd") or 0
+        val_hs = env.get("valuation", {}).get("沪深300")
+        val_zz = env.get("valuation", {}).get("中证500")
+        avg_val = [v for v in (val_hs, val_zz) if v is not None]
+        avg_val = _mean(avg_val) if avg_val else None
         if env["regime"] == "牛市氛围":
-            alloc = {"股票型": 0.50, "海外(QDII)": 0.20, "债券型": 0.18, "货币型": 0.12}
+            alloc = {"股票型": 0.50, "海外(QDII)": 0.18, "债券型": 0.17, "货币型": 0.10, "黄金": 0.05}
         elif env["regime"] == "熊市氛围":
-            alloc = {"股票型": 0.22, "海外(QDII)": 0.10, "债券型": 0.43, "货币型": 0.25}
+            alloc = {"股票型": 0.22, "海外(QDII)": 0.10, "债券型": 0.43, "货币型": 0.20, "黄金": 0.05}
         else:
-            alloc = {"股票型": 0.35, "海外(QDII)": 0.20, "债券型": 0.30, "货币型": 0.15}
+            alloc = {"股票型": 0.35, "海外(QDII)": 0.18, "债券型": 0.30, "货币型": 0.12, "黄金": 0.05}
         tilt = ""
-        if vol > 0.25:
+        if env.get("vol", 0) > 0.25:
             alloc["债券型"] = alloc.get("债券型", 0) + 0.05
             alloc["股票型"] = max(0.15, alloc.get("股票型", 0) - 0.05)
-            tilt = "当前波动偏高(年化%.0f%%)，已上调防御仓位。" % (vol * 100)
-        _s = lambda x: ("+%.1f%%" % (x * 100)) if x >= 0 else ("%.1f%%" % (x * 100))
-        note = ("当前市场：%s（温度 %d）。沪深300 近120日 %s、年化波动 %.0f%%、近一年最大回撤 %s。%s"
-                % (env["regime"], env["score"], _s(r120), vol * 100, _s(dd), tilt or "据此给出如下配置建议。"))
-    funds = []
+            tilt = "当前波动偏高(年化%.0f%%)，" % (env["vol"] * 100)
+        if avg_val is not None:
+            if avg_val > 70:
+                alloc["股票型"] = max(0.15, alloc.get("股票型", 0) - 0.10)
+                alloc["债券型"] = alloc.get("债券型", 0) + 0.07
+                alloc["货币型"] = alloc.get("货币型", 0) + 0.03
+                tilt += "宽基估值分位 %.0f%% 偏高，已下调权益、增配防御。" % avg_val
+            elif avg_val < 30:
+                alloc["股票型"] = min(0.60, alloc.get("股票型", 0) + 0.08)
+                tilt += "宽基估值分位 %.0f%% 偏低，已上调权益。" % avg_val
+        tot = sum(alloc.values()) or 1.0
+        alloc = {k: round(v / tot, 4) for k, v in alloc.items()}
+        vtxt = ("沪深300估值分位 %.0f%%、中证500 %.0f%%。" % (val_hs, val_zz)) if (val_hs and val_zz) else ""
+        note = ("当前市场：%s（温度 %d）。%s%s" % (env["regime"], env["score"], vtxt, tilt or "据此给出如下配置建议。"))
 
-    def _check(cat_code):
+    # 基金池多因子打分，按类别取 Top 2
+    bench = cached("bench", "hs300", _daily_ttl(), lambda: _bench_daily_returns(730))
+
+    def _score(cat_code):
         cat, code = cat_code
         try:
-            f = get_fund(code)
-            if f.get("ok") and f.get("name"):
-                return {"category": cat, "code": code, "name": f["name"], "type": f.get("type", "")}
+            fac = _compute_factors(code, bench)
+            return (cat, fac) if fac else None
         except Exception:
-            pass
-        return None
+            return None
 
-    tasks = [(cat, code) for cat, codes in CURATED.items() for code in codes]
+    tasks = [(cat, code) for cat, codes in UNIVERSE.items() for code in codes]
+    scored = []
     try:
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=8) as ex:
-            for r in ex.map(_check, tasks):
+            for r in ex.map(_score, tasks):
                 if r:
-                    funds.append(r)
+                    scored.append(r)
     except Exception:
         for t in tasks:
-            r = _check(t)
+            r = _score(t)
             if r:
-                funds.append(r)
-    return {"ok": True, "env": env, "alloc": alloc, "note": note, "funds": funds}
+                scored.append(r)
+
+    by_cat = {}
+    for cat, fac in scored:
+        by_cat.setdefault(cat, []).append(fac)
+    funds = []
+    for cat, lst in by_cat.items():
+        lst.sort(key=lambda x: x["composite"], reverse=True)
+        top = lst[:2]
+        asset = _ASSET.get(cat, "股票型")
+        w = alloc.get(asset, 0.0)
+        per = w / len(top) if top else 0.0
+        for fac in top:
+            verdict = "推荐" if fac["composite"] >= 68 else ("谨慎关注" if fac["composite"] >= 50 else "暂不推荐")
+            reasons = ["多因子综合 %.0f 分；近一年 %s、夏普 %.2f、最大回撤 %s、估值分位 %s%%。"
+                       % (fac["composite"], _s(fac["r250"]), fac["sharpe"], _s(fac["mdd"]),
+                          (fac["valPct"] if fac["valPct"] is not None else 0))]
+            if fac["avr"]:
+                reasons.append("东方财富五维综合 %.0f。" % fac["avr"])
+            funds.append({"category": cat, "asset": asset, "code": fac["code"], "name": fac["name"],
+                          "type": fac["type"], "score": fac["composite"], "verdict": verdict,
+                          "weight": round(per, 4), "valPct": fac["valPct"], "reasons": reasons})
+    funds.sort(key=lambda x: (x["asset"], -x["score"]))
+    return {"ok": True, "env": env, "alloc": alloc, "note": note,
+            "universe": len(tasks), "funds": funds}
 
 
-def advise_fund(code, capital=100000):
+def _fund_bench_secid(name, ftype):
+    """根据基金名称/类型推断业绩比较基准指数 secid（用于估值分位与风格参照）。"""
+    n = (name or "") + (ftype or "")
+    if "沪深300" in n:
+        return "1.000300"
+    if "中证500" in n:
+        return "1.000905"
+    if "中证1000" in n:
+        return "1.000852"
+    if "创业板" in n:
+        return "0.399006"
+    if "科创" in n:
+        return "1.000688"
+    if "上证50" in n:
+        return "1.000016"
+    if "中证红利" in n:
+        return "1.000922"
+    if "纳指" in n or "纳斯达克" in n:
+        return "100.IXIC"
+    if "标普" in n:
+        return "100.SPX"
+    if "黄金" in n:
+        return "1.518880"
+    return None
+
+
+def _compute_factors(code, bench_rets=None):
+    """多因子计算：收益/风险/风险调整收益/Alpha-Beta/卡玛/信息比率/估值分位/东财五维/经理任职。
+    各因子归一化为 0-100 贡献后加权得到 composite。"""
     f = get_fund(code)
     if not f.get("ok") or not f.get("name"):
-        return {"ok": False, "error": "未找到基金或数据不足: " + str(code)}
+        return None
     hist = get_history(code, 730)
     data = hist.get("data") or []
     if len(data) < 60:
-        return {"ok": False, "error": "历史净值不足 60 个交易日，无法稳健评估"}
+        return None
     closes = [d["nav"] for d in data]
-    dates = [d["date"] for d in data]
     n = len(closes)
     rets = [closes[i] / closes[i - 1] - 1 for i in range(1, n)]
     m, s = _mean(rets), _std(rets)
 
-    def _s(x):
-        return ("+%.1f%%" % (x * 100)) if x >= 0 else ("%.1f%%" % (x * 100))
-
     def ret(k):
-        return closes[-1] / closes[-1 - k] - 1 if n > k else None
+        return closes[-1] / closes[-1 - k] - 1 if n > k else 0.0
 
     r20, r60, r120, r250 = ret(20), ret(60), ret(120), ret(250)
     vol = s * _sqrt(252)
     ann = (closes[-1] / closes[0]) ** (252.0 / len(rets)) - 1
     peak = max(closes)
     mdd = closes[-1] / peak - 1
-    sharpe = (ann - 0.02) / vol if vol > 0 else 0
+    sharpe = (ann - 0.02) / vol if vol > 0 else 0.0
     win = closes[-120:]
-    mu = _mean(win)
-    sd = _std(win) or 1e-9
+    mu, sd = _mean(win), _std(win) or 1e-9
     z = (closes[-1] - mu) / sd
+
+    # 与沪深300回归：Beta / 年化Alpha / 信息比率
+    if bench_rets is None:
+        bench_rets = cached("bench", "hs300", _daily_ttl(), lambda: _bench_daily_returns(730))
+    L = min(len(rets), len(bench_rets))
+    if L >= 30:
+        fr = rets[-L:]
+        br = bench_rets[-L:]
+        mb = _mean(br)
+        vb = _std(br) or 1e-9
+        cov = _mean([(fr[i] - m) * (br[i] - mb) for i in range(L)])
+        beta = cov / (vb * vb) if vb > 0 else 1.0
+        rf_d = 0.02 / 252.0
+        alpha = (m - (rf_d + beta * (mb - rf_d))) * 252.0
+        te = _std([fr[i] - br[i] for i in range(L)]) or 1e-9
+        ir = (m - mb) / te * _sqrt(252)
+    else:
+        beta, alpha, ir = 1.0, 0.0, 0.0
+
+    calmar = ann / abs(mdd) if mdd < 0 else (ann / 0.01 if ann > 0 else 0.0)
+
+    # 东方财富五维评分
+    pe = f.get("perfEval") or {}
+    avr = pe.get("avr") or 0.0
+    dims = pe.get("dims") or {}
+
+    # 估值分位（固收/货币类不适用估值分位，置空避免误导）
+    ftype = f.get("type", "") or ""
+    secid = _fund_bench_secid(f.get("name", ""), ftype)
+    if "债券" in ftype or "货币" in ftype:
+        vp = None
+        val_basis = "不适用（固收/货币类）"
+    elif secid:
+        try:
+            vp = cached("val", "f_" + secid, _daily_ttl(),
+                        lambda s=secid: _index_valuation_percentile(s, 5))
+        except Exception:
+            vp = None
+        val_basis = "基准指数近5年价格分位"
+    else:
+        vp = round(sum(1 for x in closes if x <= closes[-1]) / len(closes) * 100, 1)
+        val_basis = "自身净值近3年分位（主动股基估值代理）"
+
+    # 基金经理任职年限
+    managers = f.get("managers") or []
+    tenure = None
+    if managers:
+        mm = re.search(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", managers[0].get("sdate", ""))
+        if mm:
+            try:
+                d0 = datetime.date(int(mm.group(1)), int(mm.group(2)), int(mm.group(3)))
+                tenure = round((datetime.date.today() - d0).days / 365.25, 1)
+            except Exception:
+                tenure = None
+
+    # 因子归一化 → 0-100 贡献
+    def clamp(x):
+        return max(0.0, min(100.0, x))
+
+    sc_mom = clamp(50 + r250 * 100 * 1.5)
+    sc_val = clamp(100 - (vp if vp is not None else 50))
+    sc_sharpe = clamp(sharpe / 2.0 * 100)
+    sc_calmar = clamp(calmar / 3.0 * 100)
+    sc_alpha = clamp(50 + alpha * 100 * 2)
+    sc_dd = clamp(50 + mdd * 100)
+    sc_ir = clamp(50 + ir * 50)
+    sc_avr = clamp(avr)
+
+    w = {"avr": 0.20, "mom": 0.18, "val": 0.15, "sharpe": 0.12,
+         "calmar": 0.12, "alpha": 0.12, "dd": 0.06, "ir": 0.05}
+    composite = (sc_avr * w["avr"] + sc_mom * w["mom"] + sc_val * w["val"]
+                 + sc_sharpe * w["sharpe"] + sc_calmar * w["calmar"]
+                 + sc_alpha * w["alpha"] + sc_dd * w["dd"] + sc_ir * w["ir"])
+
+    return {"code": code, "name": f.get("name"), "type": f.get("type", ""),
+            "nav": f.get("nav"), "navDate": f.get("navDate"),
+            "r20": r20, "r60": r60, "r120": r120, "r250": r250,
+            "vol": vol, "ann": ann, "mdd": mdd, "sharpe": sharpe, "z": z,
+            "m": m, "s": s,
+            "beta": beta, "alpha": alpha, "ir": ir, "calmar": calmar,
+            "avr": avr, "dims": dims,
+            "valPct": vp, "valBasis": val_basis,
+            "managers": managers, "tenure": tenure,
+            "sc": {"mom": sc_mom, "val": sc_val, "sharpe": sc_sharpe, "calmar": sc_calmar,
+                   "alpha": sc_alpha, "dd": sc_dd, "ir": sc_ir, "avr": sc_avr},
+            "composite": round(composite, 1)}
+
+
+def _build_reasons(fac, verdict, cap, amount, capital, p1, p3, p6, p12):
+    r = []
+    r.append("类型：%s；近一年收益 %s，年化波动 %.1f%%，最大回撤 %s，夏普 %.2f，卡玛 %.2f。"
+             % (fac["type"] or "—", _s(fac["r250"]), fac["vol"] * 100,
+                _s(fac["mdd"]), fac["sharpe"], fac["calmar"]))
+    r.append("相对沪深300：Beta %.2f（%s），年化Alpha %s，信息比率 %.2f。"
+             % (fac["beta"], "高弹性" if fac["beta"] > 1.1 else ("防御" if fac["beta"] < 0.9 else "同步"),
+                _s(fac["alpha"]), fac["ir"]))
+    val = fac["valPct"]
+    if val is not None:
+        r.append("估值分位 %s%%（%s）：%s" % (val, fac["valBasis"],
+                 "偏低、具备布局价值" if val < 30 else ("中性" if val < 70 else "偏高、注意追高")))
+    else:
+        r.append("估值分位：数据不足。")
+    if fac["avr"]:
+        keys = ["选证能力", "收益率", "抗风险", "稳定性", "择时能力"]
+        r.append("东方财富五维综合评分 %.0f（选证/收益/抗风险/稳定/择时 = %s）。"
+                 % (fac["avr"], "/".join("%.0f" % (fac["dims"].get(k, 0) or 0) for k in keys)))
+    if fac["managers"]:
+        tn = fac["tenure"]
+        r.append("基金经理：%s%s。"
+                 % (fac["managers"][0].get("name", ""), ("（任职 %.1f 年）" % tn) if tn else ""))
+    r.append("持有盈利概率：1月 %.0f%% / 3月 %.0f%% / 6月 %.0f%% / 1年 %.0f%%。"
+             % (p1 * 100, p3 * 100, p6 * 100, p12 * 100))
+    if verdict == "推荐":
+        r.append("综合评分 %.0f，多因子较优，可纳入组合。" % fac["composite"])
+    elif verdict == "谨慎关注":
+        r.append("综合评分 %.0f，存在机会但风险犹存，建议小仓位试探。" % fac["composite"])
+    else:
+        r.append("综合评分 %.0f，当前性价比较低，建议观望或等待更好买点。" % fac["composite"])
+    r.append("建议仓位上限约 %.0f%%（约 ¥%s，按本金 ¥%s 计）。"
+             % (cap * 100, format(amount, ","), format(int(capital), ",")))
+    return r
+
+
+def advise_fund(code, capital=100000):
+    fac = _compute_factors(code)
+    if fac is None:
+        return {"ok": False, "error": "未找到基金或历史净值不足 60 个交易日，无法稳健评估"}
+    m, s = fac["m"], fac["s"]
 
     def mc(days, sims=2000):
         win_cnt = 0
@@ -699,50 +1011,35 @@ def advise_fund(code, capital=100000):
 
     p1, p3, p6, p12 = mc(21), mc(63), mc(126), mc(252)
 
-    # 综合评分与结论
-    score = 50
-    score += 15 if (r120 or 0) > 0 else -10
-    score += 15 if z < -0.5 else (-15 if z > 1.5 else 0)
-    score += 10 if sharpe > 0.8 else (-10 if sharpe < 0.2 else 0)
-    score += 10 if mdd > -0.3 else (-10 if mdd < -0.5 else 0)
-    score = max(0, min(100, int(score)))
-    verdict = "推荐" if score >= 65 else ("谨慎关注" if score >= 45 else "暂不推荐")
+    composite = fac["composite"]
+    verdict = "推荐" if composite >= 68 else ("谨慎关注" if composite >= 50 else "暂不推荐")
 
-    # 仓位建议：按波动风险控制单只上限
-    if vol < 0.10:
+    # 仓位建议：按波动风险控制单只上限；估值过高（>80%）减仓
+    if fac["vol"] < 0.10:
         cap = 0.25
-    elif vol < 0.20:
+    elif fac["vol"] < 0.20:
         cap = 0.18
-    elif vol < 0.30:
+    elif fac["vol"] < 0.30:
         cap = 0.12
     else:
         cap = 0.07
+    if fac["valPct"] and fac["valPct"] > 80:
+        cap *= 0.6
     if verdict == "暂不推荐":
         cap = min(cap, 0.05)
     amount = int(cap * capital)
 
-    reasons = []
-    reasons.append("类型：%s；近一年收益 %s，年化波动 %.1f%%，最大回撤 %s，夏普 %.2f。"
-                   % (f.get("type") or "—", _s(r250), vol * 100, _s(mdd), sharpe))
-    reasons.append("近120日估值分位 Z=%.1f（%s），%s"
-                   % (z, "处相对低位" if z < -0.5 else ("处相对高位" if z > 1.5 else "中性"),
-                      "回调时可分批布局" if z < -0.5 else ("短期偏贵、注意追高" if z > 1.5 else "估值中性")))
-    reasons.append("持有盈利概率：1月 %.0f%% / 3月 %.0f%% / 6月 %.0f%% / 1年 %.0f%%。"
-                   % (p1 * 100, p3 * 100, p6 * 100, p12 * 100))
-    if verdict == "推荐":
-        reasons.append("综合评分 %d，趋势与估值较友好，可纳入组合。" % score)
-    elif verdict == "谨慎关注":
-        reasons.append("综合评分 %d，存在一定机会但风险犹存，建议小仓位试探。" % score)
-    else:
-        reasons.append("综合评分 %d，当前性价比较低，建议观望或等待更好买点。" % score)
-    reasons.append("按风险控制，单只建议仓位上限约 %.0f%%（约 ¥%s，按本金 ¥%s 计）；高波动品种不宜重仓。"
-                   % (cap * 100, format(amount, ","), format(int(capital), ",")))
+    reasons = _build_reasons(fac, verdict, cap, amount, capital, p1, p3, p6, p12)
 
-    return {"ok": True, "code": code, "name": f.get("name"), "type": f.get("type", ""),
-            "nav": f.get("nav"), "navDate": f.get("navDate"), "score": score, "verdict": verdict,
+    return {"ok": True, "code": code, "name": fac["name"], "type": fac["type"],
+            "nav": fac["nav"], "navDate": fac["navDate"], "score": composite, "verdict": verdict,
             "cap": cap, "amount": amount, "capital": capital,
-            "r20": r20, "r60": r60, "r120": r120, "r250": r250,
-            "vol": vol, "ann": ann, "mdd": mdd, "sharpe": sharpe, "z": z,
+            "r20": fac["r20"], "r60": fac["r60"], "r120": fac["r120"], "r250": fac["r250"],
+            "vol": fac["vol"], "ann": fac["ann"], "mdd": fac["mdd"], "sharpe": fac["sharpe"], "z": fac["z"],
+            "beta": fac["beta"], "alpha": fac["alpha"], "ir": fac["ir"], "calmar": fac["calmar"],
+            "avr": fac["avr"], "dims": fac["dims"],
+            "valPct": fac["valPct"], "valBasis": fac["valBasis"],
+            "managers": fac["managers"], "tenure": fac["tenure"],
             "p1": p1, "p3": p3, "p6": p6, "p12": p12, "reasons": reasons}
 
 
