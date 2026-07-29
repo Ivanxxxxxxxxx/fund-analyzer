@@ -648,6 +648,35 @@ def _index_valuation_percentile(secid, years=5):
     return round(below / len(rows) * 100, 1)
 
 
+def _market_from_fund_breadth():
+    """海外节点取不到指数日线时，用实时开放式基金榜单的收益率广度推断市场温度。
+    返回 ok=True 的精简市场状态；样本不足时返回 None。完全依赖可达的 rankhandler 接口。"""
+    rets = []
+    for ft in ("gp", "hh", "zs"):
+        try:
+            rows = get_rank_list(ft, 150)
+        except Exception:
+            rows = []
+        for code, name, y1, ed in rows:
+            rets.append(y1)
+    if len(rets) < 30:
+        return None
+    pos = sum(1 for r in rets if r > 0)
+    pos_ratio = pos / len(rets)
+    mean_ret = _mean(rets)
+    # 温度：均值动量 + 广度（0-100）
+    score = 50
+    score += 25 if mean_ret > 0.10 else (-25 if mean_ret < -0.10 else 0)
+    score += 10 if pos_ratio > 0.60 else (-15 if pos_ratio < 0.40 else 0)
+    score = max(0, min(100, int(score)))
+    regime = "牛市氛围" if score >= 65 else ("熊市氛围" if score <= 35 else "震荡市")
+    return {"ok": True, "source": "fund_breadth", "regime": regime, "score": score,
+            "mean_ret": round(mean_ret, 4), "pos_ratio": round(pos_ratio, 4),
+            "sample": len(rets), "valuation": {}, "available": [],
+            "indices": {}, "mom": round(mean_ret, 4), "vol": None, "dd": None,
+            "r20": None, "r60": None, "r120": None, "r250": None}
+
+
 def _compute_market_env():
     domestic = ["沪深300", "中证500", "创业板指"]
     closes = {}
@@ -661,70 +690,75 @@ def _compute_market_env():
                 closes[name] = rows
         except Exception:
             pass
-    hs = closes.get("沪深300")
-    if not hs or len(hs) < 60:
-        return {"ok": False, "available": list(closes.keys())}
-    n = len(hs)
+    # 指数日线可用（国内/沙箱节点）→ 用指数计算（含官方估值分位）
+    if closes.get("沪深300") and len(closes["沪深300"]) >= 60:
+        hs = closes["沪深300"]
+        n = len(hs)
 
-    def ret(k):
-        return hs[-1] / hs[-1 - k] - 1 if n > k else 0.0
+        def ret(k):
+            return hs[-1] / hs[-1 - k] - 1 if n > k else 0.0
 
-    r20, r60, r120, r250 = ret(20), ret(60), ret(120), ret(250)
-    rets = [hs[i] / hs[i - 1] - 1 for i in range(1, n)]
-    vol = _std(rets) * _sqrt(252)
-    peak = max(hs[-min(250, n):])
-    dd = hs[-1] / peak - 1
+        r20, r60, r120, r250 = ret(20), ret(60), ret(120), ret(250)
+        rets = [hs[i] / hs[i - 1] - 1 for i in range(1, n)]
+        vol = _std(rets) * _sqrt(252)
+        peak = max(hs[-min(250, n):])
+        dd = hs[-1] / peak - 1
 
-    # 多指数综合动量 / 波动 / 回撤
-    moms, vols, dds = [], [], []
-    indices = {}
-    for name, rows in closes.items():
-        m = len(rows)
+        # 多指数综合动量 / 波动 / 回撤
+        moms, vols, dds = [], [], []
+        indices = {}
+        for name, rows in closes.items():
+            m = len(rows)
 
-        def rr(k):
-            return rows[-1] / rows[-1 - k] - 1 if m > k else 0.0
+            def rr(k):
+                return rows[-1] / rows[-1 - k] - 1 if m > k else 0.0
 
-        r120i, r250i = rr(120), rr(250)
-        ri = [rows[i] / rows[i - 1] - 1 for i in range(1, m)]
-        voli = _std(ri) * _sqrt(252)
-        pi = max(rows[-min(250, m):])
-        ddi = rows[-1] / pi - 1
-        moms.append(r120i)
-        vols.append(voli)
-        dds.append(ddi)
-        indices[name] = {"r120": round(r120i, 4), "r250": round(r250i, 4),
-                         "vol": round(voli, 4), "dd": round(ddi, 4)}
-    mom = _mean(moms)
-    vol_avg = _mean(vols)
-    dd_avg = _mean(dds)
+            r120i, r250i = rr(120), rr(250)
+            ri = [rows[i] / rows[i - 1] - 1 for i in range(1, m)]
+            voli = _std(ri) * _sqrt(252)
+            pi = max(rows[-min(250, m):])
+            ddi = rows[-1] / pi - 1
+            moms.append(r120i)
+            vols.append(voli)
+            dds.append(ddi)
+            indices[name] = {"r120": round(r120i, 4), "r250": round(r250i, 4),
+                             "vol": round(voli, 4), "dd": round(ddi, 4)}
+        mom = _mean(moms)
+        vol_avg = _mean(vols)
+        dd_avg = _mean(dds)
 
-    # 市场温度：综合动量 + 回撤 + 波动惩罚（0-100）
-    score = 50
-    score += 25 if mom > 0.10 else (-25 if mom < -0.10 else 0)
-    score += 10 if dd_avg > -0.10 else (-15 if dd_avg < -0.25 else 0)
-    score += -8 if vol_avg > 0.25 else 0
-    score = max(0, min(100, int(score)))
+        # 市场温度：综合动量 + 回撤 + 波动惩罚（0-100）
+        score = 50
+        score += 25 if mom > 0.10 else (-25 if mom < -0.10 else 0)
+        score += 10 if dd_avg > -0.10 else (-15 if dd_avg < -0.25 else 0)
+        score += -8 if vol_avg > 0.25 else 0
+        score = max(0, min(100, int(score)))
 
-    # 估值分位（近5年价格百分位代理；海外节点取不到官方 PE 序列时的稳健替代）
-    valuation = {}
-    for name in domestic:
-        secid = INDEX_MAP.get(name)
-        if not secid:
-            continue
-        try:
-            vp = cached("val", secid, _daily_ttl(),
-                        lambda s=secid: _index_valuation_percentile(s, 5))
-            if vp is not None:
-                valuation[name] = vp
-        except Exception:
-            pass
+        # 估值分位（近5年价格百分位代理；海外节点取不到官方 PE 序列时的稳健替代）
+        valuation = {}
+        for name in domestic:
+            secid = INDEX_MAP.get(name)
+            if not secid:
+                continue
+            try:
+                vp = cached("val", secid, _daily_ttl(),
+                            lambda s=secid: _index_valuation_percentile(s, 5))
+                if vp is not None:
+                    valuation[name] = vp
+            except Exception:
+                pass
 
-    regime = "牛市氛围" if score >= 65 else ("熊市氛围" if score <= 35 else "震荡市")
-    return {"ok": True, "regime": regime, "score": score,
-            "r20": r20, "r60": r60, "r120": r120, "r250": r250,
-            "vol": vol, "dd": dd, "mom": round(mom, 4),
-            "indices": indices, "valuation": valuation,
-            "available": list(closes.keys())}
+        regime = "牛市氛围" if score >= 65 else ("熊市氛围" if score <= 35 else "震荡市")
+        return {"ok": True, "source": "index", "regime": regime, "score": score,
+                "r20": r20, "r60": r60, "r120": r120, "r250": r250,
+                "vol": vol, "dd": dd, "mom": round(mom, 4),
+                "indices": indices, "valuation": valuation,
+                "available": list(closes.keys())}
+    # 指数日线不可用（海外 Railway 节点）→ 用实时基金收益率广度推算市场温度
+    fb = _market_from_fund_breadth()
+    if fb:
+        return fb
+    return {"ok": False, "available": [], "note": "市场数据暂不可用"}
 
 
 def get_market_env():
@@ -781,7 +815,7 @@ def recommend_portfolio():
     # 大类资产配置（含估值分位微调）— 与实时市场温度联动
     if not env.get("ok"):
         alloc = {"股票型": 0.35, "海外(QDII)": 0.18, "债券型": 0.30, "货币型": 0.12, "黄金": 0.05}
-        note = "市场指数数据获取受限，采用均衡默认配置，请以实际行情为准。"
+        note = "市场数据暂不可用，采用均衡默认配置，请以实际行情为准。"
     else:
         val_hs = env.get("valuation", {}).get("沪深300")
         val_zz = env.get("valuation", {}).get("中证500")
@@ -794,7 +828,7 @@ def recommend_portfolio():
         else:
             alloc = {"股票型": 0.35, "海外(QDII)": 0.18, "债券型": 0.30, "货币型": 0.12, "黄金": 0.05}
         tilt = ""
-        if env.get("vol", 0) > 0.25:
+        if (env.get("vol") or 0) > 0.25:
             alloc["债券型"] = alloc.get("债券型", 0) + 0.05
             alloc["股票型"] = max(0.15, alloc.get("股票型", 0) - 0.05)
             tilt = "当前波动偏高(年化%.0f%%)，" % (env["vol"] * 100)
@@ -810,7 +844,9 @@ def recommend_portfolio():
         tot = sum(alloc.values()) or 1.0
         alloc = {k: round(v / tot, 4) for k, v in alloc.items()}
         vtxt = ("沪深300估值分位 %.0f%%、中证500 %.0f%%。" % (val_hs, val_zz)) if (val_hs and val_zz) else ""
-        note = ("当前市场：%s（温度 %d）。%s%s" % (env["regime"], env["score"], vtxt, tilt or "据此给出如下配置建议。"))
+        src_hint = "（市场温度由实时基金收益率广度推算：样本 %d 只、上涨占比 %.0f%%。指数日线在本节点不可用）" % (
+            env.get("sample", 0), (env.get("pos_ratio") or 0) * 100) if env.get("source") == "fund_breadth" else ""
+        note = ("当前市场：%s（温度 %d）。%s%s%s" % (env["regime"], env["score"], vtxt, tilt or "据此给出如下配置建议。", src_hint))
 
     # === 动态候选：实时拉取全市场榜单（不再使用内置名单） ===
     bench = cached("bench", "hs300", _daily_ttl(), lambda: _bench_daily_returns(730))
@@ -828,7 +864,7 @@ def recommend_portfolio():
     for ft, cat_label, asset, topn, need_age in _RECO_CATS:
         try:
             if ft == "__gold":
-                rows = get_rank_list("all", 300, name_filter="黄金")
+                rows = get_rank_list("all", 2000, name_filter="黄金")
             elif ft == "__money":
                 rows = get_rank_list("money", 30)
                 if not rows:
