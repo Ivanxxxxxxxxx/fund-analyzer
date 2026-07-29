@@ -1209,9 +1209,10 @@ def build_allocate(funds, principal):
     # 可执行优化：高相关性对 → 具体替换方案
     opts = []
     handled = set()
-    for c, (a, b) in sorted(((v, k) for k, v in corr.items()), reverse=True):
+    for c, key in sorted(((v, k) for k, v in corr.items()), reverse=True):
         if c < 0.8:
             break
+        a, b = key.split("|")
         if a in handled or b in handled:
             continue
         fa = next(x for x in items if x["code"] == a)
