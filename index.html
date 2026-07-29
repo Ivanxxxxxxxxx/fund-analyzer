@@ -53,6 +53,8 @@
   .live{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
     border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:rgba(255,255,255,0.03)}
   .live .dot{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 rgba(25,195,125,.6);animation:pulse 2s infinite}
+  .live.offline .dot{background:var(--muted);box-shadow:none;animation:none}
+  .live.offline{color:var(--muted)}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(25,195,125,.5)}70%{box-shadow:0 0 0 7px rgba(25,195,125,0)}100%{box-shadow:0 0 0 0 rgba(25,195,125,0)}}
   .wrap{padding:22px 28px;max-width:1320px;margin:0 auto}
   .grid{display:grid;gap:18px}
@@ -78,6 +80,8 @@
   .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;
     box-shadow:0 8px 20px rgba(91,140,255,0.35)}
   .btn-primary:hover{transform:translateY(-1px);filter:brightness(1.06)}
+  button:disabled{cursor:wait;opacity:.65;transform:none;filter:none}
+  button:disabled:hover{transform:none}
   .btn-ghost{background:rgba(255,255,255,0.05);color:var(--text);border:1px solid var(--line2)}
   .btn-ghost:hover{background:rgba(255,255,255,0.10)}
   .btn-sm{padding:8px 14px;font-size:12px}
@@ -167,7 +171,7 @@
   .sig-close{background:rgba(255,77,94,.16);color:#ff7a86;border:1px solid rgba(255,77,94,.45)}
   .sig-hold{background:rgba(25,195,125,.14);color:#19c37d;border:1px solid rgba(25,195,125,.4)}
   /* ---------- misc ---------- */
-  .note{color:var(--muted);font-size:12px;margin-top:10px;line-height:1.6}
+  .note{color:#a9b4c9;font-size:12.5px;margin-top:10px;line-height:1.6}
   .empty{color:var(--muted);text-align:center;padding:42px 0;font-size:13px}
   .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);
     background:rgba(20,26,40,.95);border:1px solid var(--line2);padding:11px 20px;border-radius:12px;
@@ -228,6 +232,7 @@
     max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .fold-h .ch{color:var(--muted);transition:transform .25s ease}
   .fold.open .ch{transform:rotate(90deg)}
+  .fold-h:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   .fold-b{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s cubic-bezier(.22,1,.36,1)}
   .fold.open .fold-b{grid-template-rows:1fr}
   .fold-b>div{overflow:hidden;min-height:0}
@@ -250,9 +255,9 @@
     </div>
   </div>
   <div style="margin-left:auto" class="row">
-    <span class="live"><span class="dot"></span>净值交易时段每 2 分钟自动刷新</span>
+    <span class="live" id="liveBadge"><span class="dot" id="liveDot"></span><span id="liveText">净值交易时段每 2 分钟自动刷新</span></span>
     <button class="btn-ghost btn-sm" onclick="refreshNav()">↻ 刷新净值</button>
-    <button class="btn-primary" onclick="analyze()">开始分析</button>
+    <button class="btn-primary" id="analyzeBtn" onclick="analyze()">开始分析</button>
   </div>
 </header>
 
@@ -276,7 +281,7 @@
   </div>
 
     <section class="fold open" data-key="portfolio">
-    <div class="fold-h" onclick="toggleFold(this)">
+    <div class="fold-h" role="button" tabindex="0" onclick="toggleFold(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleFold(this)}">
       <span class="ico">📦</span>
       <span class="t">我的组合</span>
       <span class="sum" id="sumPortfolio">暂无持仓</span>
@@ -356,6 +361,11 @@
     <div class="fold-b"><div><div class="fold-inner">
 <!-- 分析结果：自适应多列网格 -->
   <div class="grid analysis-grid">
+    <!-- 组合健康速览（分析后生成） -->
+    <div class="card" id="overviewCard" style="grid-column:1/-1">
+      <h3 class="sec"><span class="ic">🎯</span>组合健康速览（分析后生成）</h3>
+      <div id="overviewBox"><div class="empty">点击「开始分析」后，这里汇总评分、风险与 Top 3 可执行动作。</div></div>
+    </div>
     <!-- 组合健康评分 -->
     <div class="card">
       <h3 class="sec"><span class="ic">🩺</span>组合健康评分</h3>
@@ -401,7 +411,7 @@
     <div class="card">
       <h3 class="sec"><span class="ic">🎲</span>盈利可能性（蒙特卡洛模拟）</h3>
       <div id="probBox"><div class="empty">分析后展示不同持有期的盈利概率。</div></div>
-      <div class="note">基于历史日收益率做 5000 次路径模拟，概率随持有期拉长通常提升（但不保证未来收益）。</div>
+      <div class="note">基于历史日收益率做 2000 次路径模拟，概率随持有期拉长通常提升（但不保证未来收益）。</div>
     </div>
 
     <!-- 相关性预警 -->
@@ -584,8 +594,18 @@ function setCost(i,v){ holdings[i].cost=Math.max(0,+v||0); saveHoldings(); rende
 function delFund(i){ holdings.splice(i,1); saveHoldings(); renderHoldings(); }
 async function refreshNav(silent=false){
   if(!holdings.length){ if(!silent) toast("请先添加基金"); return; }
-  for(const h of holdings){ const f=await api("/api/fund/"+h.code).catch(()=>({})); if(f.ok){ h.nav=f.nav; h.navDate=f.navDate; h.changePct=f.changePct; h.name=h.name||f.name; h.type=h.type||f.type; } }
+  let okCount=0;
+  for(const h of holdings){ const f=await api("/api/fund/"+h.code).catch(()=>({})); if(f.ok){ h.nav=f.nav; h.navDate=f.navDate; h.changePct=f.changePct; h.name=h.name||f.name; h.type=h.type||f.type; okCount++; } }
   saveHoldings(); renderHoldings(); renderSignals(computeSignals()); setDataStamp(); if(!silent) toast("净值已刷新");
+  setLive(okCount>0);
+}
+function setLive(ok){
+  const badge=document.getElementById("liveBadge");
+  const txt=document.getElementById("liveText");
+  if(!badge) return;
+  const t=new Date().toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"});
+  if(ok){ badge.classList.remove("offline"); if(txt) txt.textContent="实时已连接 · 最近 "+t; }
+  else { badge.classList.add("offline"); if(txt) txt.textContent="数据获取异常 · 最近 "+t; }
 }
 
 // ---------------- 分析计算 ----------------
@@ -608,85 +628,96 @@ function norm(mean,sd){ // Box-Muller
 
 async function analyze(){
   if(holdings.length<1){ toast("请先添加至少一只基金"); return; }
-  toast("正在拉取历史净值并计算…");
-  for(const h of holdings){ const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]})); h.history=r.data||[]; }
-  const miss=holdings.filter(h=>!h.history||h.history.length<20);
-  if(miss.length){ toast("警告："+miss.map(h=>h.code).join(",")+" 历史不足，结果可能不准"); }
-
-  const allDates=new Set();
-  holdings.forEach(h=>(h.history||[]).forEach(d=>allDates.add(d.date)));
-  const dates=[...allDates].sort();
-  const series=holdings.map(h=>{
-    const m={}; h.history.forEach(d=>m[d.date]=d.nav);
-    const arr=[]; let last=null;
-    dates.forEach(dt=>{ if(m[dt]!=null) last=m[dt]; arr.push(last); });
-    return arr;
-  });
-  const rets=series.map(dailyReturns);
-
-  const totalVal=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
-  const w=holdings.map(h=>(+h.value||0)/totalVal);
-
-  const L=Math.min(...rets.map(r=>r.length));
-  const pr=[];
-  for(let t=0;t<L;t++){ let r=0; for(let i=0;i<holdings.length;i++) r+=w[i]*rets[i][t]; pr.push(r); }
-
-  // 基准对比（沪深300）与组合累计收益曲线
-  let benchName="沪深300", benchCum=null, portCum=null, trendDates=null;
+  const btn=document.getElementById("analyzeBtn");
+  if(btn){ btn.disabled=true; btn.textContent="分析中…"; }
+  const ov=document.getElementById("overviewBox");
+  if(ov) ov.innerHTML='<div class="empty">正在拉取历史净值、运行蒙特卡洛模拟…</div>';
   try{
-    const b=await api("/api/index/000300").catch(()=>({ok:false}));
-    if(b && b.values && b.values.length){
-      const bm={}; b.dates.forEach((d,i)=>bm[d]=b.values[i]);
-      let lastV=null; const bmArr=dates.map(d=>{ if(bm[d]!=null) lastV=bm[d]; return lastV; });
-      const slice=bmArr.slice(bmArr.length-L);
-      let base=null; for(const v of slice){ if(v!=null){base=v;break;} }
-      if(base) benchCum=slice.map(v=> v==null?null:(v/base-1));
-      benchName=b.name||"沪深300";
-    }
-  }catch(e){}
-  { let cum=1; portCum=[]; for(const r of pr){ cum*=(1+r); portCum.push(cum-1); } trendDates=dates.slice(dates.length-L); }
-  if(benchCum){ const s=benchCum.findIndex(v=>v!=null); if(s>0){ benchCum=benchCum.slice(s); portCum=portCum.slice(s); trendDates=trendDates.slice(s); } }
+    toast("正在拉取历史净值并计算…");
+    for(const h of holdings){ const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]})); h.history=r.data||[]; }
+    const miss=holdings.filter(h=>!h.history||h.history.length<20);
+    if(miss.length){ toast("警告："+miss.map(h=>h.code).join(",")+" 历史不足，结果可能不准"); }
 
-  const mean=pr.reduce((a,b)=>a+b,0)/L;
-  const variance=pr.reduce((a,b)=>a+(b-mean)**2,0)/(L-1);
-  const volDaily=Math.sqrt(variance);
-  const annVol=volDaily*Math.sqrt(252);
-  const growth=pr.reduce((acc,r)=>acc*(1+r),1);
-  const annRet=Math.pow(growth, 252/L)-1;
-  const rf=0.02, sharpe=annVol>0?(annRet-rf)/annVol:0;
+    const allDates=new Set();
+    holdings.forEach(h=>(h.history||[]).forEach(d=>allDates.add(d.date)));
+    const dates=[...allDates].sort();
+    const series=holdings.map(h=>{
+      const m={}; h.history.forEach(d=>m[d.date]=d.nav);
+      const arr=[]; let last=null;
+      dates.forEach(dt=>{ if(m[dt]!=null) last=m[dt]; arr.push(last); });
+      return arr;
+    });
+    const rets=series.map(dailyReturns);
 
-  let peak=1,maxDD=0; pr.forEach(r=>{ const v=peak*(1+r); if(v>peak)peak=v; const dd=v/peak-1; if(dd<maxDD)maxDD=dd; });
+    const totalVal=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
+    const w=holdings.map(h=>(+h.value||0)/totalVal);
 
-  const N=holdings.length;
-  const corr=[]; for(let i=0;i<N;i++){ corr[i]=[]; for(let j=0;j<N;j++) corr[i][j]= i===j?1:pearson(rets[i].slice(0,L),rets[j].slice(0,L)); }
-  let offSum=0,offCnt=0; for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){offSum+=corr[i][j];offCnt++;}
-  const corrAvg=offCnt?offSum/offCnt:0;
+    const L=Math.min(...rets.map(r=>r.length));
+    const pr=[];
+    for(let t=0;t<L;t++){ let r=0; for(let i=0;i<holdings.length;i++) r+=w[i]*rets[i][t]; pr.push(r); }
 
-  const hhi=w.reduce((s,x)=>s+x*x,0);
-  const divScore=Math.max(0,Math.min(100,(1-hhi)*100));
-  const sharpeScore=Math.max(0,Math.min(100,sharpe/2*100));
-  const corrScore=Math.max(0,Math.min(100,(1-corrAvg)*100));
-  const score=Math.round(0.35*divScore+0.35*sharpeScore+0.30*corrScore);
+    // 基准对比（沪深300）与组合累计收益曲线
+    let benchName="沪深300", benchCum=null, portCum=null, trendDates=null;
+    try{
+      const b=await api("/api/index/000300").catch(()=>({ok:false}));
+      if(b && b.values && b.values.length){
+        const bm={}; b.dates.forEach((d,i)=>bm[d]=b.values[i]);
+        let lastV=null; const bmArr=dates.map(d=>{ if(bm[d]!=null) lastV=bm[d]; return lastV; });
+        const slice=bmArr.slice(bmArr.length-L);
+        let base=null; for(const v of slice){ if(v!=null){base=v;break;} }
+        if(base) benchCum=slice.map(v=> v==null?null:(v/base-1));
+        benchName=b.name||"沪深300";
+      }
+    }catch(e){}
+    { let cum=1; portCum=[]; for(const r of pr){ cum*=(1+r); portCum.push(cum-1); } trendDates=dates.slice(dates.length-L); }
+    if(benchCum){ const s=benchCum.findIndex(v=>v!=null); if(s>0){ benchCum=benchCum.slice(s); portCum=portCum.slice(s); trendDates=trendDates.slice(s); } }
 
-  let risk="", rc="";
-  if(annVol<0.08){risk="低";rc="good";} else if(annVol<0.15){risk="中低";rc="good";}
-  else if(annVol<0.25){risk="中";rc="warn";} else if(annVol<0.35){risk="中高";rc="bad";}
-  else {risk="高";rc="bad";}
+    const mean=pr.reduce((a,b)=>a+b,0)/L;
+    const variance=pr.reduce((a,b)=>a+(b-mean)**2,0)/(L-1);
+    const volDaily=Math.sqrt(variance);
+    const annVol=volDaily*Math.sqrt(252);
+    const growth=pr.reduce((acc,r)=>acc*(1+r),1);
+    const annRet=Math.pow(growth, 252/L)-1;
+    const rf=0.02, sharpe=annVol>0?(annRet-rf)/annVol:0;
 
-  drawScoreRing(score);
-  renderKPI({totalVal,annRet,annVol,maxDD,sharpe,score,risk,rc,mean,L});
-  renderAlloc(w);
-  renderRisk({annVol,maxDD,risk,rc,corrAvg,mean,sharpe});
-  renderProb(mean,volDaily);
-  renderCorr(corr);
-  renderIndustry(holdings,w);
-  renderSugg({w,holdings,corrAvg,maxDD,sharpe,risk,divScore,corr,score});
-  renderSignals(computeSignals());
-  renderTrend(trendDates, portCum, benchCum, benchName);
-  setDataStamp();
-  window.__score=score; window.__risk=risk;
-  updateSummaries();
-  toast("分析完成");
+    let peak=1,maxDD=0; pr.forEach(r=>{ const v=peak*(1+r); if(v>peak)peak=v; const dd=v/peak-1; if(dd<maxDD)maxDD=dd; });
+
+    const N=holdings.length;
+    const corr=[]; for(let i=0;i<N;i++){ corr[i]=[]; for(let j=0;j<N;j++) corr[i][j]= i===j?1:pearson(rets[i].slice(0,L),rets[j].slice(0,L)); }
+    let offSum=0,offCnt=0; for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){offSum+=corr[i][j];offCnt++;}
+    const corrAvg=offCnt?offSum/offCnt:0;
+
+    const hhi=w.reduce((s,x)=>s+x*x,0);
+    const divScore=Math.max(0,Math.min(100,(1-hhi)*100));
+    const sharpeScore=Math.max(0,Math.min(100,sharpe/2*100));
+    const corrScore=Math.max(0,Math.min(100,(1-corrAvg)*100));
+    const score=Math.round(0.35*divScore+0.35*sharpeScore+0.30*corrScore);
+
+    let risk="", rc="";
+    if(annVol<0.08){risk="低";rc="good";} else if(annVol<0.15){risk="中低";rc="good";}
+    else if(annVol<0.25){risk="中";rc="warn";} else if(annVol<0.35){risk="中高";rc="bad";}
+    else {risk="高";rc="bad";}
+
+    drawScoreRing(score);
+    renderKPI({totalVal,annRet,annVol,maxDD,sharpe,score,risk,rc,mean,L});
+    renderAlloc(w);
+    renderRisk({annVol,maxDD,risk,rc,corrAvg,mean,sharpe});
+    renderProb(mean,volDaily);
+    renderCorr(corr);
+    renderIndustry(holdings,w);
+    renderSugg({w,holdings,corrAvg,maxDD,sharpe,risk,divScore,corr,score});
+    renderSignals(computeSignals());
+    renderTrend(trendDates, portCum, benchCum, benchName);
+    setDataStamp();
+    window.__score=score; window.__risk=risk;
+    updateSummaries();
+    renderOverview();
+    toast("分析完成");
+  }catch(e){
+    console.error(e); toast("分析出错："+(e&&e.message?e.message:e));
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent="开始分析"; }
+  }
 }
 
 // ---------------- 渲染 ----------------
@@ -696,9 +727,10 @@ function drawScoreRing(score){
   const scoreEl=document.getElementById("gaugeScore");
   const gradeEl=document.getElementById("gaugeGrade");
   if(!fill) return;
-  fill.style.strokeDashoffset = C*(1-score/100);
   const col = score>=75?"var(--good)":score>=55?"var(--warn)":"var(--bad)";
   const grade = score>=75?"健康":score>=55?"良好":score>=30?"预警":"高危";
+  fill.style.strokeDashoffset = C*(1-score/100);
+  fill.style.stroke = col;
   scoreEl.textContent=score; scoreEl.style.color=col; gradeEl.textContent=grade+" · "+score+"/100";
 }
 function renderKPI(m){
@@ -807,7 +839,7 @@ function renderRisk(m){
 
 function renderProb(mean,volDaily){
   const horizons=[{d:21,t:"1 个月"},{d:63,t:"3 个月"},{d:126,t:"6 个月"},{d:252,t:"1 年"}];
-  const sims=5000;
+  const sims=2000;
   const out=horizons.map(h=>{
     let win=0,sum=0;
     for(let s=0;s<sims;s++){
@@ -925,7 +957,7 @@ function computeSignals(){
 
 function renderSignals(rows){
   const box=document.getElementById("signalBox");
-  if(!rows){ box.innerHTML='<div class="empty">点击「开始分析」生成实时操作信号（随净值每 60 秒自动刷新）。</div>'; return; }
+  if(!rows){ box.innerHTML='<div class="empty">点击「开始分析」生成实时操作信号（交易时段每 2 分钟自动刷新）。</div>'; return; }
   const cnt={add:0,reduce:0,close:0,hold:0};
   rows.forEach(r=>cnt[r.action]++);
   const label={add:"加仓",reduce:"减仓",close:"平仓",hold:"继续持仓"};
@@ -990,16 +1022,17 @@ async function loadRecommend(){
        <div class="bar" style="flex:1"><i style="width:${(v*100).toFixed(0)}%;background:#5b8cff"></i></div>
        <div style="width:56px;text-align:right;font-size:12px">${(v*100).toFixed(0)}%</div></div>`).join("");
   const fundHtml = d.funds.length
-    ? d.funds.map(f=>`<span class="tag" title="${f.category}" onclick="document.getElementById('codeInput').value='${f.code}';document.getElementById('codeInput').focus()">${f.code} ${f.name}</span>`).join(" ")
+    ? d.funds.map(f=>`<span class="tag" title="${f.category}（点击直接加入组合）" style="cursor:pointer" onclick="addByCode('${f.code}')">${f.code} ${f.name}</span>`).join(" ")
     : '<span class="muted">精选基金校验未通过（数据源海外受限），请手动搜索代码添加。</span>';
   box.innerHTML=`
     <div class="note" style="margin-bottom:10px">📊 <b>市场环境：</b>${regimeTxt}</div>
     <div style="font-size:13px;font-weight:600;margin:6px 0">建议资产配置比例</div>
     ${allocHtml}
     <div class="note" style="margin:12px 0">${d.note||""}</div>
-    <div style="font-size:13px;font-weight:600;margin:6px 0">各品类精选基金（点击填入搜索框）</div>
+    <div style="font-size:13px;font-weight:600;margin:6px 0">各品类精选基金（点击直接加入组合）</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${fundHtml}</div>
     <div class="note">以上为结合市场温度的参考配置，非投资建议；具体基金请以实时净值为准。</div>`;
+  window.__recoCount = d.funds.length; updateSummaries();
 }
 
 // ---------------- 单基金买入诊断 ----------------
@@ -1023,6 +1056,7 @@ async function runAdvise(){
     <div class="note">近一年收益 ${signPctPct(d.r250)} · 年化波动 ${pct(d.vol)} · 最大回撤 ${pct(d.mdd)} · 夏普 ${FMT(d.sharpe.toFixed(2))} · 估值分位Z ${d.z.toFixed(1)}</div>
     <ul class="suggestions">${d.reasons.map(r=>`<li class="s-warn">${r}</li>`).join("")}</ul>
     <div class="note">诊断基于历史统计与量化规则，仅供参考，不构成投资意见。</div>`;
+  window.__advisedCode=code; updateSummaries();
 }
 
 // ---------------- 组合导入/导出 + 时间戳 ----------------
@@ -1073,6 +1107,13 @@ function updateSummaries(){
     const pl=total-totalCost;
     sp.textContent = n ? (n+" 只 · 市值 ¥"+Math.round(total).toLocaleString("en-US")+" · "+(totalCost>0?(pl/totalCost*100):0).toFixed(1)+"%") : "暂无持仓";
   }
+  const st=document.getElementById("sumTools");
+  if(st){
+    const parts=[];
+    if(window.__recoCount) parts.push("已推荐 "+window.__recoCount+" 只");
+    if(window.__advisedCode) parts.push("已诊断 "+window.__advisedCode);
+    st.textContent = parts.length ? parts.join(" · ") : "配置推荐 · 买入诊断";
+  }
   const sr=document.getElementById("sumReport");
   if(sr){
     if(window.__score!=null){
@@ -1081,6 +1122,37 @@ function updateSummaries(){
       sr.textContent="分析后生成 9 项指标";
     }
   }
+}
+
+function renderOverview(){
+  const box=document.getElementById("overviewBox");
+  if(!box) return;
+  if(window.__score==null){ box.innerHTML='<div class="empty">点击「开始分析」后，这里汇总评分、风险与 Top 3 可执行动作。</div>'; return; }
+  const col = window.__score>=75?"var(--good)":window.__score>=55?"var(--warn)":"var(--bad)";
+  const grade = window.__score>=75?"健康":window.__score>=55?"良好":window.__score>=30?"预警":"高危";
+  const sigs=computeSignals()||[];
+  const pri={close:0,reduce:1,add:2,hold:3};
+  const top=sigs.slice().sort((a,b)=>pri[a.action]-pri[b.action]).slice(0,3)
+    .map(r=>{const lbl={add:"加仓",reduce:"减仓",close:"平仓",hold:"持仓"}[r.action];
+      const sc={add:"sig-add",reduce:"sig-reduce",close:"sig-close",hold:"sig-hold"}[r.action];
+      return `<span class="sig ${sc}">${lbl} ${r.h.name||r.h.code}</span>`;});
+  box.innerHTML=`
+    <div class="row" style="gap:18px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="width:74px;height:74px;border-radius:50%;border:7px solid ${col};display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <span style="font-size:21px;font-weight:700;color:${col}">${window.__score}</span>
+          <span style="font-size:11px;color:var(--muted)">${grade}</span>
+        </div>
+        <div>
+          <div style="font-size:13px;color:var(--muted)">风险等级</div>
+          <div style="font-size:18px;font-weight:600">${window.__risk||"—"}</div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:220px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Top 3 可执行动作（来自操作信号）</div>
+        <div class="row" style="gap:8px">${top.join("")||'<span class="muted">暂无显著操作信号</span>'}</div>
+      </div>
+    </div>`;
 }
 
 // 初始化
