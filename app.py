@@ -83,11 +83,21 @@ def search_fund(key):
                                   "pinyin": ""})
         except Exception:
             pass
-    # 兜底2：纯 6 位代码，用 fundgz 直接取名称（最稳，支付宝/天天共用代码）
+    # 兜底2：纯 6 位代码，优先用 fundgz 直接取名称（国内最稳）；
+    # 但 fundgz 在海外节点常被限，故再兜底到 get_fund（走 fundf10/api.fund，海外可达），
+    # 保证在 Railway 等海外环境下「输入 6 位代码」也能搜到并出现在下拉框。
     if not items and re.match(r"^\d{6}$", key):
         g = _fundgz(key)
         if g and g.get("name"):
             items.append({"code": key, "name": g["name"], "type": "", "pinyin": ""})
+        else:
+            try:
+                f = get_fund(key)
+                if f and f.get("name"):
+                    items.append({"code": key, "name": f["name"],
+                                  "type": f.get("type", ""), "pinyin": ""})
+            except Exception:
+                pass
     return {"ok": True, "items": items[:20]}
 
 
