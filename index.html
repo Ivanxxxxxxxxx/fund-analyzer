@@ -259,6 +259,8 @@
   .kpi.sm .value{font-size:17px}
   .kpi.sm .label{font-size:10.5px}
   .kpi.sm .hint{font-size:9.5px;white-space:normal}
+  .dyn-banner{background:rgba(91,140,255,.12);border:1px solid rgba(91,140,255,.35);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px;line-height:1.5}
+  .warn-banner{background:rgba(255,176,32,.12);border:1px solid rgba(255,176,32,.4);border-radius:10px;padding:8px 12px;font-size:12.5px;margin-bottom:10px;color:#ffcf80}
 </style>
 </head>
 <body>
@@ -477,7 +479,15 @@ let donutChart = null;
 function loadHoldings(){ try{return JSON.parse(localStorage.getItem("fp_holdings")||"[]")}catch(e){return[]} }
 function saveHoldings(){ localStorage.setItem("fp_holdings", JSON.stringify(holdings)) }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
-async function api(path){ const r=await fetch(path); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }
+async function api(path, timeout=120000){
+  const ctrl=new AbortController();
+  const tid=setTimeout(()=>ctrl.abort(), timeout);
+  try{
+    const r=await fetch(path, {signal:ctrl.signal});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return await r.json();
+  } finally { clearTimeout(tid); }
+}
 
 // 常用基金「名称→代码」本地索引：海外节点天天基金搜索接口被限，输入名称时在本地兜底匹配
 const FUND_INDEX = {
@@ -1027,8 +1037,8 @@ function renderTrend(dates, portCum, benchCum, benchName){
 // ---------------- 智能配置推荐 ----------------
 async function loadRecommend(){
   const box=document.getElementById("recoBox");
-  box.innerHTML='<div class="empty">正在分析市场环境并生成配置建议（基金池多因子打分，首次约需 20-40 秒）…</div>';
-  const d=await api("/api/recommend").catch(e=>({ok:false,error:String(e)}));
+  box.innerHTML='<div class="empty">🔄 正在动态扫描全市场基金（实时榜单＋多因子精评）…首次约需 30-60 秒，结果缓存 30 分钟。</div>';
+  const d=await api("/api/recommend", 120000).catch(e=>({ok:false,error:String(e)}));
   if(!d.ok){ box.innerHTML='<div class="empty">推荐生成失败：'+(d.error||"")+'</div>'; return; }
   const env=d.env||{};
   const regimeTxt = env.ok ? (env.regime+"（市场温度 "+env.score+"）") : "市场数据获取受限";
@@ -1062,13 +1072,17 @@ async function loadRecommend(){
     }).join("");
     return `<div class="reco-cat"><div class="reco-cat-h">${cat}</div>${rows}</div>`;
   }).join("") || '<span class="muted">基金池校验未通过（数据源海外受限），请手动搜索代码添加。</span>';
+  const dynBanner = `<div class="dyn-banner">📡 <b>动态实时推荐</b>（非内置名单）：本次实时扫描全市场 <b>${d.universe}</b> 只候选基金，按多因子评分精选。数据更新于 <b>${d.generatedAt||"—"}</b>（每 30 分钟自动重扫）。</div>`;
+  const warnBanner = (d.note && d.note.indexOf("暂不可用")>=0) ? `<div class="warn-banner">⚠️ 部分品类实时榜单在本节点暂不可用，已留空（可手动添加对应基金）。</div>` : "";
   box.innerHTML=`
+    ${dynBanner}
+    ${warnBanner}
     <div class="note" style="margin-bottom:10px">📊 <b>市场环境：</b>${regimeTxt}</div>
     <div style="font-size:13px;font-weight:600;margin:6px 0">建议资产配置比例</div>
     ${allocHtml}
     ${valHtml}
     <div class="note" style="margin:12px 0">${d.note||""}</div>
-    <div style="font-size:13px;font-weight:600;margin:6px 0">各品类精选基金（结合多因子评分，点击直接加入组合）</div>
+    <div style="font-size:13px;font-weight:600;margin:6px 0">各品类动态精选基金（实时榜单＋多因子，点击直接加入组合）</div>
     <div style="margin-top:8px">${fundHtml}</div>
     <div class="note">以上为结合市场温度与估值的参考配置，非投资建议；具体基金请以实时净值为准。</div>`;
   window.__recoCount = d.funds.length; updateSummaries();
