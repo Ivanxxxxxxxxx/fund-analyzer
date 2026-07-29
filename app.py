@@ -1020,12 +1020,15 @@ def _compute_factors(code, bench_rets=None):
         vp = None
         val_basis = "不适用（固收/货币类）"
     elif secid:
+        val_basis = "基准指数近5年价格分位"
         try:
             vp = cached("val", "f_" + secid, _daily_ttl(),
                         lambda s=secid: _index_valuation_percentile(s, 5))
         except Exception:
             vp = None
-        val_basis = "基准指数近5年价格分位"
+        if vp is None:  # 海外节点基准指数日线不可达 → 退化为自身净值分位代理
+            vp = round(sum(1 for x in closes if x <= closes[-1]) / len(closes) * 100, 1)
+            val_basis = "自身净值分位代理（基准指数海外不可达）"
     else:
         vp = round(sum(1 for x in closes if x <= closes[-1]) / len(closes) * 100, 1)
         val_basis = "自身净值近3年分位（主动股基估值代理）"
