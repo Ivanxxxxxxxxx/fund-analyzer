@@ -243,6 +243,22 @@
     .fold-h .sum{max-width:46%;font-size:11px}
     .fold-inner{padding:14px 12px}
   }
+  /* 多因子推荐基金卡片 */
+  .reco-cat{margin:10px 0 4px}
+  .reco-cat-h{font-size:12px;font-weight:700;color:var(--muted);margin:8px 0 6px;letter-spacing:.5px}
+  .reco-fund{background:rgba(255,255,255,0.035);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;cursor:pointer;transition:border-color .15s,background .15s}
+  .reco-fund:hover{border-color:var(--accent);background:rgba(91,140,255,0.08)}
+  .rf-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .rf-code{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .rf-name{font-size:13.5px;font-weight:600;flex:1}
+  .rf-meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--muted)}
+  .rf-meta span{white-space:nowrap}
+  .rf-reason{margin-top:6px;font-size:11.5px;line-height:1.5;color:var(--muted)}
+  .badge{border:1px solid;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600}
+  .kpi.sm{padding:9px 10px}
+  .kpi.sm .value{font-size:17px}
+  .kpi.sm .label{font-size:10.5px}
+  .kpi.sm .hint{font-size:9.5px;white-space:normal}
 </style>
 </head>
 <body>
@@ -1011,7 +1027,7 @@ function renderTrend(dates, portCum, benchCum, benchName){
 // ---------------- 智能配置推荐 ----------------
 async function loadRecommend(){
   const box=document.getElementById("recoBox");
-  box.innerHTML='<div class="empty">正在分析市场环境并生成配置建议…</div>';
+  box.innerHTML='<div class="empty">正在分析市场环境并生成配置建议（基金池多因子打分，首次约需 20-40 秒）…</div>';
   const d=await api("/api/recommend").catch(e=>({ok:false,error:String(e)}));
   if(!d.ok){ box.innerHTML='<div class="empty">推荐生成失败：'+(d.error||"")+'</div>'; return; }
   const env=d.env||{};
@@ -1021,17 +1037,40 @@ async function loadRecommend(){
        <div style="width:96px;font-size:12px" class="muted">${k}</div>
        <div class="bar" style="flex:1"><i style="width:${(v*100).toFixed(0)}%;background:#5b8cff"></i></div>
        <div style="width:56px;text-align:right;font-size:12px">${(v*100).toFixed(0)}%</div></div>`).join("");
-  const fundHtml = d.funds.length
-    ? d.funds.map(f=>`<span class="tag" title="${f.category}（点击直接加入组合）" style="cursor:pointer" onclick="addByCode('${f.code}')">${f.code} ${f.name}</span>`).join(" ")
-    : '<span class="muted">精选基金校验未通过（数据源海外受限），请手动搜索代码添加。</span>';
+  const val=env.valuation||{};
+  const valHtml = Object.keys(val).length ? (
+    '<div style="font-size:13px;font-weight:600;margin:14px 0 6px">宽基估值分位（近5年价格，越低越便宜）</div>'+
+    Object.entries(val).map(([k,v])=>{
+      const col=v<30?"var(--good)":(v<70?"var(--warn)":"var(--bad)");
+      return `<div style="display:flex;align-items:center;gap:10px;margin:6px 0">
+        <div style="width:84px;font-size:12px" class="muted">${k}</div>
+        <div class="bar" style="flex:1"><i style="width:${v}%;background:${col}"></i></div>
+        <div style="width:48px;text-align:right;font-size:12px;color:${col}">${v}%</div></div>`;
+    }).join("")) : "";
+  const byCat={};
+  (d.funds||[]).forEach(f=>{ (byCat[f.category]=byCat[f.category]||[]).push(f); });
+  const fundHtml = Object.entries(byCat).map(([cat,fs])=>{
+    const rows=fs.map(f=>{
+      const vc=f.verdict==="推荐"?"var(--good)":(f.verdict==="谨慎关注"?"var(--warn)":"var(--bad)");
+      const valTxt=(f.valPct==null)?"—":f.valPct+"%";
+      const rsn=(f.reasons||[]).join(" ");
+      return `<div class="reco-fund" onclick="addByCode('${f.code}')" title="点击加入组合">
+        <div class="rf-head"><span class="rf-code">${f.code}</span><span class="rf-name">${f.name}</span>
+          <span class="badge" style="color:${vc};border-color:${vc}">${f.verdict}</span></div>
+        <div class="rf-meta"><span>评分 ${f.score}</span><span>建议配置 ${(f.weight*100).toFixed(0)}%</span><span>估值 ${valTxt}</span></div>
+        <div class="rf-reason">${rsn}</div></div>`;
+    }).join("");
+    return `<div class="reco-cat"><div class="reco-cat-h">${cat}</div>${rows}</div>`;
+  }).join("") || '<span class="muted">基金池校验未通过（数据源海外受限），请手动搜索代码添加。</span>';
   box.innerHTML=`
     <div class="note" style="margin-bottom:10px">📊 <b>市场环境：</b>${regimeTxt}</div>
     <div style="font-size:13px;font-weight:600;margin:6px 0">建议资产配置比例</div>
     ${allocHtml}
+    ${valHtml}
     <div class="note" style="margin:12px 0">${d.note||""}</div>
-    <div style="font-size:13px;font-weight:600;margin:6px 0">各品类精选基金（点击直接加入组合）</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${fundHtml}</div>
-    <div class="note">以上为结合市场温度的参考配置，非投资建议；具体基金请以实时净值为准。</div>`;
+    <div style="font-size:13px;font-weight:600;margin:6px 0">各品类精选基金（结合多因子评分，点击直接加入组合）</div>
+    <div style="margin-top:8px">${fundHtml}</div>
+    <div class="note">以上为结合市场温度与估值的参考配置，非投资建议；具体基金请以实时净值为准。</div>`;
   window.__recoCount = d.funds.length; updateSummaries();
 }
 
@@ -1047,13 +1086,22 @@ async function runAdvise(){
   const vc = d.verdict==="推荐"?"var(--good)":(d.verdict==="谨慎关注"?"var(--warn)":"var(--bad)");
   box.innerHTML=`
     <div class="grid cols-2" style="gap:14px">
-      <div class="kpi"><span class="label">综合评分</span><span class="value" style="color:${vc}">${d.score}</span><span class="hint">/100</span></div>
+      <div class="kpi"><span class="label">综合评分</span><span class="value" style="color:${vc}">${d.score}</span><span class="hint">/100（多因子加权）</span></div>
       <div class="kpi"><span class="label">买入结论</span><span class="value" style="color:${vc}">${d.verdict}</span><span class="hint">${d.name}（${d.type||"—"}）</span></div>
-      <div class="kpi"><span class="label">建议仓位上限</span><span class="value">${(d.cap*100).toFixed(0)}%</span><span class="hint">按波动风险控制</span></div>
+      <div class="kpi"><span class="label">建议仓位上限</span><span class="value">${(d.cap*100).toFixed(0)}%</span><span class="hint">按波动与估值风险</span></div>
       <div class="kpi"><span class="label">建议买入金额</span><span class="value">¥${d.amount.toLocaleString("en-US")}</span><span class="hint">按本金 ¥${d.capital.toLocaleString("en-US")} 计</span></div>
     </div>
+    <div class="grid cols-3" style="gap:10px;margin-top:10px">
+      <div class="kpi sm"><span class="label">Beta(对沪深300)</span><span class="value">${FMT(d.beta.toFixed(2))}</span><span class="hint">${d.beta>1.1?"高弹性":(d.beta<0.9?"防御":"同步")}</span></div>
+      <div class="kpi sm"><span class="label">年化Alpha</span><span class="value">${signPctPct(d.alpha)}</span><span class="hint">超越市场的主动收益</span></div>
+      <div class="kpi sm"><span class="label">信息比率IR</span><span class="value">${FMT(d.ir.toFixed(2))}</span></div>
+      <div class="kpi sm"><span class="label">卡玛比率</span><span class="value">${FMT(d.calmar.toFixed(2))}</span><span class="hint">年化收益/回撤</span></div>
+      <div class="kpi sm"><span class="label">东财五维</span><span class="value">${d.avr?d.avr.toFixed(0):"—"}</span></div>
+      <div class="kpi sm"><span class="label">估值分位</span><span class="value">${d.valPct==null?"—":d.valPct+"%"}</span><span class="hint">${d.valBasis||""}</span></div>
+    </div>
+    <div class="note" style="margin:10px 0">基金经理：${(d.managers&&d.managers.length)?(d.managers[0].name+(d.tenure?("（任职 "+d.tenure+" 年）"):"")):"—"} ｜ 东财五维（选证/收益/抗风险/稳定/择时）：${(d.dims&&Object.keys(d.dims).length)?Object.entries(d.dims).map(([k,v])=>k.slice(0,2)+Math.round(v)).join("/"):"—"}</div>
     <div class="note" style="margin:12px 0">盈利可能性（蒙特卡洛）：1月 ${(d.p1*100).toFixed(0)}% · 3月 ${(d.p3*100).toFixed(0)}% · 6月 ${(d.p6*100).toFixed(0)}% · 1年 ${(d.p12*100).toFixed(0)}%</div>
-    <div class="note">近一年收益 ${signPctPct(d.r250)} · 年化波动 ${pct(d.vol)} · 最大回撤 ${pct(d.mdd)} · 夏普 ${FMT(d.sharpe.toFixed(2))} · 估值分位Z ${d.z.toFixed(1)}</div>
+    <div class="note">近一年收益 ${signPctPct(d.r250)} · 年化波动 ${pct(d.vol)} · 最大回撤 ${pct(d.mdd)} · 夏普 ${FMT(d.sharpe.toFixed(2))} · 估值Z(相对120日均线) ${d.z.toFixed(1)}</div>
     <ul class="suggestions">${d.reasons.map(r=>`<li class="s-warn">${r}</li>`).join("")}</ul>
     <div class="note">诊断基于历史统计与量化规则，仅供参考，不构成投资意见。</div>`;
   window.__advisedCode=code; updateSummaries();
