@@ -16,6 +16,7 @@ import ssl
 import time
 import datetime
 import sys
+import random
 
 PORT = int(os.environ.get("PORT", 8000))  # 云平台通常用环境变量注入端口
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -574,41 +575,58 @@ INDEX_MAP = {
 
 
 def _get_index_kline(secid, days=300):
-    url = ("https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s"
-           "&fields1=f1&fields2=f51,f53&klt=101&fqt=1&beg=0&end=20500101" % secid)
-    txt = fetch(url, headers={"Referer": "https://quote.eastmoney.com/"})
-    d = json.loads(txt)
-    klines = (d.get("data") or {}).get("klines") or []
-    rows = []
-    for k in klines:
-        parts = k.split(",")
-        if len(parts) >= 2:
-            try:
-                rows.append(float(parts[1]))
-            except Exception:
-                pass
-    return rows[-days:]
+    """指数日线收盘序列（多 host 重试，失败容错返回 [] 而非抛异常）。"""
+    hosts = ["https://push2his.eastmoney.com", "https://push2.eastmoney.com", "https://quote.eastmoney.com"]
+    for host in hosts:
+        try:
+            url = host + ("/api/qt/stock/kline/get?secid=%s&fields1=f1&fields2=f51,f53&klt=101&fqt=1&beg=0&end=20500101" % secid)
+            txt = fetch(url, headers={"Referer": "https://quote.eastmoney.com/"}, timeout=15)
+            if not txt:
+                continue
+            d = json.loads(txt)
+            klines = (d.get("data") or {}).get("klines") or []
+            rows = []
+            for k in klines:
+                parts = k.split(",")
+                if len(parts) >= 2:
+                    try:
+                        rows.append(float(parts[1]))
+                    except Exception:
+                        pass
+            if rows:
+                return rows[-days:]
+        except Exception:
+            continue
+    return []
 
 
 def _get_index_series(secid, days=800):
-    """返回指数日期序列与收盘值，用于组合走势基准对比。"""
-    url = ("https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s"
-           "&fields1=f1&fields2=f51,f53&klt=101&fqt=1&beg=0&end=20500101" % secid)
-    txt = fetch(url, headers={"Referer": "https://quote.eastmoney.com/"})
-    d = json.loads(txt)
-    klines = (d.get("data") or {}).get("klines") or []
-    dates, values = [], []
-    for k in klines:
-        parts = k.split(",")
-        if len(parts) >= 2:
-            try:
-                dates.append(parts[0])
-                values.append(float(parts[1]))
-            except Exception:
-                pass
-    if days:
-        dates, values = dates[-days:], values[-days:]
-    return {"dates": dates, "values": values}
+    """返回指数日期序列与收盘值，用于组合走势基准对比（多 host 重试容错）。"""
+    hosts = ["https://push2his.eastmoney.com", "https://push2.eastmoney.com", "https://quote.eastmoney.com"]
+    for host in hosts:
+        try:
+            url = host + ("/api/qt/stock/kline/get?secid=%s&fields1=f1&fields2=f51,f53&klt=101&fqt=1&beg=0&end=20500101" % secid)
+            txt = fetch(url, headers={"Referer": "https://quote.eastmoney.com/"}, timeout=15)
+            if not txt:
+                continue
+            d = json.loads(txt)
+            klines = (d.get("data") or {}).get("klines") or []
+            dates, values = [], []
+            for k in klines:
+                parts = k.split(",")
+                if len(parts) >= 2:
+                    try:
+                        dates.append(parts[0])
+                        values.append(float(parts[1]))
+                    except Exception:
+                        pass
+            if values:
+                if days:
+                    dates, values = dates[-days:], values[-days:]
+                return {"dates": dates, "values": values}
+        except Exception:
+            continue
+    return {"dates": [], "values": []}
 
 
 def _bench_daily_returns(days=730):
@@ -714,26 +732,53 @@ def get_market_env():
 
 
 # 基金池：覆盖主要资产类别的候选标的，工具实时拉取多因子数据、按类别筛选 Top N
-UNIVERSE = {
-    "沪深300": ["110020", "000051", "050002"],
-    "中证500": ["000008", "001556", "161017"],
-    "创业板": ["110026", "003765"],
-    "中证红利": ["100032", "009051"],
-    "债券型": ["110017", "000191", "050011"],
-    "货币基金": ["000198"],
-    "海外(QDII)": ["161130", "270042", "161128"],
-    "黄金": ["000216", "518880"],
-}
-# 类别 → 大类资产配置桶
-_ASSET = {
-    "沪深300": "股票型", "中证500": "股票型", "创业板": "股票型", "中证红利": "股票型",
-    "债券型": "债券型", "货币基金": "货币型", "海外(QDII)": "海外(QDII)", "黄金": "黄金",
-}
+
+
+def get_rank_list(ft, pn=100, name_filter=None):
+    """动态拉取天天基金开放式基金排行，返回 [(code, name, y1, est_date)]。
+    彻底替代内置名单：每次调用都是实时榜单。"""
+    sd = (datetime.date.today() - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
+    ed = datetime.date.today().strftime("%Y-%m-%d")
+    dt = "money" if ft == "money" else "kf"
+    url = ("https://fund.eastmoney.com/data/rankhandler.aspx?op=ph&dt=%s&ft=%s&rs=&gs=0"
+           "&sc=1nz&st=desc&sd=%s&ed=%s&qdii=&tabSubtype=,,,&pi=1&pn=%d&dx=1&v=%s"
+           ) % (dt, ft, sd, ed, pn, random.random())
+    try:
+        html = fetch(url, headers={"Referer": "https://fund.eastmoney.com/"}, timeout=20)
+    except Exception:
+        return []
+    m = re.search(r'datas:\s*\[(.*?)\]\s*,\s*allRecords', html, re.S)
+    if not m:
+        return []
+    out = []
+    for cell in re.findall(r'"([^"]*)"', m.group(1)):
+        p = cell.split(",")
+        if len(p) >= 17 and re.fullmatch(r"\d{6}", p[0]):
+            if name_filter and name_filter not in p[1]:
+                continue
+            try:
+                y1 = float(p[11]) if p[11] else 0.0
+            except Exception:
+                y1 = 0.0
+            out.append((p[0], p[1], y1, p[16] if len(p) > 16 else ""))
+    return out
+
+
+# 动态推荐类别规格：(rankhandler ft, 展示类别名, 大类资产桶, 粗筛取头部数, 需成立>=2年过滤)
+_RECO_CATS = [
+    ("gp", "股票型", "股票型", 15, True),
+    ("hh", "混合型", "股票型", 15, True),
+    ("zs", "指数型", "股票型", 15, True),
+    ("zq", "债券型", "债券型", 12, True),
+    ("qdii", "海外(QDII)", "海外(QDII)", 12, True),
+    ("__gold", "黄金", "黄金", 6, False),
+    ("__money", "货币型", "货币型", 6, False),
+]
 
 
 def recommend_portfolio():
     env = get_market_env()
-    # 大类资产配置（含估值分位微调）
+    # 大类资产配置（含估值分位微调）— 与实时市场温度联动
     if not env.get("ok"):
         alloc = {"股票型": 0.35, "海外(QDII)": 0.18, "债券型": 0.30, "货币型": 0.12, "黄金": 0.05}
         note = "市场指数数据获取受限，采用均衡默认配置，请以实际行情为准。"
@@ -767,54 +812,90 @@ def recommend_portfolio():
         vtxt = ("沪深300估值分位 %.0f%%、中证500 %.0f%%。" % (val_hs, val_zz)) if (val_hs and val_zz) else ""
         note = ("当前市场：%s（温度 %d）。%s%s" % (env["regime"], env["score"], vtxt, tilt or "据此给出如下配置建议。"))
 
-    # 基金池多因子打分，按类别取 Top 2
+    # === 动态候选：实时拉取全市场榜单（不再使用内置名单） ===
     bench = cached("bench", "hs300", _daily_ttl(), lambda: _bench_daily_returns(730))
+    now = datetime.date.today()
+    candidates = []
+    empty_cats = []
 
-    def _score(cat_code):
-        cat, code = cat_code
+    def _est_years(d):
+        try:
+            y, mo, dd = map(int, d.split("-"))
+            return (now - datetime.date(y, mo, dd)).days / 365.25
+        except Exception:
+            return 99.0
+
+    for ft, cat_label, asset, topn, need_age in _RECO_CATS:
+        try:
+            if ft == "__gold":
+                rows = get_rank_list("all", 300, name_filter="黄金")
+            elif ft == "__money":
+                rows = get_rank_list("money", 30)
+                if not rows:
+                    rows = get_rank_list("all", 400, name_filter="货币")
+            else:
+                rows = get_rank_list(ft, 100)
+        except Exception:
+            rows = []
+        if need_age:
+            rows = [r for r in rows if _est_years(r[3]) >= 2.0]
+        rows.sort(key=lambda r: r[2], reverse=True)
+        head = rows[:topn]
+        for code, name, y1, ed in head:
+            candidates.append((cat_label, asset, code, name))
+        if not head:
+            empty_cats.append(cat_label)
+
+    # === 多因子精评（实时净值/五维/经理/估值） ===
+    def _score(item):
+        cat_label, asset, code, name = item
         try:
             fac = _compute_factors(code, bench)
-            return (cat, fac) if fac else None
+            return (cat_label, asset, fac) if fac else None
         except Exception:
             return None
 
-    tasks = [(cat, code) for cat, codes in UNIVERSE.items() for code in codes]
     scored = []
     try:
         from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=8) as ex:
-            for r in ex.map(_score, tasks):
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            for r in ex.map(_score, candidates):
                 if r:
                     scored.append(r)
     except Exception:
-        for t in tasks:
-            r = _score(t)
+        for it in candidates:
+            r = _score(it)
             if r:
                 scored.append(r)
 
     by_cat = {}
-    for cat, fac in scored:
-        by_cat.setdefault(cat, []).append(fac)
+    for cat_label, asset, fac in scored:
+        by_cat.setdefault(cat_label, []).append((asset, fac))
     funds = []
-    for cat, lst in by_cat.items():
-        lst.sort(key=lambda x: x["composite"], reverse=True)
-        top = lst[:2]
-        asset = _ASSET.get(cat, "股票型")
+    for cat_label, lst in by_cat.items():
+        lst.sort(key=lambda x: x[1]["composite"], reverse=True)
+        top = lst[:3]
+        asset = top[0][0]
         w = alloc.get(asset, 0.0)
         per = w / len(top) if top else 0.0
-        for fac in top:
+        for asset, fac in top:
             verdict = "推荐" if fac["composite"] >= 68 else ("谨慎关注" if fac["composite"] >= 50 else "暂不推荐")
             reasons = ["多因子综合 %.0f 分；近一年 %s、夏普 %.2f、最大回撤 %s、估值分位 %s%%。"
                        % (fac["composite"], _s(fac["r250"]), fac["sharpe"], _s(fac["mdd"]),
                           (fac["valPct"] if fac["valPct"] is not None else 0))]
             if fac["avr"]:
                 reasons.append("东方财富五维综合 %.0f。" % fac["avr"])
-            funds.append({"category": cat, "asset": asset, "code": fac["code"], "name": fac["name"],
+            funds.append({"category": cat_label, "asset": asset, "code": fac["code"], "name": fac["name"],
                           "type": fac["type"], "score": fac["composite"], "verdict": verdict,
                           "weight": round(per, 4), "valPct": fac["valPct"], "reasons": reasons})
     funds.sort(key=lambda x: (x["asset"], -x["score"]))
-    return {"ok": True, "env": env, "alloc": alloc, "note": note,
-            "universe": len(tasks), "funds": funds}
+    dyn_note = ""
+    if empty_cats:
+        dyn_note = "（%s 的实时榜单在本节点暂不可用，本次该仓位为空，可手动添加对应基金）" % "、".join(empty_cats)
+    return {"ok": True, "env": env, "alloc": alloc, "note": note + dyn_note,
+            "universe": len(candidates), "funds": funds, "dynamic": True,
+            "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
+
 
 
 def _fund_bench_secid(name, ftype):
@@ -1093,7 +1174,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, json.dumps(get_market_env(), ensure_ascii=False))
             return
         if path == "/api/recommend":
-            self._send(200, json.dumps(recommend_portfolio(), ensure_ascii=False))
+            # 动态全市场扫描较重，结果缓存 30 分钟（数据日频变化，足够动态且避免每次点击都大扫描拖垮服务）
+            data = cached("reco", "dyn", 1800, recommend_portfolio)
+            self._send(200, json.dumps(data, ensure_ascii=False))
             return
         if path.startswith("/api/advise/"):
             code = path.split("/")[-1]
