@@ -47,6 +47,69 @@ def fetch(url, headers=None, timeout=20):
             return r.read().decode("utf-8", "ignore")
 
 
+# ---------------- 智能缓存（按基金交易规则） ----------------
+# 基金净值每个交易日收盘后才披露一次（一般当晚 22:00 前），盘中只有「估值」且只在
+# 交易时段有意义。据此设计缓存：日频数据缓存到「下一交易日 22:00」才刷新；盘中估值
+# 仅在交易时段缓存 60 秒，非交易时段不取（直接用已披露净值）。
+import datetime as _dt
+
+_CACHE = {}
+
+
+def _next_nav_refresh():
+    """下一次净值披露时刻：交易日 22:00。"""
+    now = _dt.datetime.now()
+    cutoff = now.replace(hour=22, minute=0, second=0, microsecond=0)
+    if now < cutoff and now.weekday() < 5:
+        return cutoff
+    d = now + _dt.timedelta(days=1)
+    while d.weekday() >= 5:
+        d += _dt.timedelta(days=1)
+    return d.replace(hour=22, minute=0, second=0, microsecond=0)
+
+
+def _is_trading_now():
+    now = _dt.datetime.now()
+    if now.weekday() >= 5:
+        return False
+    t = now.time()
+    return (_dt.time(9, 30) <= t <= _dt.time(11, 30)) or (_dt.time(13, 0) <= t <= _dt.time(15, 0))
+
+
+def cached(category, key, ttl, fn):
+    """通用缓存：ttl 为秒；ttl<=0 表示不缓存（如非交易时段的盘中估值）。"""
+    if ttl <= 0:
+        return fn()
+    ck = category + ":" + key
+    item = _CACHE.get(ck)
+    now_ts = _dt.datetime.now().timestamp()
+    if item and now_ts - item[0] < item[1]:
+        return item[2]
+    val = fn()
+    _CACHE[ck] = (now_ts, ttl, val)
+    return val
+
+
+def _daily_ttl():
+    secs = (_next_nav_refresh() - _dt.datetime.now()).total_seconds()
+    return max(60, int(secs))
+
+
+def _estimate_ttl():
+    return 60 if _is_trading_now() else 0
+
+
+def _mean(xs):
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def _std(xs):
+    if len(xs) < 2:
+        return 0.0
+    m = _mean(xs)
+    return (sum((x - m) ** 2 for x in xs) / (len(xs) - 1)) ** 0.5
+
+
 # ---------------- 天天基金接口封装 ----------------
 
 def search_fund(key):
@@ -101,7 +164,7 @@ def search_fund(key):
     return {"ok": True, "items": items[:20]}
 
 
-def _fundgz(code):
+def _fundgz_raw(code):
     """天天基金实时估值接口，返回 {fundcode,name,dwjz,jzrq,gszzl,...}，含基金名称。"""
     try:
         txt = fetch("https://fundgz.1234567.com.cn/js/%s.js" % code)
@@ -113,6 +176,11 @@ def _fundgz(code):
         return json.loads(m.group(1))
     except Exception:
         return None
+
+
+def _fundgz(code):
+    """包装：盘中估值仅在交易时段缓存 60 秒；非交易时段不缓存（直接用已披露净值）。"""
+    return cached("est", code, _estimate_ttl(), lambda: _fundgz_raw(code))
 
 
 def infer_type(name):
@@ -157,13 +225,13 @@ def _extract_var(txt, var):
     return None
 
 
-def get_detail(code):
+def _get_detail_raw(code):
     """基金档案：名称/类型/最新净值+涨跌/资产配置/前十大持仓。"""
     res = {"ok": True, "code": code, "name": "", "type": "", "nav": None,
            "navDate": None, "changePct": None,
            "assetAllocation": [], "industry": [], "holdings": []}
     txt = None
-    for host in ("https://fundf10.eastmoney.com", "https://fund.eastmoney.com"):
+    for host in ("https://fund.eastmoney.com", "https://fundf10.eastmoney.com"):
         try:
             t = fetch("%s/pingzhongdata/%s.js" % (host, code),
                       headers={"Referer": "http://fundf10.eastmoney.com/"})
@@ -217,7 +285,7 @@ def get_detail(code):
 
     # 前十大持仓（独立接口，结构稳定）
     try:
-        h = get_holdings(code)
+        h = _get_holdings_raw(code)
         if h.get("ok"):
             res["holdings"] = h.get("data") or []
     except Exception:
@@ -241,8 +309,8 @@ def get_detail(code):
     return res
 
 
-def get_fund(code):
-    detail = get_detail(code)  # 名称/类型/净值/涨跌/资产配置/持仓（最稳来源）
+def _get_fund_raw(code):
+    detail = _get_detail_raw(code)  # 名称/类型/净值/涨跌/资产配置/持仓（最稳来源）
     nav = detail.get("nav")
     nav_date = detail.get("navDate")
     chg = detail.get("changePct")
@@ -276,30 +344,53 @@ def get_fund(code):
             "holdings": detail.get("holdings") or []}
 
 
-def get_history(code, days=365):
+def _get_history_raw(code, days=365):
+    # 主数据源：pingzhongdata 内含完整历史单位净值序列（不受分页限流影响）；
+    # lsjz 分页接口作为兜底（部分环境/基金可能只返回近期少量数据）。
     result = []
-    page = 1
-    ts = int(datetime.datetime.now().timestamp() * 1000)
-    while len(result) < days and page <= 30:
-        url = ("https://api.fund.eastmoney.com/f10/lsjz?fundCode=%s&pageIndex=%d"
-               "&pageSize=60&startDate=&endDate=&_=%d" % (code, page, ts))
-        try:
-            txt = fetch(url, headers={"Referer": REFERER})
-            data = json.loads(txt)
-            lst = (data.get("Data") or {}).get("LSJZList") or []
-            if not lst:
-                break
-            for it in lst:
-                dwjz = it.get("DWJZ")
-                if dwjz in (None, "", "--"):
+    try:
+        txt = fetch("https://fund.eastmoney.com/pingzhongdata/%s.js" % code,
+                    headers={"Referer": "http://fund.eastmoney.com/"})
+        raw = _extract_var(txt, "Data_netWorthTrend")
+        if raw:
+            nwt = json.loads(raw)
+            for it in nwt:
+                y = it.get("y")
+                if y is None:
                     continue
-                result.append({"date": it.get("FSRQ"), "nav": float(dwjz)})
-            if len(lst) < 60:
+                try:
+                    dt = datetime.datetime.fromtimestamp(int(it.get("x", 0)) / 1000).strftime("%Y-%m-%d")
+                except Exception:
+                    continue
+                result.append({"date": dt, "nav": float(y)})
+    except Exception:
+        pass
+    if len(result) < 30:  # 兜底：lsjz 分页
+        page = 1
+        ts = int(datetime.datetime.now().timestamp() * 1000)
+        while len(result) < days and page <= 30:
+            url = ("https://api.fund.eastmoney.com/f10/lsjz?fundCode=%s&pageIndex=%d"
+                   "&pageSize=60&startDate=&endDate=&_=%d" % (code, page, ts))
+            try:
+                txt = fetch(url, headers={"Referer": REFERER})
+                data = json.loads(txt)
+                lst = (data.get("Data") or {}).get("LSJZList") or []
+                if not lst:
+                    break
+                for it in lst:
+                    dwjz = it.get("DWJZ")
+                    if dwjz in (None, "", "--"):
+                        continue
+                    result.append({"date": it.get("FSRQ"), "nav": float(dwjz)})
+                if len(lst) < 60:
+                    break
+                page += 1
+            except Exception:
                 break
-            page += 1
-        except Exception as e:
-            return {"ok": False, "error": str(e), "data": _dedupe(result)}
-    return {"ok": True, "data": _dedupe(result)[:days] if days else _dedupe(result)}
+    result = _dedupe(result)
+    if days:
+        result = result[-days:]
+    return {"ok": True, "data": result}
 
 
 def _dedupe(rows):
@@ -313,7 +404,7 @@ def _dedupe(rows):
     return uniq
 
 
-def get_holdings(code):
+def _get_holdings_raw(code):
     try:
         url = ("https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&code=%s"
                "&topline=10&year=&month=" % code)
@@ -377,6 +468,269 @@ def get_stock_industry(code):
     return res
 
 
+# ============================================================
+# 缓存包装：日频数据缓存到下一交易日 22:00；盘中估值仅交易时段缓存 60s
+# ============================================================
+def get_detail(code):
+    return cached("detail", code, _daily_ttl(), lambda: _get_detail_raw(code))
+
+
+def get_history(code, days=365):
+    return cached("history", "%s_%d" % (code, days), _daily_ttl(), lambda: _get_history_raw(code, days))
+
+
+def get_holdings(code):
+    return cached("holdings", code, _daily_ttl(), lambda: _get_holdings_raw(code))
+
+
+def get_fund(code):
+    return cached("fund", code, _daily_ttl(), lambda: _get_fund_raw(code))
+
+
+# ============================================================
+# 市场环境分析 + 智能配置推荐 + 单基金买入诊断
+# ============================================================
+import random as _rnd
+
+
+def _norm_box(mean, sd):
+    """Box-Muller 正态随机数（用 math.sqrt 取实数根，避免负数 **0.5 变成复数）。"""
+    u = 0.0
+    while u == 0:
+        u = _rnd.random()
+    v = _rnd.random()
+    return mean + sd * (_sqrt(-2.0 * _log(u)) * _cos(2 * 3.14159265358979 * v))
+
+
+_cos = __import__("math").cos
+_sqrt = __import__("math").sqrt
+_log = __import__("math").log
+
+
+# 用于判断市场环境的宽基/海外/避险指数（东方财富 secid）
+INDEX_MAP = {
+    "沪深300": "1.000300",
+    "中证500": "1.000905",
+    "创业板指": "0.399006",
+    "纳斯达克": "100.IXIC",
+    "标普500": "100.SPX",
+    "黄金ETF": "1.518880",
+}
+
+
+def _get_index_kline(secid, days=300):
+    url = ("https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s"
+           "&fields1=f1&fields2=f51,f53&klt=101&fqt=1&beg=0&end=20500101" % secid)
+    txt = fetch(url, headers={"Referer": "https://quote.eastmoney.com/"})
+    d = json.loads(txt)
+    klines = (d.get("data") or {}).get("klines") or []
+    rows = []
+    for k in klines:
+        parts = k.split(",")
+        if len(parts) >= 2:
+            try:
+                rows.append(float(parts[1]))
+            except Exception:
+                pass
+    return rows[-days:]
+
+
+def _get_index_series(secid, days=800):
+    """返回指数日期序列与收盘值，用于组合走势基准对比。"""
+    url = ("https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s"
+           "&fields1=f1&fields2=f51,f53&klt=101&fqt=1&beg=0&end=20500101" % secid)
+    txt = fetch(url, headers={"Referer": "https://quote.eastmoney.com/"})
+    d = json.loads(txt)
+    klines = (d.get("data") or {}).get("klines") or []
+    dates, values = [], []
+    for k in klines:
+        parts = k.split(",")
+        if len(parts) >= 2:
+            try:
+                dates.append(parts[0])
+                values.append(float(parts[1]))
+            except Exception:
+                pass
+    if days:
+        dates, values = dates[-days:], values[-days:]
+    return {"dates": dates, "values": values}
+
+
+def _compute_market_env():
+    closes = {}
+    for name, secid in INDEX_MAP.items():
+        try:
+            rows = _get_index_kline(secid, 300)
+            if len(rows) >= 60:
+                closes[name] = rows
+        except Exception:
+            pass
+    hs = closes.get("沪深300")
+    if not hs or len(hs) < 60:
+        return {"ok": False, "available": list(closes.keys())}
+    n = len(hs)
+
+    def ret(k):
+        return hs[-1] / hs[-1 - k] - 1 if n > k else None
+
+    r20, r60, r120, r250 = ret(20), ret(60), ret(120), ret(250)
+    rets = [hs[i] / hs[i - 1] - 1 for i in range(1, n)]
+    vol = _std(rets) * _sqrt(252)
+    peak = max(hs[-min(250, n):])
+    dd = hs[-1] / peak - 1
+    # 市场温度：动量 + 回撤综合（0-100）
+    score = 50
+    if r120 is not None:
+        score += 20 if r120 > 0.10 else (-20 if r120 < -0.10 else 0)
+    if dd is not None:
+        score += 10 if dd > -0.10 else (-15 if dd < -0.25 else 0)
+    score = max(0, min(100, score))
+    regime = "牛市氛围" if score >= 65 else ("熊市氛围" if score <= 35 else "震荡市")
+    return {"ok": True, "regime": regime, "score": score,
+            "r20": r20, "r60": r60, "r120": r120, "r250": r250,
+            "vol": vol, "dd": dd, "available": list(closes.keys())}
+
+
+def get_market_env():
+    return cached("market", "env", _daily_ttl(), _compute_market_env)
+
+
+# 精选基金（按类别，给出备选代码，工具会实时校验名称后展示）
+CURATED = {
+    "沪深300指数": ["110020", "000051"],
+    "中证500指数": ["000008", "001556"],
+    "债券型(稳健)": ["110017", "000191"],
+    "货币基金": ["000198"],
+    "海外(QDII)": ["161130", "270042"],
+    "黄金": ["000216"],
+}
+
+
+def recommend_portfolio():
+    env = get_market_env()
+    if not env.get("ok"):
+        alloc = {"股票型": 0.35, "海外(QDII)": 0.20, "债券型": 0.30, "货币型": 0.15}
+        note = "市场指数数据获取受限，采用均衡默认配置（股35/海外20/债30/货15），请以实际行情为准。"
+    else:
+        r120 = env.get("r120") or 0
+        vol = env.get("vol") or 0.20
+        dd = env.get("dd") or 0
+        if env["regime"] == "牛市氛围":
+            alloc = {"股票型": 0.50, "海外(QDII)": 0.20, "债券型": 0.18, "货币型": 0.12}
+        elif env["regime"] == "熊市氛围":
+            alloc = {"股票型": 0.22, "海外(QDII)": 0.10, "债券型": 0.43, "货币型": 0.25}
+        else:
+            alloc = {"股票型": 0.35, "海外(QDII)": 0.20, "债券型": 0.30, "货币型": 0.15}
+        tilt = ""
+        if vol > 0.25:
+            alloc["债券型"] = alloc.get("债券型", 0) + 0.05
+            alloc["股票型"] = max(0.15, alloc.get("股票型", 0) - 0.05)
+            tilt = "当前波动偏高(年化%.0f%%)，已上调防御仓位。" % (vol * 100)
+        _s = lambda x: ("+%.1f%%" % (x * 100)) if x >= 0 else ("%.1f%%" % (x * 100))
+        note = ("当前市场：%s（温度 %d）。沪深300 近120日 %s、年化波动 %.0f%%、近一年最大回撤 %s。%s"
+                % (env["regime"], env["score"], _s(r120), vol * 100, _s(dd), tilt or "据此给出如下配置建议。"))
+    funds = []
+    for cat, codes in CURATED.items():
+        for code in codes:
+            try:
+                f = get_fund(code)
+                if f.get("ok") and f.get("name"):
+                    funds.append({"category": cat, "code": code,
+                                  "name": f["name"], "type": f.get("type", "")})
+            except Exception:
+                pass
+    return {"ok": True, "env": env, "alloc": alloc, "note": note, "funds": funds}
+
+
+def advise_fund(code, capital=100000):
+    f = get_fund(code)
+    if not f.get("ok") or not f.get("name"):
+        return {"ok": False, "error": "未找到基金或数据不足: " + str(code)}
+    hist = get_history(code, 730)
+    data = hist.get("data") or []
+    if len(data) < 60:
+        return {"ok": False, "error": "历史净值不足 60 个交易日，无法稳健评估"}
+    closes = [d["nav"] for d in data]
+    dates = [d["date"] for d in data]
+    n = len(closes)
+    rets = [closes[i] / closes[i - 1] - 1 for i in range(1, n)]
+    m, s = _mean(rets), _std(rets)
+
+    def _s(x):
+        return ("+%.1f%%" % (x * 100)) if x >= 0 else ("%.1f%%" % (x * 100))
+
+    def ret(k):
+        return closes[-1] / closes[-1 - k] - 1 if n > k else None
+
+    r20, r60, r120, r250 = ret(20), ret(60), ret(120), ret(250)
+    vol = s * _sqrt(252)
+    ann = (closes[-1] / closes[0]) ** (252.0 / len(rets)) - 1
+    peak = max(closes)
+    mdd = closes[-1] / peak - 1
+    sharpe = (ann - 0.02) / vol if vol > 0 else 0
+    win = closes[-120:]
+    mu = _mean(win)
+    sd = _std(win) or 1e-9
+    z = (closes[-1] - mu) / sd
+
+    def mc(days, sims=2000):
+        win_cnt = 0
+        for _ in range(sims):
+            g = 1.0
+            for _ in range(days):
+                g *= 1 + _norm_box(m, s)
+            if g > 1:
+                win_cnt += 1
+        return win_cnt / sims
+
+    p1, p3, p6, p12 = mc(21), mc(63), mc(126), mc(252)
+
+    # 综合评分与结论
+    score = 50
+    score += 15 if (r120 or 0) > 0 else -10
+    score += 15 if z < -0.5 else (-15 if z > 1.5 else 0)
+    score += 10 if sharpe > 0.8 else (-10 if sharpe < 0.2 else 0)
+    score += 10 if mdd > -0.3 else (-10 if mdd < -0.5 else 0)
+    score = max(0, min(100, int(score)))
+    verdict = "推荐" if score >= 65 else ("谨慎关注" if score >= 45 else "暂不推荐")
+
+    # 仓位建议：按波动风险控制单只上限
+    if vol < 0.10:
+        cap = 0.25
+    elif vol < 0.20:
+        cap = 0.18
+    elif vol < 0.30:
+        cap = 0.12
+    else:
+        cap = 0.07
+    if verdict == "暂不推荐":
+        cap = min(cap, 0.05)
+    amount = int(cap * capital)
+
+    reasons = []
+    reasons.append("类型：%s；近一年收益 %s，年化波动 %.1f%%，最大回撤 %s，夏普 %.2f。"
+                   % (f.get("type") or "—", _s(r250), vol * 100, _s(mdd), sharpe))
+    reasons.append("近120日估值分位 Z=%.1f（%s），%s"
+                   % (z, "处相对低位" if z < -0.5 else ("处相对高位" if z > 1.5 else "中性"),
+                      "回调时可分批布局" if z < -0.5 else ("短期偏贵、注意追高" if z > 1.5 else "估值中性")))
+    reasons.append("持有盈利概率：1月 %.0f%% / 3月 %.0f%% / 6月 %.0f%% / 1年 %.0f%%。"
+                   % (p1 * 100, p3 * 100, p6 * 100, p12 * 100))
+    if verdict == "推荐":
+        reasons.append("综合评分 %d，趋势与估值较友好，可纳入组合。" % score)
+    elif verdict == "谨慎关注":
+        reasons.append("综合评分 %d，存在一定机会但风险犹存，建议小仓位试探。" % score)
+    else:
+        reasons.append("综合评分 %d，当前性价比较低，建议观望或等待更好买点。" % score)
+    reasons.append("按风险控制，单只建议仓位上限约 %.0f%%（约 ¥%s，按本金 ¥%s 计）；高波动品种不宜重仓。"
+                   % (cap * 100, format(amount, ","), format(int(capital), ",")))
+
+    return {"ok": True, "code": code, "name": f.get("name"), "type": f.get("type", ""),
+            "nav": f.get("nav"), "navDate": f.get("navDate"), "score": score, "verdict": verdict,
+            "cap": cap, "amount": amount, "capital": capital,
+            "r20": r20, "r60": r60, "r120": r120, "r250": r250,
+            "vol": vol, "ann": ann, "mdd": mdd, "sharpe": sharpe, "z": z,
+            "p1": p1, "p3": p3, "p6": p6, "p12": p12, "reasons": reasons}
+
 
 # ---------------- HTTP 服务 ----------------
 
@@ -403,23 +757,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path, qs = parsed.path, urllib.parse.parse_qs(parsed.query)
         if path == "/debug":
-            import stat as _stat
-            def _perm(p):
-                try:
-                    m = _stat.S_IMODE(os.stat(p).st_mode)
-                    return oct(m) + (" (可执行)" if m & 0o111 else " (不可执行!)")
-                except Exception as e:
-                    return "不存在: %s" % e
             info = {
                 "python_version": sys.version.split()[0],
-                "cwd": os.getcwd(),
-                "BASE": BASE,
                 "PORT_env": os.environ.get("PORT"),
-                "list_BASE": sorted(os.listdir(BASE)),
-                "scf_bootstrap_perm": _perm(os.path.join(BASE, "scf_bootstrap")),
-                "app.py_exists": os.path.exists(os.path.join(BASE, "app.py")),
-                "index.html_exists": os.path.exists(os.path.join(BASE, "index.html")),
                 "protocol_version": "HTTP/1.1",
+                "trading_now": _is_trading_now(),
+                "next_nav_refresh": _next_nav_refresh().strftime("%Y-%m-%d %H:%M"),
+                "cache_entries": len(_CACHE),
             }
             self._send(200, json.dumps(info, ensure_ascii=False, indent=2))
             return
@@ -433,6 +777,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/search":
             self._send(200, json.dumps(search_fund(qs.get("key", [""])[0]), ensure_ascii=False))
+            return
+        if path == "/api/market":
+            self._send(200, json.dumps(get_market_env(), ensure_ascii=False))
+            return
+        if path == "/api/recommend":
+            self._send(200, json.dumps(recommend_portfolio(), ensure_ascii=False))
+            return
+        if path.startswith("/api/advise/"):
+            code = path.split("/")[-1]
+            try:
+                capital = int(qs.get("capital", ["100000"])[0])
+            except Exception:
+                capital = 100000
+            self._send(200, json.dumps(advise_fund(code, capital), ensure_ascii=False))
+            return
+        if path.startswith("/api/index/"):
+            code = path.split("/")[-1]
+            secid = {"000300": "1.000300", "000905": "1.000905",
+                     "399006": "0.399006"}.get(code, "1." + code)
+            name = {"000300": "沪深300", "000905": "中证500", "399006": "创业板指"}.get(code, code)
+            data = cached("index", secid, _daily_ttl(), lambda: _get_index_series(secid, 800))
+            data = dict(data)
+            data["name"] = name
+            self._send(200, json.dumps(data, ensure_ascii=False))
             return
         if path.startswith("/api/fund/"):
             self._send(200, json.dumps(get_fund(path.split("/")[-1]), ensure_ascii=False))

@@ -208,10 +208,50 @@
 
   <!-- 持仓明细 -->
   <div class="card">
-    <h3 class="sec"><span class="ic">💼</span>持仓明细（市值 / 占比 / 成本 / 盈亏）</h3>
+    <h3 class="sec"><span class="ic">💼</span>持仓明细（市值 / 占比 / 成本 / 盈亏）
+      <span style="margin-left:auto" class="row">
+        <span class="pill" id="dataStamp" style="border-color:rgba(25,195,125,.35);color:#7fe3a8">数据更新：—</span>
+        <button class="btn-ghost btn-sm" onclick="exportJSON()">⬇ 导出</button>
+        <button class="btn-ghost btn-sm" onclick="importJSON()">⬆ 导入</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none" onchange="doImport(this)">
+      </span>
+    </h3>
     <div id="holdingsBox">
       <div class="empty">还没有基金，先在上方输入代码添加吧。</div>
     </div>
+  </div>
+
+  <!-- 智能配置推荐 -->
+  <div class="card">
+    <h3 class="sec"><span class="ic">🤖</span>智能配置推荐（结合当前市场环境）
+      <span style="margin-left:auto" class="row">
+        <button class="btn-primary btn-sm" onclick="loadRecommend()">🔄 生成推荐</button>
+      </span>
+    </h3>
+    <div id="recoBox"><div class="empty">点击「生成推荐」，工具将抓取沪深300等指数判断市场温度，给出股/债/货/QDII 配置比例与精选基金。</div></div>
+  </div>
+
+  <!-- 单基金买入诊断 -->
+  <div class="card">
+    <h3 class="sec"><span class="ic">🔍</span>单基金买入诊断（给出代码自动分析）</h3>
+    <div class="add-bar">
+      <div class="add-input-wrap">
+        <input type="text" id="adviseInput" autocomplete="off" placeholder="输入基金代码(如 110011) 诊断是否值得买、适合买多少"
+               onkeydown="if(event.key==='Enter')runAdvise()">
+      </div>
+      <input class="num" id="capitalInput" type="number" min="1000" step="10000" value="100000" title="可用于投资基金的总本金(元)"
+             style="width:150px" placeholder="本金¥">
+      <button class="btn-primary" onclick="runAdvise()">开始诊断</button>
+      <span class="muted">本金用于估算「建议买入金额」</span>
+    </div>
+    <div id="adviseBox"><div class="empty">输入基金代码后点击「开始诊断」，自动分析收益/波动/回撤/估值分位/盈利概率，并给出是否推荐、建议仓位。</div></div>
+  </div>
+
+  <!-- 组合走势与基准对比 -->
+  <div class="card">
+    <h3 class="sec"><span class="ic">📈</span>组合走势与基准对比（累计收益）</h3>
+    <div id="trendBox"><div class="empty">点击「开始分析」后展示组合 vs 沪深300 的累计收益曲线。</div></div>
+    <div id="trendCanvasWrap" style="position:relative;height:300px;display:none"><canvas id="trendCanvas"></canvas></div>
   </div>
 
   <!-- 评分 + KPI -->
@@ -310,6 +350,37 @@ function saveHoldings(){ localStorage.setItem("fp_holdings", JSON.stringify(hold
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
 async function api(path){ const r=await fetch(path); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }
 
+// 常用基金「名称→代码」本地索引：海外节点天天基金搜索接口被限，输入名称时在本地兜底匹配
+const FUND_INDEX = {
+  "000001":"华夏成长混合","000011":"华夏大盘精选混合","000051":"华夏沪深300ETF联接A",
+  "000008":"嘉实中证500ETF联接A","000216":"华安黄金易ETF联接A","000198":"天弘余额宝货币",
+  "000478":"建信中证500指数增强A","000961":"天弘沪深300ETF联接A","001156":"申万菱信量化小盘股票",
+  "001632":"天弘中证食品饮料A","002001":"华夏回报混合","003095":"中欧医疗健康混合A",
+  "005827":"易方达蓝筹精选混合","110003":"易方达上证50指数A","110011":"易方达优质精选混合(QDII)",
+  "110017":"易方达增强回报债券A","110020":"易方达沪深300ETF联接A","110022":"易方达消费行业股票",
+  "110027":"易方达安心回报债券A","161005":"富国天惠成长混合(LOF)","161017":"富国中证500指数增强(LOF)",
+  "161725":"招商中证白酒指数(LOF)","161726":"招商国证生物医药指数(LOF)","161130":"易方达标普500(QDII-LOF)",
+  "161720":"招商中证全指证券公司(LOF)","163402":"兴全趋势投资混合(LOF)","163406":"兴全合润混合(LOF)",
+  "163417":"兴全合宜灵活配置混合(LOF)","217022":"招商产业债券A","260108":"景顺长城新兴成长混合",
+  "270042":"广发纳斯达克100指数(QDII)","270048":"广发纯债债券A","320007":"诺安成长混合",
+  "519018":"汇添富均衡增长混合","519066":"汇添富蓝筹稳健混合","519674":"银河创新成长混合",
+  "519732":"交银施罗德新生活力混合","100018":"富国天利增长债券","050027":"博时信用债纯债债券A",
+  "000191":"富国信用债债券A","001071":"华安媒体互联网混合","001856":"前海开源国家比较优势混合",
+  "001875":"前海开源沪港深优势精选混合","002190":"农银汇理新能源主题混合","001102":"前海开源稀缺资产混合",
+  "001986":"前海开源人工智能混合","001714":"工银瑞信文体产业股票","519712":"交银定期支付双息平衡混合",
+  "001595":"天弘中证银行指数A","001549":"天弘上证50指数A","100056":"富国低碳新经济混合"
+};
+function localIndexSearch(k){
+  k=k.trim();
+  const out=[]; const isCode=/^\d{6}$/.test(k);
+  for(const [code,name] of Object.entries(FUND_INDEX)){
+    if(isCode){ if(code.startsWith(k)) out.push({code,name,type:"",local:true}); }
+    else if(name.includes(k)) out.push({code,name,type:"",local:true});
+    if(out.length>=20) break;
+  }
+  return out;
+}
+
 // ---------------- 添加 / 渲染持仓 ----------------
 let searchTimer=null;
 async function onSearchInput(){
@@ -319,14 +390,16 @@ async function onSearchInput(){
   clearTimeout(searchTimer);
   searchTimer=setTimeout(async ()=>{
     const s=await api("/api/search?key="+encodeURIComponent(v)).catch(()=>({ok:false,items:[]}));
-    if(s.ok && s.items && s.items.length){
-      dd.innerHTML=s.items.map((it,i)=>
+    let items=(s.ok && s.items)||[];
+    if(!items.length) items=localIndexSearch(v);
+    if(items.length){
+      dd.innerHTML=items.map((it,i)=>
         `<div class="sd-item" onclick="pickSearch(${i})">
            <span class="sd-code">${it.code}</span>
            <span class="sd-name">${it.name}</span>
-           <span class="sd-type">${it.type||""}</span>
+           <span class="sd-type">${it.local?"本地":(it.type||"")}</span>
          </div>`).join("");
-      dd._items=s.items;
+      dd._items=items;
       dd.style.display="block";
     } else {
       dd.innerHTML='<div class="sd-empty">未找到匹配基金，换个关键词试试</div>';
@@ -359,7 +432,7 @@ async function addByCode(code){
     assetAllocation:f.assetAllocation||[], industry:f.industry||[], industryBasis:f.industryBasis||"", holdings:f.holdings||[]});
   document.getElementById("codeInput").value="";
   document.getElementById("searchDropdown").style.display="none";
-  saveHoldings(); renderHoldings(); toast("已添加 "+f.name);
+  saveHoldings(); renderHoldings(); setDataStamp(); toast("已添加 "+f.name);
 }
 // 点击空白处关闭搜索下拉
 document.addEventListener("click", e=>{
@@ -408,7 +481,7 @@ function delFund(i){ holdings.splice(i,1); saveHoldings(); renderHoldings(); }
 async function refreshNav(){
   if(!holdings.length){ toast("请先添加基金"); return; }
   for(const h of holdings){ const f=await api("/api/fund/"+h.code).catch(()=>({})); if(f.ok){ h.nav=f.nav; h.navDate=f.navDate; h.changePct=f.changePct; h.name=h.name||f.name; h.type=h.type||f.type; } }
-  saveHoldings(); renderHoldings(); renderSignals(computeSignals()); toast("净值已刷新");
+  saveHoldings(); renderHoldings(); renderSignals(computeSignals()); setDataStamp(); toast("净值已刷新");
 }
 
 // ---------------- 分析计算 ----------------
@@ -432,7 +505,7 @@ function norm(mean,sd){ // Box-Muller
 async function analyze(){
   if(holdings.length<1){ toast("请先添加至少一只基金"); return; }
   toast("正在拉取历史净值并计算…");
-  for(const h of holdings){ const r=await api("/api/history/"+h.code+"?days=365").catch(()=>({data:[]})); h.history=r.data||[]; }
+  for(const h of holdings){ const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]})); h.history=r.data||[]; }
   const miss=holdings.filter(h=>!h.history||h.history.length<20);
   if(miss.length){ toast("警告："+miss.map(h=>h.code).join(",")+" 历史不足，结果可能不准"); }
 
@@ -453,6 +526,22 @@ async function analyze(){
   const L=Math.min(...rets.map(r=>r.length));
   const pr=[];
   for(let t=0;t<L;t++){ let r=0; for(let i=0;i<holdings.length;i++) r+=w[i]*rets[i][t]; pr.push(r); }
+
+  // 基准对比（沪深300）与组合累计收益曲线
+  let benchName="沪深300", benchCum=null, portCum=null, trendDates=null;
+  try{
+    const b=await api("/api/index/000300").catch(()=>({ok:false}));
+    if(b && b.values && b.values.length){
+      const bm={}; b.dates.forEach((d,i)=>bm[d]=b.values[i]);
+      let lastV=null; const bmArr=dates.map(d=>{ if(bm[d]!=null) lastV=bm[d]; return lastV; });
+      const slice=bmArr.slice(bmArr.length-L);
+      let base=null; for(const v of slice){ if(v!=null){base=v;break;} }
+      if(base) benchCum=slice.map(v=> v==null?null:(v/base-1));
+      benchName=b.name||"沪深300";
+    }
+  }catch(e){}
+  { let cum=1; portCum=[]; for(const r of pr){ cum*=(1+r); portCum.push(cum-1); } trendDates=dates.slice(dates.length-L); }
+  if(benchCum){ const s=benchCum.findIndex(v=>v!=null); if(s>0){ benchCum=benchCum.slice(s); portCum=portCum.slice(s); trendDates=trendDates.slice(s); } }
 
   const mean=pr.reduce((a,b)=>a+b,0)/L;
   const variance=pr.reduce((a,b)=>a+(b-mean)**2,0)/(L-1);
@@ -489,6 +578,8 @@ async function analyze(){
   renderIndustry(holdings,w);
   renderSugg({w,holdings,corrAvg,maxDD,sharpe,risk,divScore,corr,score});
   renderSignals(computeSignals());
+  renderTrend(trendDates, portCum, benchCum, benchName);
+  setDataStamp();
   toast("分析完成");
 }
 
@@ -753,6 +844,104 @@ function renderSignals(rows){
   html+=`</tbody></table>
     <div class="note">信号基于实时净值、当日涨跌、近 120 日历史分位（Z 值）、回撤与组合占比的量化规则生成，随净值每 60 秒自动刷新；仅作参考，不构成投资意见。</div>`;
   box.innerHTML=html;
+}
+
+// ---------------- 组合走势折线图 ----------------
+let trendChart=null;
+function renderTrend(dates, portCum, benchCum, benchName){
+  const box=document.getElementById("trendBox");
+  const wrap=document.getElementById("trendCanvasWrap");
+  if(!portCum || !portCum.length){ box.innerHTML='<div class="empty">暂无可绘制数据。</div>'; wrap.style.display="none"; return; }
+  box.innerHTML=""; wrap.style.display="block";
+  const ds=[{label:"我的组合",data:portCum.map(v=>+(v*100).toFixed(2)),borderColor:"#5b8cff",
+    backgroundColor:"rgba(91,140,255,.12)",fill:true,tension:.25,pointRadius:0}];
+  if(benchCum && benchCum.some(v=>v!=null))
+    ds.push({label:benchName,data:benchCum.map(v=>v==null?null:+(v*100).toFixed(2)),
+      borderColor:"#ffb020",backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0});
+  if(trendChart) trendChart.destroy();
+  trendChart=new Chart(document.getElementById("trendCanvas"),{
+    type:"line",
+    data:{labels:dates,datasets:ds},
+    options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{color:"#eaf0fb"}},
+        tooltip:{callbacks:{label:c=>c.dataset.label+": "+c.parsed.y+"%"}}},
+      scales:{x:{ticks:{color:"#8b97ad",maxTicksLimit:8},grid:{color:"rgba(255,255,255,.05)"}},
+        y:{ticks:{color:"#8b97ad",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,.05)"}}}}
+  });
+}
+
+// ---------------- 智能配置推荐 ----------------
+async function loadRecommend(){
+  const box=document.getElementById("recoBox");
+  box.innerHTML='<div class="empty">正在分析市场环境并生成配置建议…</div>';
+  const d=await api("/api/recommend").catch(e=>({ok:false,error:String(e)}));
+  if(!d.ok){ box.innerHTML='<div class="empty">推荐生成失败：'+(d.error||"")+'</div>'; return; }
+  const env=d.env||{};
+  const regimeTxt = env.ok ? (env.regime+"（市场温度 "+env.score+"）") : "市场数据获取受限";
+  const allocHtml = Object.entries(d.alloc).map(([k,v])=>
+    `<div style="display:flex;align-items:center;gap:12px;margin:8px 0">
+       <div style="width:96px;font-size:12px" class="muted">${k}</div>
+       <div class="bar" style="flex:1"><i style="width:${(v*100).toFixed(0)}%;background:#5b8cff"></i></div>
+       <div style="width:56px;text-align:right;font-size:12px">${(v*100).toFixed(0)}%</div></div>`).join("");
+  const fundHtml = d.funds.length
+    ? d.funds.map(f=>`<span class="tag" title="${f.category}" onclick="document.getElementById('codeInput').value='${f.code}';document.getElementById('codeInput').focus()">${f.code} ${f.name}</span>`).join(" ")
+    : '<span class="muted">精选基金校验未通过（数据源海外受限），请手动搜索代码添加。</span>';
+  box.innerHTML=`
+    <div class="note" style="margin-bottom:10px">📊 <b>市场环境：</b>${regimeTxt}</div>
+    <div style="font-size:13px;font-weight:600;margin:6px 0">建议资产配置比例</div>
+    ${allocHtml}
+    <div class="note" style="margin:12px 0">${d.note||""}</div>
+    <div style="font-size:13px;font-weight:600;margin:6px 0">各品类精选基金（点击填入搜索框）</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${fundHtml}</div>
+    <div class="note">以上为结合市场温度的参考配置，非投资建议；具体基金请以实时净值为准。</div>`;
+}
+
+// ---------------- 单基金买入诊断 ----------------
+async function runAdvise(){
+  const code=document.getElementById("adviseInput").value.trim();
+  const box=document.getElementById("adviseBox");
+  if(!/^\d{6}$/.test(code)){ toast("请输入 6 位基金代码"); return; }
+  const capital=Math.max(0, (+document.getElementById("capitalInput").value||100000)||100000);
+  box.innerHTML='<div class="empty">正在诊断 '+code+' …</div>';
+  const d=await api("/api/advise/"+code+"?capital="+capital).catch(e=>({ok:false,error:String(e)}));
+  if(!d.ok){ box.innerHTML='<div class="empty">诊断失败：'+(d.error||"")+'</div>'; return; }
+  const vc = d.verdict==="推荐"?"var(--good)":(d.verdict==="谨慎关注"?"var(--warn)":"var(--bad)");
+  box.innerHTML=`
+    <div class="grid cols-2" style="gap:14px">
+      <div class="kpi"><span class="label">综合评分</span><span class="value" style="color:${vc}">${d.score}</span><span class="hint">/100</span></div>
+      <div class="kpi"><span class="label">买入结论</span><span class="value" style="color:${vc}">${d.verdict}</span><span class="hint">${d.name}（${d.type||"—"}）</span></div>
+      <div class="kpi"><span class="label">建议仓位上限</span><span class="value">${(d.cap*100).toFixed(0)}%</span><span class="hint">按波动风险控制</span></div>
+      <div class="kpi"><span class="label">建议买入金额</span><span class="value">¥${d.amount.toLocaleString("en-US")}</span><span class="hint">按本金 ¥${d.capital.toLocaleString("en-US")} 计</span></div>
+    </div>
+    <div class="note" style="margin:12px 0">盈利可能性（蒙特卡洛）：1月 ${(d.p1*100).toFixed(0)}% · 3月 ${(d.p3*100).toFixed(0)}% · 6月 ${(d.p6*100).toFixed(0)}% · 1年 ${(d.p12*100).toFixed(0)}%</div>
+    <div class="note">近一年收益 ${signPctPct(d.r250)} · 年化波动 ${pct(d.vol)} · 最大回撤 ${pct(d.mdd)} · 夏普 ${FMT(d.sharpe.toFixed(2))} · 估值分位Z ${d.z.toFixed(1)}</div>
+    <ul class="suggestions">${d.reasons.map(r=>`<li class="s-warn">${r}</li>`).join("")}</ul>
+    <div class="note">诊断基于历史统计与量化规则，仅供参考，不构成投资意见。</div>`;
+}
+
+// ---------------- 组合导入/导出 + 时间戳 ----------------
+function setDataStamp(){
+  const el=document.getElementById("dataStamp");
+  if(el) el.textContent="数据更新："+new Date().toLocaleTimeString("zh-CN");
+}
+function exportJSON(){
+  const data={version:1,exportedAt:new Date().toISOString(),holdings};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="fund-portfolio-"+new Date().toISOString().slice(0,10)+".json"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast("已导出组合 JSON");
+}
+function importJSON(){ document.getElementById("importFile").click(); }
+function doImport(input){
+  const f=input.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{
+    const d=JSON.parse(rd.result);
+    if(Array.isArray(d.holdings)){ holdings=d.holdings.filter(h=>h.code); saveHoldings(); renderHoldings(); toast("已导入 "+holdings.length+" 只基金"); }
+    else toast("文件格式不正确");
+  }catch(e){ toast("解析失败："+e.message); } input.value=""; };
+  rd.readAsText(f);
 }
 
 // 初始化
