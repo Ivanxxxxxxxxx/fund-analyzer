@@ -630,15 +630,29 @@ def recommend_portfolio():
         note = ("当前市场：%s（温度 %d）。沪深300 近120日 %s、年化波动 %.0f%%、近一年最大回撤 %s。%s"
                 % (env["regime"], env["score"], _s(r120), vol * 100, _s(dd), tilt or "据此给出如下配置建议。"))
     funds = []
-    for cat, codes in CURATED.items():
-        for code in codes:
-            try:
-                f = get_fund(code)
-                if f.get("ok") and f.get("name"):
-                    funds.append({"category": cat, "code": code,
-                                  "name": f["name"], "type": f.get("type", "")})
-            except Exception:
-                pass
+
+    def _check(cat_code):
+        cat, code = cat_code
+        try:
+            f = get_fund(code)
+            if f.get("ok") and f.get("name"):
+                return {"category": cat, "code": code, "name": f["name"], "type": f.get("type", "")}
+        except Exception:
+            pass
+        return None
+
+    tasks = [(cat, code) for cat, codes in CURATED.items() for code in codes]
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            for r in ex.map(_check, tasks):
+                if r:
+                    funds.append(r)
+    except Exception:
+        for t in tasks:
+            r = _check(t)
+            if r:
+                funds.append(r)
     return {"ok": True, "env": env, "alloc": alloc, "note": note, "funds": funds}
 
 
