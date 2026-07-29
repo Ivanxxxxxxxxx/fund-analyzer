@@ -214,6 +214,30 @@
   @media(max-width:767px) and (max-height:480px){
     .trend-wrap{height:180px}
   }
+
+  /* ---------- 折叠分区 fold ---------- */
+  .fold{margin:18px 0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:rgba(255,255,255,0.015)}
+  .fold-h{display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;user-select:none;
+    background:linear-gradient(180deg,rgba(91,140,255,0.07),transparent);transition:.18s}
+  .fold-h:hover{background:linear-gradient(180deg,rgba(91,140,255,0.14),transparent)}
+  .fold.open .fold-h{box-shadow:inset 0 -1px 0 var(--line)}
+  .fold-h .ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:15px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 6px 16px rgba(91,140,255,0.32)}
+  .fold-h .t{font-size:15px;font-weight:600;letter-spacing:.3px}
+  .fold-h .sum{margin-left:auto;font-size:12px;color:var(--muted);padding-right:8px;text-align:right;
+    max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fold-h .ch{color:var(--muted);transition:transform .25s ease}
+  .fold.open .ch{transform:rotate(90deg)}
+  .fold-b{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s cubic-bezier(.22,1,.36,1)}
+  .fold.open .fold-b{grid-template-rows:1fr}
+  .fold-b>div{overflow:hidden;min-height:0}
+  .fold-inner{padding:18px}
+  @media(max-width:767px){
+    .fold-h{padding:12px 14px;gap:10px}
+    .fold-h .t{font-size:14px}
+    .fold-h .sum{max-width:46%;font-size:11px}
+    .fold-inner{padding:14px 12px}
+  }
 </style>
 </head>
 <body>
@@ -251,7 +275,47 @@
     </div>
   </div>
 
-  <!-- 智能工具区：推荐 + 诊断 并排 -->
+    <section class="fold open" data-key="portfolio">
+    <div class="fold-h" onclick="toggleFold(this)">
+      <span class="ico">📦</span>
+      <span class="t">我的组合</span>
+      <span class="sum" id="sumPortfolio">暂无持仓</span>
+      <svg class="ch" width="16" height="16" viewBox="0 0 16 16"><polyline points="6,5 10,8 6,11" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+    </div>
+    <div class="fold-b"><div><div class="fold-inner">
+<!-- 持仓明细 -->
+  <div class="card">
+    <h3 class="sec"><span class="ic">💼</span>持仓明细（市值 / 占比 / 成本 / 盈亏）
+      <span style="margin-left:auto" class="row">
+        <span class="pill" id="dataStamp" style="border-color:rgba(25,195,125,.35);color:#7fe3a8">数据更新：—</span>
+        <button class="btn-ghost btn-sm" onclick="exportJSON()">⬇ 导出</button>
+        <button class="btn-ghost btn-sm" onclick="importJSON()">⬆ 导入</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none" onchange="doImport(this)">
+      </span>
+    </h3>
+    <div id="holdingsBox">
+      <div class="empty">还没有基金，先在上方输入代码添加吧。</div>
+    </div>
+  </div>
+
+  <!-- 组合走势与基准对比 -->
+  <div class="card">
+    <h3 class="sec"><span class="ic">📈</span>组合走势与基准对比（累计收益）</h3>
+    <div id="trendBox"><div class="empty">点击「开始分析」后展示组合 vs 沪深300 的累计收益曲线。</div></div>
+    <div id="trendCanvasWrap" class="trend-wrap" style="display:none"><canvas id="trendCanvas"></canvas></div>
+  </div>
+    </div></div></div>
+  </section>
+
+  <section class="fold open" data-key="tools">
+    <div class="fold-h" onclick="toggleFold(this)">
+      <span class="ico">🧭</span>
+      <span class="t">智能决策</span>
+      <span class="sum" id="sumTools">配置推荐 · 买入诊断</span>
+      <svg class="ch" width="16" height="16" viewBox="0 0 16 16"><polyline points="6,5 10,8 6,11" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+    </div>
+    <div class="fold-b"><div><div class="fold-inner">
+<!-- 智能工具区：推荐 + 诊断 并排 -->
   <div class="grid cols-2">
     <!-- 智能配置推荐 -->
     <div class="card">
@@ -279,30 +343,18 @@
       <div id="adviseBox"><div class="empty">输入基金代码后点击「开始诊断」，自动分析收益/波动/回撤/估值分位/盈利概率，并给出是否推荐、建议仓位。</div></div>
     </div>
   </div>
+    </div></div></div>
+  </section>
 
-  <!-- 持仓明细 -->
-  <div class="card">
-    <h3 class="sec"><span class="ic">💼</span>持仓明细（市值 / 占比 / 成本 / 盈亏）
-      <span style="margin-left:auto" class="row">
-        <span class="pill" id="dataStamp" style="border-color:rgba(25,195,125,.35);color:#7fe3a8">数据更新：—</span>
-        <button class="btn-ghost btn-sm" onclick="exportJSON()">⬇ 导出</button>
-        <button class="btn-ghost btn-sm" onclick="importJSON()">⬆ 导入</button>
-        <input type="file" id="importFile" accept="application/json" style="display:none" onchange="doImport(this)">
-      </span>
-    </h3>
-    <div id="holdingsBox">
-      <div class="empty">还没有基金，先在上方输入代码添加吧。</div>
+  <section class="fold" data-key="report">
+    <div class="fold-h" onclick="toggleFold(this)">
+      <span class="ico">📑</span>
+      <span class="t">深度分析报告</span>
+      <span class="sum" id="sumReport">分析后生成 9 项指标</span>
+      <svg class="ch" width="16" height="16" viewBox="0 0 16 16"><polyline points="6,5 10,8 6,11" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
     </div>
-  </div>
-
-  <!-- 组合走势与基准对比 -->
-  <div class="card">
-    <h3 class="sec"><span class="ic">📈</span>组合走势与基准对比（累计收益）</h3>
-    <div id="trendBox"><div class="empty">点击「开始分析」后展示组合 vs 沪深300 的累计收益曲线。</div></div>
-    <div id="trendCanvasWrap" class="trend-wrap" style="display:none"><canvas id="trendCanvas"></canvas></div>
-  </div>
-
-  <!-- 分析结果：自适应多列网格 -->
+    <div class="fold-b"><div><div class="fold-inner">
+<!-- 分析结果：自适应多列网格 -->
   <div class="grid analysis-grid">
     <!-- 组合健康评分 -->
     <div class="card">
@@ -377,8 +429,10 @@
       <h3 class="sec"><span class="ic">💡</span>可执行的优化建议</h3>
       <ul class="suggestions" id="suggBox"><li class="muted" style="border-left-color:var(--muted)">分析后自动生成针对你组合的诊断与建议。</li></ul>
     </div>
-  </div>
-</div>
+    </div></div></div>
+  </section>
+
+
 
 <div class="toast" id="toast"></div>
 
@@ -523,6 +577,7 @@ function renderHoldings(){
     <div class="note">合计市值 ${yuan(total)} · 总投入 ${yuan(totalCost)} ·
       <b class="${cls(totalPL)}">累计盈亏 ${totalPL>=0?"+":""}${yuan(totalPL)}（${signPct(totalPLpct)}）</b>
       · 修改市值/成本后重新点「开始分析」即可更新占比与组合指标</div>`;
+  updateSummaries();
 }
 function setVal(i,v){ holdings[i].value=Math.max(0,+v||0); saveHoldings(); renderHoldings(); }
 function setCost(i,v){ holdings[i].cost=Math.max(0,+v||0); saveHoldings(); renderHoldings(); }
@@ -629,6 +684,8 @@ async function analyze(){
   renderSignals(computeSignals());
   renderTrend(trendDates, portCum, benchCum, benchName);
   setDataStamp();
+  window.__score=score; window.__risk=risk;
+  updateSummaries();
   toast("分析完成");
 }
 
@@ -993,8 +1050,43 @@ function doImport(input){
   rd.readAsText(f);
 }
 
+// ---------------- 折叠分区交互 ----------------
+function toggleFold(h){
+  const sec=h.closest(".fold");
+  if(!sec) return;
+  sec.classList.toggle("open");
+  try{ localStorage.setItem("fp_fold_"+sec.dataset.key, sec.classList.contains("open")?"1":"0"); }catch(e){}
+}
+function initFolds(){
+  document.querySelectorAll(".fold").forEach(sec=>{
+    let st=null; try{ st=localStorage.getItem("fp_fold_"+sec.dataset.key); }catch(e){}
+    if(st==="0") sec.classList.remove("open");
+    else if(st==="1") sec.classList.add("open");
+  });
+}
+function updateSummaries(){
+  const sp=document.getElementById("sumPortfolio");
+  if(sp){
+    const n=holdings.length;
+    const total=holdings.reduce((s,h)=>s+(+h.value||0),0);
+    const totalCost=holdings.reduce((s,h)=>s+(+h.cost||0),0);
+    const pl=total-totalCost;
+    sp.textContent = n ? (n+" 只 · 市值 ¥"+Math.round(total).toLocaleString("en-US")+" · "+(totalCost>0?(pl/totalCost*100):0).toFixed(1)+"%") : "暂无持仓";
+  }
+  const sr=document.getElementById("sumReport");
+  if(sr){
+    if(window.__score!=null){
+      sr.textContent="评分 "+window.__score+" · 风险"+(window.__risk||"")+" · "+document.querySelectorAll("#suggBox li").length+" 建议";
+    } else {
+      sr.textContent="分析后生成 9 项指标";
+    }
+  }
+}
+
 // 初始化
 renderHoldings();
+initFolds();
+updateSummaries();
 // 方案A：按基金交易规则调度自动刷新（北京时间，无夏令时）
 function beijingTime(){
   const now=new Date();
