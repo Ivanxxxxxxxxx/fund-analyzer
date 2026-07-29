@@ -261,6 +261,41 @@
   .kpi.sm .hint{font-size:9.5px;white-space:normal}
   .dyn-banner{background:rgba(91,140,255,.12);border:1px solid rgba(91,140,255,.35);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:10px;line-height:1.5}
   .warn-banner{background:rgba(255,176,32,.12);border:1px solid rgba(255,176,32,.4);border-radius:10px;padding:8px 12px;font-size:12.5px;margin-bottom:10px;color:#ffcf80}
+  /* 一键配资 */
+  .rf-sel{margin-left:6px;border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;cursor:pointer;transition:.15s}
+  .rf-sel:hover{background:rgba(91,140,255,.12)}
+  .rf-sel.on{background:var(--accent);color:#fff}
+  .alloc-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:40;display:none;
+    align-items:center;gap:14px;background:rgba(20,24,33,.96);border:1px solid var(--accent);border-radius:14px;
+    padding:10px 16px;box-shadow:0 12px 40px rgba(0,0,0,.45);max-width:94vw}
+  .alloc-bar.show{display:flex}
+  .alloc-bar .cnt{font-size:13px}
+  .alloc-bar .cnt b{color:var(--accent);font-size:16px}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:28px 12px}
+  .overlay.show{display:flex}
+  .modal{width:min(820px,96vw);background:var(--bg-2);border:1px solid var(--line);border-radius:16px;padding:20px;margin:auto}
+  .modal h2{font-size:18px;margin:0 0 4px}
+  .modal .sub{font-size:12.5px;color:var(--muted);margin-bottom:14px}
+  .sel-list{display:flex;flex-direction:column;gap:6px;margin:8px 0 14px;max-height:200px;overflow:auto}
+  .sel-row{display:flex;align-items:center;gap:10px;font-size:13px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
+  .sel-row .x{margin-left:auto;cursor:pointer;color:var(--muted);border:none;background:none;font-size:15px}
+  .principal-in{display:flex;align-items:center;gap:8px;font-size:14px;margin:6px 0 12px}
+  .principal-in input{width:160px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:15px}
+  .plan-sec{margin:16px 0 6px;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.3px}
+  table.plan{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.plan th,table.plan td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left}
+  table.plan th{color:var(--muted);font-weight:600}
+  .rep-card{background:rgba(255,176,32,.08);border:1px solid rgba(255,176,32,.35);border-radius:12px;padding:12px;margin:8px 0}
+  .rep-card .arrow{color:var(--accent);font-weight:700;margin:0 6px}
+  .rep-card .old{color:var(--bad);text-decoration:line-through}
+  .rep-card .new{color:var(--good);font-weight:600}
+  .rep-corrs{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .rep-reason{font-size:12px;margin-top:6px;line-height:1.5}
+  .btn-buy{display:inline-block;margin-top:8px;padding:5px 12px;border-radius:999px;background:var(--good);color:#04210f;font-weight:700;font-size:12px;text-decoration:none}
+  .opt-line{font-size:13px;line-height:1.6;margin:6px 0;padding-left:18px;position:relative}
+  .opt-line:before{content:"⚠";position:absolute;left:0;color:var(--warn)}
+  .amount-cell{font-weight:700;color:var(--fg)}
+  .alloc-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -464,6 +499,24 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- 一键配资：浮动栏 + 弹窗 -->
+<div class="alloc-bar" id="allocBar">
+  <span class="cnt">已选 <b id="selCnt">0</b> 只 · 合计权重 <b id="selW">0%</b></span>
+  <button class="btn-primary btn-sm" onclick="openAllocate()">⚡ 一键配资</button>
+  <button class="rf-sel" style="border-color:var(--muted);color:var(--muted)" onclick="clearSel()">清空</button>
+</div>
+
+<div class="overlay" id="allocOverlay" onclick="if(event.target===this)closeAllocate()">
+  <div class="modal" id="allocModal">
+    <h2>⚡ 一键配资</h2>
+    <div class="sub">从推荐选入的基金，结合实时多因子、相关性、估值分位，给出具体买入金额与可执行优化方案。</div>
+    <div class="sel-list" id="selList"></div>
+    <div class="principal-in">本金（¥）<input id="principalInput2" type="number" value="100000" min="0" step="1000"></div>
+    <button class="btn-primary" onclick="genPlan()">生成配资方案</button>
+    <div id="planBox"></div>
+  </div>
+</div>
+
 <script>
 const FMT = n => (n==null||isNaN(n)) ? "—" : n;
 const pct = (n,d=2) => (n==null||isNaN(n)) ? "—" : (n*100).toFixed(d)+"%";
@@ -479,11 +532,12 @@ let donutChart = null;
 function loadHoldings(){ try{return JSON.parse(localStorage.getItem("fp_holdings")||"[]")}catch(e){return[]} }
 function saveHoldings(){ localStorage.setItem("fp_holdings", JSON.stringify(holdings)) }
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2200); }
-async function api(path, timeout=180000){
+async function api(path, timeout=180000, opts={}){
   const ctrl=new AbortController();
   const tid=setTimeout(()=>ctrl.abort(), timeout);
   try{
-    const r=await fetch(path, {signal:ctrl.signal});
+    const r=await fetch(path, {signal:ctrl.signal, method:opts.method||"GET",
+      body:opts.body, headers: opts.body?{"Content-Type":"application/json"}:undefined});
     if(!r.ok) throw new Error("HTTP "+r.status);
     return await r.json();
   } finally { clearTimeout(tid); }
@@ -732,6 +786,7 @@ async function analyze(){
     renderCorr(corr);
     renderIndustry(holdings,w);
     renderSugg({w,holdings,corrAvg,maxDD,sharpe,risk,divScore,corr,score});
+    loadOptimize();
     renderSignals(computeSignals());
     renderTrend(trendDates, portCum, benchCum, benchName);
     setDataStamp();
@@ -914,7 +969,7 @@ function renderSugg(ctx){
     else if(corrAvg>0.7) items.push({lv:"warn",t:`平均相关性 ${corrAvg.toFixed(2)} 偏高，可适度补充防御或跨市场品种。`});
     else items.push({lv:"good",t:`平均相关性 ${corrAvg.toFixed(2)}，分散效果较好。`});
     let mi=0,mj=1,mv=-1; for(let i=0;i<holdings.length;i++)for(let j=i+1;j<holdings.length;j++) if(corr[i][j]>mv){mv=corr[i][j];mi=i;mj=j;}
-    if(mv>0.85) items.push({lv:"warn",t:`<b>${holdings[mi].code}</b> 与 <b>${holdings[mj].code}</b> 相关性 ${mv.toFixed(2)}，几乎同涨同跌，考虑用其一替换。`});
+    if(mv>0.85) items.push({lv:"warn",t:`<b>${holdings[mi].code}</b> 与 <b>${holdings[mj].code}</b> 相关性 ${mv.toFixed(2)}，几乎同涨同跌。下方已给出具体替换方案。`});
   }
   if(maxDD<-0.3) items.push({lv:"warn",t:`历史最大回撤 ${pct(maxDD)}，高于舒适区间，可下调高波动仓位或增配防御资产。`});
   if(sharpe<0.5) items.push({lv:"warn",t:`夏普比率 ${sharpe.toFixed(2)} 偏低，单位风险回报不足，建议优化持仓结构。`});
@@ -1057,6 +1112,7 @@ async function loadRecommend(){
         <div class="bar" style="flex:1"><i style="width:${v}%;background:${col}"></i></div>
         <div style="width:48px;text-align:right;font-size:12px;color:${col}">${v}%</div></div>`;
     }).join("")) : "";
+  window.__recoFunds={};
   const byCat={};
   (d.funds||[]).forEach(f=>{ (byCat[f.category]=byCat[f.category]||[]).push(f); });
   const fundHtml = Object.entries(byCat).map(([cat,fs])=>{
@@ -1064,8 +1120,10 @@ async function loadRecommend(){
       const vc=f.verdict==="推荐"?"var(--good)":(f.verdict==="谨慎关注"?"var(--warn)":"var(--bad)");
       const valTxt=(f.valPct==null)?"—":f.valPct+"%";
       const rsn=(f.reasons||[]).join(" ");
+      window.__recoFunds[f.code]=f;
       return `<div class="reco-fund" onclick="addByCode('${f.code}')" title="点击加入组合">
         <div class="rf-head"><span class="rf-code">${f.code}</span><span class="rf-name">${f.name}</span>
+          <button class="rf-sel" id="sel-${f.code}" onclick="event.stopPropagation();toggleSel('${f.code}')">选入配资</button>
           <span class="badge" style="color:${vc};border-color:${vc}">${f.verdict}</span></div>
         <div class="rf-meta"><span>评分 ${f.score}</span><span>建议配置 ${(f.weight*100).toFixed(0)}%</span><span>估值 ${valTxt}</span></div>
         <div class="rf-reason">${rsn}</div></div>`;
@@ -1086,6 +1144,122 @@ async function loadRecommend(){
     <div style="margin-top:8px">${fundHtml}</div>
     <div class="note">以上为结合市场温度与估值的参考配置，非投资建议；具体基金请以实时净值为准。</div>`;
   window.__recoCount = d.funds.length; updateSummaries();
+}
+
+// ---------------- 一键配资（选入 → 方案 → 加入组合） ----------------
+let selFunds = new Map();   // code -> {code,name,weight,asset,verdict}
+function toggleSel(code){
+  const f = window.__recoFunds[code];
+  if(!f) return;
+  const b = document.getElementById("sel-"+code);
+  if(selFunds.has(code)){
+    selFunds.delete(code);
+    if(b){ b.classList.remove("on"); b.textContent="选入配资"; }
+  } else {
+    selFunds.set(code, {code, name:f.name, weight:f.weight||0, asset:f.asset||"", verdict:f.verdict});
+    if(b){ b.classList.add("on"); b.textContent="已选 ✓"; }
+  }
+  renderSelBar();
+}
+function clearSel(){
+  selFunds.forEach((v,k)=>{ const b=document.getElementById("sel-"+k); if(b){ b.classList.remove("on"); b.textContent="选入配资"; } });
+  selFunds.clear(); renderSelBar();
+}
+function renderSelBar(){
+  const bar=document.getElementById("allocBar");
+  document.getElementById("selCnt").textContent=selFunds.size;
+  let w=0; selFunds.forEach(v=>w+=(v.weight||0));
+  document.getElementById("selW").textContent=(w*100).toFixed(0)+"%";
+  bar.classList.toggle("show", selFunds.size>0);
+}
+function openAllocate(){
+  if(selFunds.size===0){ toast("请先在推荐里选入基金"); return; }
+  document.getElementById("selList").innerHTML=[...selFunds.values()].map(v=>
+    `<div class="sel-row"><span class="rf-code">${v.code}</span><span style="flex:1">${v.name}</span><span class="muted">${(v.weight*100).toFixed(0)}%</span><button class="x" onclick="toggleSel('${v.code}')">✕</button></div>`).join("");
+  document.getElementById("planBox").innerHTML="";
+  document.getElementById("allocOverlay").classList.add("show");
+}
+function closeAllocate(){ document.getElementById("allocOverlay").classList.remove("show"); }
+
+async function genPlan(){
+  const box=document.getElementById("planBox");
+  const principal=Math.max(0, (+document.getElementById("principalInput2").value)||0);
+  if(principal<=0){ toast("请输入本金"); return; }
+  const funds=[...selFunds.values()].map(v=>({code:v.code,name:v.name,weight:v.weight,asset:v.asset}));
+  box.innerHTML='<div class="empty">正在结合数据分析生成配资方案（多因子＋相关性＋估值）…通常 20–40 秒</div>';
+  const d=await api("/api/allocate", 200000, {method:"POST", body:JSON.stringify({funds, principal})}).catch(e=>({ok:false,error:String(e)}));
+  if(!d.ok){ box.innerHTML='<div class="empty">生成失败：'+(d.error||"")+'</div>'; return; }
+  window.__lastPlan=d;
+  renderPlan(d);
+}
+
+function renderPlan(d){
+  const total=d.principal||0;
+  const buyRows=(d.buyPlan||[]).map(b=>`<tr>
+      <td>${b.code}<br><span class="muted" style="font-size:11px">${b.name}</span></td>
+      <td>${(b.weight*100).toFixed(1)}%</td>
+      <td class="amount-cell">${yuan(b.amount)}</td>
+      <td style="font-size:11.5px;color:var(--muted);max-width:260px">${b.strategy}</td>
+      <td><a class="btn-buy" href="${b.link}" target="_blank" rel="noopener">去购买 ↗</a></td></tr>`).join("");
+  const optHtml=(d.optimizations&&d.optimizations.length)? d.optimizations.map(o=>{
+    if(o.replace){
+      const r=o.replace;
+      return `<div class="rep-card"><div class="opt-line">${o.text}</div>
+        <div style="margin-top:6px"><span class="old">${r.from.name}（${r.from.code}）</span><span class="arrow">➜</span><span class="new">${r.to.name}（${r.to.code}）</span></div>
+        <div class="rep-corrs">相关性 ${r.oldCorr} → <b style="color:var(--good)">${r.newCorr}</b>　<a class="btn-buy" href="${r.to.link}" target="_blank" rel="noopener">查看并购买候选 ↗</a></div>
+        <div class="rep-reason">${r.reason}</div></div>`;
+    }
+    return `<div class="opt-line">${o.text}</div>`;
+  }).join("") : '<div class="opt-line" style="color:var(--good)">相关性良好，无需替换，可按下表直接建仓。</div>';
+  box.innerHTML=`
+    <div class="plan-sec">① 配置明细（本金 ${yuan(total)}）</div>
+    <div class="table-scroll"><table class="plan"><thead><tr><th>基金</th><th>权重</th><th>买入金额</th><th>估值策略（怎么买）</th><th>购买</th></tr></thead><tbody>${buyRows}</tbody></table></div>
+    <div class="plan-sec">② 相关性诊断与可执行优化</div>
+    ${optHtml}
+    <div class="alloc-actions">
+      <button class="rf-sel" onclick="closeAllocate()">稍后</button>
+      <button class="btn-primary" onclick="confirmAllocate(${total})">✅ 确认并加入我的组合</button>
+    </div>`;
+}
+
+async function confirmAllocate(total){
+  const plan=window.__lastPlan||{buyPlan:[]};
+  const amounts={}; (plan.buyPlan||[]).forEach(b=>amounts[b.code]=b.amount);
+  let added=0;
+  for(const v of selFunds.values()){
+    const amt=Math.round(amounts[v.code]!=null?amounts[v.code]:(total*(v.weight||0)));
+    if(amt<=0) continue;
+    const ex=holdings.find(h=>h.code===v.code);
+    if(ex){ ex.cost=(+ex.cost||0)+amt; ex.value=(+ex.value||0)+amt; }
+    else {
+      const f=await api("/api/fund/"+v.code).catch(()=>({}));
+      holdings.push({code:v.code, name:f.name||v.name, type:f.type||v.asset||"", nav:f.nav, navDate:f.navDate,
+        changePct:f.changePct, value:amt, cost:amt, assetAllocation:f.assetAllocation||[], industry:f.industry||[], industryBasis:f.industryBasis||"", holdings:f.holdings||[]});
+    }
+    added++;
+  }
+  saveHoldings(); renderHoldings(); setDataStamp();
+  closeAllocate(); clearSel();
+  toast("已加入我的组合："+added+" 只，合计 "+yuan(total));
+  const sec=document.querySelector('section[data-key="portfolio"]'); if(sec) sec.classList.add("open");
+  if(window.analyze) analyze();
+}
+
+// 组合诊断：用接口给出具体替换方案，补进“可执行的优化建议”
+async function loadOptimize(){
+  if(holdings.length<2) return;
+  const total=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
+  const funds=holdings.map(h=>({code:h.code, name:h.name, weight:(+h.value||0)/total, asset:h.asset||h.type||""}));
+  const d=await api("/api/optimize", 200000, {method:"POST", body:JSON.stringify({funds})}).catch(()=>({ok:false}));
+  if(!d.ok) return;
+  const box=document.getElementById("suggBox");
+  (d.optimizations||[]).filter(o=>o.replace).forEach(o=>{
+    const r=o.replace;
+    const li=document.createElement("li");
+    li.className="s-warn";
+    li.innerHTML=`⚠ ${o.text} 建议将 <b>${r.from.name}</b> 替换为 <b>${r.to.name}（${r.to.code}）</b>，相关性 ${r.oldCorr}→<b>${r.newCorr}</b>。<a class="btn-buy" href="${r.to.link}" target="_blank" rel="noopener">去购买候选 ↗</a>`;
+    box.appendChild(li);
+  });
 }
 
 // ---------------- 单基金买入诊断 ----------------
