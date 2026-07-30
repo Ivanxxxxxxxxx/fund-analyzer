@@ -1181,7 +1181,7 @@ def _find_replacement(repl, keep, codes, rets_map, topn=8):
             "reason": "近1年收益 +%.0f%%，与保留基金相关系数仅 %.2f，分散效果显著优于原基金。" % (y1, cr)}
 
 
-def build_allocate(funds, principal):
+def build_allocate(funds, principal, existing=None):
     """一键配资核心：返回配置金额、相关性矩阵、可执行优化（含具体替换方案）、买入方案。
     funds: [{code,name,weight,asset}]；principal: 本金（元）。"""
     items, rets_map = [], {}
@@ -1202,14 +1202,31 @@ def build_allocate(funds, principal):
                       "type": (fac or {}).get("type", ""), "composite": (fac or {}).get("composite"),
                       "valPct": (fac or {}).get("valPct")})
     codes = [it["code"] for it in items]
-    corr = {}
-    for i in range(len(codes)):
-        for j in range(i + 1, len(codes)):
-            c = _corr(rets_map[codes[i]], rets_map[codes[j]])
-            if c is not None:
-                corr["%s|%s" % (codes[i], codes[j])] = round(c, 3)
 
-    # 可执行优化：高相关性对 → 具体替换方案
+    # 现有持仓（来自“我的组合”）作为背景，一并纳入相关性与集中度分析
+    exist_items = []
+    if existing:
+        for h in existing:
+            c = h.get("code")
+            if not c:
+                continue
+            exist_items.append({"code": c, "name": h.get("name"),
+                                "asset": h.get("asset") or h.get("type") or "",
+                                "value": float(h.get("value") or 0)})
+    exist_codes = [e["code"] for e in exist_items]
+    all_codes = codes + exist_codes
+    for e in exist_items:
+        rets_map.setdefault(e["code"], _fund_returns(e["code"], 730))
+
+    # 相关性矩阵：新选 + 现有 全量
+    corr = {}
+    for i in range(len(all_codes)):
+        for j in range(i + 1, len(all_codes)):
+            c = _corr(rets_map.get(all_codes[i]), rets_map.get(all_codes[j]))
+            if c is not None:
+                corr["%s|%s" % (all_codes[i], all_codes[j])] = round(c, 3)
+
+    # 可执行优化：高相关性 → 具体替换方案（区分“新选内部”与“新选 vs 已有”）
     opts = []
     handled = set()
     for c, key in sorted(((v, k) for k, v in corr.items()), reverse=True):
@@ -1218,36 +1235,79 @@ def build_allocate(funds, principal):
         a, b = key.split("|")
         if a in handled or b in handled:
             continue
-        fa = next(x for x in items if x["code"] == a)
-        fb = next(x for x in items if x["code"] == b)
-        sa = fa.get("composite") or 50
-        sb = fb.get("composite") or 50
-        keep, repl = (fa, fb) if sa >= sb else (fb, fa)
-        rep = _find_replacement(repl, keep, codes, rets_map)
-        handled.add(keep["code"]); handled.add(repl["code"])
-        if rep:
-            opts.append({"type": "corr", "level": "warn",
-                "text": "%s 与 %s 相关系数 %.2f，几乎同涨同跌，持有两只等于押注同一方向。"
-                         % (fa["name"], fb["name"], c),
-                "replace": {"from": {"code": repl["code"], "name": repl["name"]},
-                            "to": {"code": rep["code"], "name": rep["name"], "corr": rep["corr"],
-                                   "asset": repl["asset"],
-                                   "link": "https://fund.eastmoney.com/%s.html" % rep["code"]},
-                            "oldCorr": round(c, 2), "newCorr": rep["corr"], "reason": rep["reason"]}})
+        a_new, b_new = a in codes, b in codes
+        a_ex, b_ex = a in exist_codes, b in exist_codes
+        if a_ex and b_ex:
+            continue  # 已有 vs 已有 由“我的组合”诊断单独处理
+        if a_new and b_new:
+            # 新选内部高相关：保留评分高者，替换另一只
+            fa = next(x for x in items if x["code"] == a)
+            fb = next(x for x in items if x["code"] == b)
+            sa = fa.get("composite") or 50
+            sb = fb.get("composite") or 50
+            keep, repl = (fa, fb) if sa >= sb else (fb, fa)
+            rep = _find_replacement(repl, keep, all_codes, rets_map)
+            handled.add(keep["code"]); handled.add(repl["code"])
+            if rep:
+                opts.append({"type": "corr", "level": "warn",
+                    "text": "%s 与 %s 相关系数 %.2f，几乎同涨同跌，持有两只等于押注同一方向。"
+                             % (fa["name"], fb["name"], c),
+                    "replace": {"from": {"code": repl["code"], "name": repl["name"]},
+                                "to": {"code": rep["code"], "name": rep["name"], "corr": rep["corr"],
+                                       "asset": repl["asset"],
+                                       "link": "https://fund.eastmoney.com/%s.html" % rep["code"]},
+                                "oldCorr": round(c, 2), "newCorr": rep["corr"], "reason": rep["reason"]}})
+            else:
+                opts.append({"type": "corr", "level": "warn",
+                    "text": "%s 与 %s 相关系数 %.2f，相关性偏高，建议二选一保留（保留评分更高者），或手动调入低相关品种。"
+                             % (fa["name"], fb["name"], c)})
         else:
-            opts.append({"type": "corr", "level": "warn",
-                "text": "%s 与 %s 相关系数 %.2f，相关性偏高，建议二选一保留（保留评分更高者），或手动调入低相关品种。"
-                         % (fa["name"], fb["name"], c)})
+            # 一侧新选、一侧已有：保留已持有的，替换新选的
+            new_code, ex_code = (a, b) if a_new else (b, a)
+            nf = next(x for x in items if x["code"] == new_code)
+            ef = next(x for x in exist_items if x["code"] == ex_code)
+            rep = _find_replacement(nf, ef, all_codes, rets_map)
+            handled.add(new_code); handled.add(ex_code)
+            if rep:
+                opts.append({"type": "corr", "level": "warn",
+                    "text": "你已持有 %s（%s），与本次选中的 %s（%s）相关系数 %.2f，高度同涨同跌。建议保留你已持有的，将后者更换为低相关品种。"
+                             % (ef["name"], ef["code"], nf["name"], nf["code"], c),
+                    "replace": {"from": {"code": nf["code"], "name": nf["name"]},
+                                "to": {"code": rep["code"], "name": rep["name"], "corr": rep["corr"],
+                                       "asset": nf["asset"],
+                                       "link": "https://fund.eastmoney.com/%s.html" % rep["code"]},
+                                "oldCorr": round(c, 2), "newCorr": rep["corr"], "reason": rep["reason"]}})
+            else:
+                opts.append({"type": "corr", "level": "warn",
+                    "text": "你已持有 %s（%s），与本次选中的 %s（%s）相关系数 %.2f，建议二选一保留（优先保留已持有的），或手动调入低相关品种。"
+                             % (ef["name"], ef["code"], nf["name"], nf["code"], c)})
 
-    # 集中度预警
-    by_asset = {}
+    # 重复提示：本次选的已在组合里持有
     for it in items:
-        by_asset[it["asset"]] = by_asset.get(it["asset"], 0) + it["weight"]
-    for asset, w in by_asset.items():
-        if w > 0.6 and asset in ("股票型", "海外(QDII)"):
-            opts.append({"type": "concentration", "level": "warn",
-                "text": "%s 占组合 %.0f%%，过于集中。建议降至 60%% 以内，将约 %s 调仓至债券型 / 货币型等防御资产。"
-                         % (asset, w * 100, "¥" + format(round(principal * (w - 0.6)), ","))})
+        if it["code"] in exist_codes:
+            opts.append({"type": "dup", "level": "warn", "code": it["code"],
+                "text": "你已持有 %s（%s），本次又选了同一只，建议从本次方案中移除重复，避免重复建仓。"
+                         % (it["name"], it["code"])})
+
+    # 合并集中度预警（结合已有持仓市值）
+    existing_total = sum(e["value"] for e in exist_items)
+    combined_total = existing_total + principal
+    if combined_total > 0:
+        by_asset = {}
+        for it in items:
+            by_asset[it["asset"]] = by_asset.get(it["asset"], 0) + it["amount"]
+        for e in exist_items:
+            by_asset[e["asset"]] = by_asset.get(e["asset"], 0) + e["value"]
+        for asset, val in by_asset.items():
+            if asset in ("股票型", "海外(QDII)") and val / combined_total > 0.6:
+                exist_val = sum(e["value"] for e in exist_items if e["asset"] == asset)
+                new_val = sum(it["amount"] for it in items if it["asset"] == asset)
+                over = principal * (val / combined_total - 0.6)
+                opts.append({"type": "concentration", "level": "warn",
+                    "text": "合并你已有持仓后，%s 占组合 %.0f%%（已有 ¥%s + 本次 ¥%s），过于集中。建议降至 60%% 以内，本次可将约 ¥%s 改配债券型 / 货币型等防御资产。"
+                             % (asset, val / combined_total * 100,
+                                format(round(exist_val), ","), format(round(new_val), ","),
+                                format(round(over), ","))})
 
     # 买入方案（具体到金额 + 估值策略 + 购买入口）
     buy = []
@@ -1427,7 +1487,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     principal = float(body.get("principal") or 0)
                 except Exception:
                     principal = 0.0
-                data = build_allocate(funds, principal)
+                data = build_allocate(funds, principal, body.get("existing"))
             elif path == "/api/optimize":
                 # 组合诊断：用现有持仓权重（无权重则等权），principal=0 仅算相关性与替换方案
                 funds = body.get("funds") or []
