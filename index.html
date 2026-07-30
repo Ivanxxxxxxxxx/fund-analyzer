@@ -313,6 +313,7 @@
   .rep-card .new{color:var(--good);font-weight:600}
   .rep-corrs{font-size:11.5px;color:var(--muted);margin-top:4px}
   .rep-reason{font-size:12px;margin-top:6px;line-height:1.5}
+  .rep-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center}
   .btn-buy{display:inline-block;margin-top:8px;padding:5px 12px;border-radius:999px;background:var(--good);color:#04210f;font-weight:700;font-size:12px;text-decoration:none}
   .opt-line{font-size:13px;line-height:1.6;margin:6px 0;padding-left:18px;position:relative}
   .opt-line:before{content:"⚠";position:absolute;left:0;color:var(--warn)}
@@ -1274,7 +1275,11 @@ function renderPlan(d){
         <div class="opt-line">${o.text}</div>
         <div class="rep-flow"><span class="old">${r.from.name}（${r.from.code}）</span><span class="arrow">➜</span><span class="new">${r.to.name}（${r.to.code}）</span></div>
         <div class="rep-corrs">相关性 <span class="corr-pill">${r.oldCorr} → ${r.newCorr}</span>　<a class="btn-buy" href="${r.to.link}" target="_blank" rel="noopener">查看并购买候选 ↗</a></div>
-        <div class="rep-reason">${r.reason}</div></div>`;
+        <div class="rep-reason">${r.reason}</div>
+        <div class="rep-actions">
+          <button class="btn-primary btn-sm" onclick="applyReplace('${r.from.code}','${r.to.code}','${r.to.name}','${r.asset||''}')">✅ 一键应用此替换</button>
+          <span class="muted" style="font-size:11px">点此直接替换选中的基金，无需再去搜索</span>
+        </div></div>`;
     }
     return `<div class="opt-line">${o.text}</div>`;
   }).join("") : '<div class="opt-line" style="color:var(--good)">相关性良好，无需替换，可按下表直接建仓。</div>';
@@ -1294,6 +1299,19 @@ function renderPlan(d){
     </div>`;
 }
 
+function applyReplace(fromCode, toCode, toName, toAsset){
+  if(!selFunds.has(fromCode)){ toast("原基金不在选择中，无法替换"); return; }
+  const from=selFunds.get(fromCode);
+  const w=from.weight || (1/Math.max(1,selFunds.size));
+  selFunds.delete(fromCode);
+  selFunds.set(toCode, {code:toCode, name:toName, weight:w, asset:toAsset||from.asset||"", verdict:from.verdict});
+  renderSelBar();
+  document.getElementById("selList").innerHTML=[...selFunds.values()].map(v=>
+    `<div class="sel-row"><span class="rf-code">${v.code}</span><span style="flex:1">${v.name}</span><span class="muted">${(v.weight*100).toFixed(0)}%</span><button class="x" onclick="toggleSel('${v.code}')">✕</button></div>`).join("");
+  toast("已用 "+toName+" 替换 "+from.name+"，正在重新生成方案…");
+  genPlan();
+}
+
 async function confirmAllocate(total){
   const plan=window.__lastPlan||{buyPlan:[]};
   const amounts={}; (plan.buyPlan||[]).forEach(b=>amounts[b.code]=b.amount);
@@ -1302,7 +1320,10 @@ async function confirmAllocate(total){
     const amt=Math.round(amounts[v.code]!=null?amounts[v.code]:(total*(v.weight||0)));
     if(amt<=0) continue;
     const ex=holdings.find(h=>h.code===v.code);
-    if(ex){ ex.cost=(+ex.cost||0)+amt; ex.value=(+ex.value||0)+amt; }
+    if(ex){
+      // 应用方案目标仓位（覆盖该基金原仓位），保证选中基金合计 = 本金，不叠加膨胀
+      ex.cost=amt; ex.value=amt;
+    }
     else {
       const f=await api("/api/fund/"+v.code).catch(()=>({}));
       holdings.push({code:v.code, name:f.name||v.name, type:f.type||v.asset||"", nav:f.nav, navDate:f.navDate,
@@ -1312,7 +1333,7 @@ async function confirmAllocate(total){
   }
   saveHoldings(); renderHoldings(); setDataStamp();
   closeAllocate(); clearSel();
-  toast("已加入我的组合："+added+" 只，合计 "+yuan(total));
+  toast("已按方案配置 "+added+" 只，合计 "+yuan(total)+"（该批基金已更新为方案目标仓位）");
   const sec=document.querySelector('section[data-key="portfolio"]'); if(sec) sec.classList.add("open");
   if(window.analyze) analyze();
 }
@@ -1332,9 +1353,22 @@ async function loadOptimize(){
     li.innerHTML=`<span class="rep-tag">替换建议</span>
       <div class="opt-line">${o.text}</div>
       <div class="rep-flow"><span class="old">${r.from.name}（${r.from.code}）</span><span class="arrow">➜</span><span class="new">${r.to.name}（${r.to.code}）</span></div>
-      <div class="rep-corrs">相关性 <span class="corr-pill">${r.oldCorr} → ${r.newCorr}</span>　<a class="btn-buy" href="${r.to.link}" target="_blank" rel="noopener">查看并购买候选 ↗</a></div>`;
+      <div class="rep-corrs">相关性 <span class="corr-pill">${r.oldCorr} → ${r.newCorr}</span>　<a class="btn-buy" href="${r.to.link}" target="_blank" rel="noopener">查看并购买候选 ↗</a></div>
+      <div class="rep-actions"><button class="btn-primary btn-sm" onclick="applyReplaceHolding('${r.from.code}','${r.to.code}','${r.to.name}')">✅ 一键替换到组合</button><span class="muted" style="font-size:11px">直接替换持仓，无需再去搜索</span></div>`;
     box.appendChild(li);
   });
+}
+
+function applyReplaceHolding(fromCode, toCode, toName){
+  const ex=holdings.find(h=>h.code===fromCode);
+  if(!ex){ toast("原基金不在组合中，无法替换"); return; }
+  const val=ex.value||0;   // 沿用原基金市值，保持组合规模不变
+  const idx=holdings.findIndex(h=>h.code===fromCode);
+  holdings.splice(idx,1);
+  holdings.push({code:toCode, name:toName, type:ex.type||"", nav:ex.nav, navDate:ex.navDate,
+    changePct:ex.changePct, value:val, cost:val, assetAllocation:ex.assetAllocation||[], industry:ex.industry||[], industryBasis:"", holdings:[]});
+  saveHoldings(); renderHoldings(); if(window.analyze) analyze();
+  toast("已替换："+fromCode+" ➜ "+toName+"，组合规模不变");
 }
 
 // ---------------- 单基金买入诊断 ----------------
