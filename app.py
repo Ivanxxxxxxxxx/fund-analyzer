@@ -1231,6 +1231,7 @@ def build_allocate(funds, principal):
                          % (fa["name"], fb["name"], c),
                 "replace": {"from": {"code": repl["code"], "name": repl["name"]},
                             "to": {"code": rep["code"], "name": rep["name"], "corr": rep["corr"],
+                                   "asset": repl["asset"],
                                    "link": "https://fund.eastmoney.com/%s.html" % rep["code"]},
                             "oldCorr": round(c, 2), "newCorr": rep["corr"], "reason": rep["reason"]}})
         else:
