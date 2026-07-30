@@ -366,7 +366,7 @@
   <div style="margin-left:auto" class="row">
     <span class="live" id="liveBadge"><span class="dot" id="liveDot"></span><span id="liveText">净值交易时段每 2 分钟自动刷新</span></span>
     <button class="btn-ghost btn-sm" onclick="refreshNav()">↻ 刷新净值</button>
-    <button class="btn-primary" id="analyzeBtn" onclick="analyze()">开始分析</button>
+    <button class="btn-primary" id="analyzeBtn" onclick="runAnalysis()">开始分析</button>
   </div>
 </header>
 
@@ -1376,7 +1376,8 @@ async function confirmAllocate(total){
   saveHoldings(); renderHoldings(); setDataStamp();
   closeAllocate(); clearSel();
   toast("已按方案配置 "+added+" 只，合计 "+yuan(total)+"（该批基金已更新为方案目标仓位）");
-  const sec=document.querySelector('section[data-key="portfolio"]'); if(sec) sec.classList.add("open");
+  setFold("portfolio", true);  // 加入组合后展开「我的组合」
+  setFold("tools", false);     // 折叠「智能决策」
   if(window.analyze) analyze();
 }
 
@@ -1472,17 +1473,37 @@ function doImport(input){
 }
 
 // ---------------- 折叠分区交互 ----------------
+// 开始分析：生成分析报告后展开「分析报告」、折叠「我的组合」
+async function runAnalysis(){
+  await analyze();
+  setFold("report", true);
+  setFold("portfolio", false);
+}
 function toggleFold(h){
   const sec=h.closest(".fold");
   if(!sec) return;
   sec.classList.toggle("open");
   try{ localStorage.setItem("fp_fold_"+sec.dataset.key, sec.classList.contains("open")?"1":"0"); }catch(e){}
 }
+function setFold(key, open, persist){
+  const sec=document.querySelector('section.fold[data-key="'+key+'"]');
+  if(!sec) return;
+  sec.classList.toggle("open", !!open);
+  if(persist!==false){ try{ localStorage.setItem("fp_fold_"+key, open?"1":"0"); }catch(e){} }
+}
 function initFolds(){
+  const empty = !holdings.length;
   document.querySelectorAll(".fold").forEach(sec=>{
-    let st=null; try{ st=localStorage.getItem("fp_fold_"+sec.dataset.key); }catch(e){}
-    if(st==="0") sec.classList.remove("open");
-    else if(st==="1") sec.classList.add("open");
+    const key=sec.dataset.key;
+    let st=null; try{ st=localStorage.getItem("fp_fold_"+key); }catch(e){}
+    if(st==="0"){ sec.classList.remove("open"); }
+    else if(st==="1"){ sec.classList.add("open"); }
+    else {
+      // 无手动选择时，按组合是否为空给出智能默认
+      if(key==="portfolio") sec.classList.toggle("open", !empty); // 有基金→展开
+      else if(key==="tools") sec.classList.toggle("open", empty); // 空组合→展开智能决策引导
+      // report 默认保持关闭
+    }
   });
 }
 function updateSummaries(){
