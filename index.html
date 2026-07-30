@@ -1245,8 +1245,9 @@ async function genPlan(){
   const principal=Math.max(0, (+document.getElementById("principalInput2").value)||0);
   if(principal<=0){ toast("请输入本金"); return; }
   const funds=[...selFunds.values()].map(v=>({code:v.code,name:v.name,weight:v.weight,asset:v.asset}));
-  box.innerHTML='<div class="empty"><span class="spinner"></span>正在结合数据分析生成配资方案（多因子＋相关性＋估值）…通常 20–40 秒</div>';
-  const d=await api("/api/allocate", 200000, {method:"POST", body:JSON.stringify({funds, principal})}).catch(e=>({ok:false,error:String(e)}));
+  const exist=holdings.map(h=>({code:h.code,name:h.name,value:(+h.value||0),asset:h.asset||h.type||""}));
+  box.innerHTML='<div class="empty"><span class="spinner"></span>正在结合数据分析生成配资方案（多因子＋相关性＋估值，并对照你已有组合）…通常 20–40 秒</div>';
+  const d=await api("/api/allocate", 200000, {method:"POST", body:JSON.stringify({funds, principal, existing:exist})}).catch(e=>({ok:false,error:String(e)}));
   if(!d.ok){ box.innerHTML='<div class="empty">生成失败：'+(d.error||"")+'</div>'; return; }
   window.__lastPlan=d;
   renderPlan(d);
@@ -1268,6 +1269,12 @@ function renderPlan(d){
       <td style="font-size:11.5px;color:var(--muted);max-width:260px">${b.strategy}</td>
       <td><a class="btn-buy" href="${b.link}" target="_blank" rel="noopener">去购买 ↗</a></td></tr>`).join("");
   const optHtml=(d.optimizations&&d.optimizations.length)? d.optimizations.map(o=>{
+    if(o.type==="dup"){
+      return `<div class="rep-card">
+        <span class="rep-tag">重复提示</span>
+        <div class="opt-line">${o.text}</div>
+        <div class="rep-actions"><button class="btn-primary btn-sm" onclick="removeFromSel('${o.code}')">从方案移除</button><span class="muted" style="font-size:11px">你已持有，无需重复建仓</span></div></div>`;
+    }
     if(o.replace){
       const r=o.replace;
       return `<div class="rep-card">
@@ -1309,6 +1316,18 @@ function applyReplace(fromCode, toCode, toName, toAsset){
   document.getElementById("selList").innerHTML=[...selFunds.values()].map(v=>
     `<div class="sel-row"><span class="rf-code">${v.code}</span><span style="flex:1">${v.name}</span><span class="muted">${(v.weight*100).toFixed(0)}%</span><button class="x" onclick="toggleSel('${v.code}')">✕</button></div>`).join("");
   toast("已用 "+toName+" 替换 "+from.name+"，正在重新生成方案…");
+  genPlan();
+}
+
+function removeFromSel(code){
+  if(!selFunds.has(code)){ toast("该基金不在方案中"); return; }
+  const f=selFunds.get(code);
+  selFunds.delete(code);
+  renderSelBar();
+  document.getElementById("selList").innerHTML=[...selFunds.values()].map(v=>
+    `<div class="sel-row"><span class="rf-code">${v.code}</span><span style="flex:1">${v.name}</span><span class="muted">${(v.weight*100).toFixed(0)}%</span><button class="x" onclick="toggleSel('${v.code}')">✕</button></div>`).join("");
+  const b=document.getElementById("sel-"+code); if(b){ b.classList.remove("on"); b.textContent="选入配资"; }
+  toast("已从方案移除 "+f.name);
   genPlan();
 }
 
