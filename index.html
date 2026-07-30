@@ -65,6 +65,18 @@
   .kpi-grid{grid-template-columns:repeat(3,1fr)}
   /* 分析结果自适应多列网格：宽屏 3 列、平板 2 列、手机 1 列 */
   .analysis-grid{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+  .report-body{display:block}
+  .report-group{margin-bottom:14px}
+  .report-group:last-child{margin-bottom:0}
+  .group-head{display:flex;align-items:center;gap:9px;margin:4px 2px 12px}
+  .group-head .gbar{width:4px;height:16px;border-radius:2px;flex:none}
+  .group-head .gt{font-size:13.5px;font-weight:600;color:var(--text);letter-spacing:.4px}
+  .group-head .gsub{font-size:11.5px;color:var(--muted);font-weight:400;letter-spacing:.2px}
+  .group-head .gline{flex:1;height:1px;background:var(--line);opacity:.6}
+  .g-decision .gbar{background:#4f8ff7}
+  .g-action .gbar{background:#19c37d}
+  .g-data .gbar{background:#f0a23a}
+  .g-ref .gbar{background:#9aa0ac}
   .trend-wrap{position:relative;height:300px}
   .table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
   @media(max-width:1024px){.cols-3{grid-template-columns:repeat(2,1fr)}.wrap{padding:20px 20px}}
@@ -485,13 +497,17 @@
     <div class="fold-b"><div><div class="fold-inner">
 <!-- 分析结果：自适应多列网格 -->
   <div class="grid analysis-grid">
-    <!-- 组合健康速览（分析后生成） -->
-    <div class="card" id="overviewCard" style="grid-column:1/-1">
+
+  <div class="report-body">
+    <!-- 决策层 -->
+    <div class="report-group g-decision">
+      <div class="group-head"><span class="gbar"></span><span class="gt">决策层</span><span class="gsub">一眼看清组合状态</span><span class="gline"></span></div>
+      <div class="grid analysis-grid">
+<div class="card" id="overviewCard" style="grid-column:1/-1">
       <h3 class="sec"><span class="ic">🎯</span>组合健康速览（分析后生成）</h3>
       <div id="overviewBox"><div class="empty">点击「开始分析」后，这里汇总评分、风险与 Top 3 可执行动作。</div></div>
     </div>
-    <!-- 组合健康评分 -->
-    <div class="card">
+<div class="card">
       <h3 class="sec"><span class="ic">🩺</span>组合健康评分</h3>
       <div class="gauge-wrap">
         <svg viewBox="0 0 160 160" class="gauge">
@@ -512,58 +528,63 @@
       </div>
       <div class="gauge-formula">分散 35% · 风险收益 35% · 低相关 30%</div>
     </div>
-
-    <!-- 组合 KPI -->
-    <div class="card">
+      </div>
+    </div>
+    <!-- 行动层 -->
+    <div class="report-group g-action">
+      <div class="group-head"><span class="gbar"></span><span class="gt">行动层</span><span class="gsub">该怎么做 · 优先看这里</span><span class="gline"></span></div>
+      <div class="grid analysis-grid">
+<div class="card">
+      <h3 class="sec"><span class="ic">💡</span>可执行的优化建议</h3>
+      <ul class="suggestions" id="suggBox"><li class="muted" style="border-left-color:var(--muted)">分析后自动生成针对你组合的诊断与建议。</li></ul>
+    </div>
+<div class="card">
+      <h3 class="sec"><span class="ic">📡</span>实时操作信号（加仓 / 减仓 / 平仓 / 持仓）</h3>
+      <div id="signalBox"><div class="empty">点击「开始分析」生成实时操作信号（交易时段每 2 分钟自动刷新）。</div></div>
+    </div>
+      </div>
+    </div>
+    <!-- 数据层 -->
+    <div class="report-group g-data">
+      <div class="group-head"><span class="gbar"></span><span class="gt">数据层</span><span class="gsub">支撑结论的核心指标</span><span class="gline"></span></div>
+      <div class="grid analysis-grid">
+<div class="card">
       <h3 class="sec"><span class="ic">📌</span>组合 KPI</h3>
       <div id="kpiBox"><div class="empty">点击「开始分析」生成组合指标。</div></div>
     </div>
-
-    <!-- 资产配置环形图 -->
-    <div class="card">
+<div class="card">
       <h3 class="sec"><span class="ic">🧩</span>资产配置环形图（按类型）</h3>
       <div id="allocBox"><div class="empty">分析后展示资产类型分布。</div></div>
     </div>
-
-    <!-- 风险体检 -->
-    <div class="card">
+<div class="card">
       <h3 class="sec"><span class="ic">🛡️</span>风险体检</h3>
       <div id="riskBox"><div class="empty">分析后展示波动率 / 最大回撤 / 风险等级。</div></div>
     </div>
-
-    <!-- 盈利概率 -->
-    <div class="card">
-      <h3 class="sec"><span class="ic">🎲</span>盈利可能性（蒙特卡洛模拟）</h3>
-      <div id="probBox"><div class="empty">分析后展示不同持有期的盈利概率。</div></div>
-      <div class="note">基于历史日收益率做 2000 次路径模拟，概率随持有期拉长通常提升（但不保证未来收益）。</div>
-    </div>
-
-    <!-- 相关性预警 -->
-    <div class="card">
+<div class="card">
       <h3 class="sec"><span class="ic">🔗</span>相关性预警（基金间日收益相关系数）</h3>
       <div id="corrBox"><div class="empty">分析后展示相关性热力图，颜色越红代表同涨同跌风险越高。</div></div>
       <div class="note">相关性越高 → 分散效果越差。建议组合内基金相关性尽量低于 0.7。</div>
     </div>
-
-    <!-- 行业集中度 -->
-    <div class="card">
+<div class="card">
       <h3 class="sec"><span class="ic">🏭</span>行业集中度与重叠持仓</h3>
       <div id="industryBox"><div class="empty">分析后展示行业分布、集中度预警与跨基金重叠持仓。</div></div>
       <div class="note">行业占比取自各基金最新季报配置，按持仓市值加权汇总；重叠持仓越多，隐性集中风险越高。</div>
     </div>
-
-    <!-- 实时操作信号 -->
-    <div class="card">
-      <h3 class="sec"><span class="ic">📡</span>实时操作信号（加仓 / 减仓 / 平仓 / 持仓）</h3>
-      <div id="signalBox"><div class="empty">点击「开始分析」生成实时操作信号（交易时段每 2 分钟自动刷新）。</div></div>
+      </div>
     </div>
-
-    <!-- 优化建议 -->
-    <div class="card">
-      <h3 class="sec"><span class="ic">💡</span>可执行的优化建议</h3>
-      <ul class="suggestions" id="suggBox"><li class="muted" style="border-left-color:var(--muted)">分析后自动生成针对你组合的诊断与建议。</li></ul>
+    <!-- 参考层 -->
+    <div class="report-group g-ref">
+      <div class="group-head"><span class="gbar"></span><span class="gt">参考层</span><span class="gsub">长期视角 · 仅供参考</span><span class="gline"></span></div>
+      <div class="grid analysis-grid">
+<div class="card">
+      <h3 class="sec"><span class="ic">🎲</span>盈利可能性（蒙特卡洛模拟）</h3>
+      <div id="probBox"><div class="empty">分析后展示不同持有期的盈利概率。</div></div>
+      <div class="note">基于历史日收益率做 2000 次路径模拟，概率随持有期拉长通常提升（但不保证未来收益）。</div>
     </div>
-    </div></div></div>
+      </div>
+    </div>
+  </div>
+</div></div></div>
   </section>
 
 
