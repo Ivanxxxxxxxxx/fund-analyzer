@@ -806,7 +806,12 @@ async function analyze(){
   if(ov) ov.innerHTML='<div class="empty">正在拉取历史净值、运行蒙特卡洛模拟…</div>';
   try{
     toast("正在拉取历史净值并计算…");
-    for(const h of holdings){ const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]})); h.history=r.data||[]; }
+    if(!window.__histCache) window.__histCache={};  // O3：按 code 缓存历史净值，避免重复拉取
+    for(const h of holdings){
+      if(window.__histCache[h.code]){ h.history=window.__histCache[h.code]; continue; }
+      const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]}));
+      h.history=r.data||[]; window.__histCache[h.code]=h.history;
+    }
     const miss=holdings.filter(h=>!h.history||h.history.length<20);
     if(miss.length){ toast("警告："+miss.map(h=>h.code).join(",")+" 历史不足，结果可能不准"); }
 
@@ -1248,7 +1253,7 @@ function toggleSel(code){
     selFunds.delete(code);
     if(b){ b.classList.remove("on"); b.textContent="选入配资"; }
   } else {
-    selFunds.set(code, {code, name:f.name, weight:f.weight||0, asset:f.asset||"", verdict:f.verdict});
+    selFunds.set(code, {code, name:f.name, weight:f.weight||0, asset:f.asset||"", verdict:f.verdict, score:f.score});
     if(b){ b.classList.add("on"); b.textContent="已选 ✓"; }
   }
   renderSelBar();
@@ -1266,7 +1271,21 @@ function renderSelBar(){
   document.body.classList.toggle("alloc-open", selFunds.size>0);
 }
 function openAllocate(){
-  if(selFunds.size===0){ toast("请先在推荐里选入基金"); return; }
+  if(selFunds.size===0){
+    // O1：空态不再直接卡住，自动带入推荐的基金（每类精选1只），与 R3 精选口径一致
+    const recos = window.__recoFunds ? Object.values(window.__recoFunds) : [];
+    const byAsset = {};
+    recos.filter(f=>f.verdict==="推荐").forEach(f=>{
+      const a = f.asset||"其它";
+      if(!byAsset[a] || (f.score||0) > (byAsset[a].score||0)) byAsset[a]=f;
+    });
+    Object.values(byAsset).forEach(f=>{
+      selFunds.set(f.code, {code:f.code, name:f.name, weight:f.weight||0, asset:f.asset||"", verdict:f.verdict, score:f.score});
+    });
+    renderSelBar();
+    if(selFunds.size===0){ toast("请先在推荐里选入基金"); return; }
+    toast("已为你预选推荐的 "+selFunds.size+" 只（每类1只），可增减后生成方案");
+  }
   document.getElementById("selList").innerHTML=[...selFunds.values()].map(v=>
     `<div class="sel-row"><span class="rf-code">${v.code}</span><span style="flex:1">${v.name}</span><span class="muted">${(v.weight*100).toFixed(0)}%</span><button class="x" onclick="toggleSel('${v.code}')">✕</button></div>`).join("");
   document.getElementById("planBox").innerHTML="";
@@ -1281,7 +1300,15 @@ async function genPlan(){
   const box=document.getElementById("planBox");
   const principal=Math.max(0, (+document.getElementById("principalInput2").value)||0);
   if(principal<=0){ toast("请输入本金"); return; }
-  const funds=[...selFunds.values()].map(v=>({code:v.code,name:v.name,weight:v.weight,asset:v.asset}));
+  let sel=[...selFunds.values()];
+  const perMin=1000;  // R3：本金较小时自动每类精选1只，避免单只金额过低（如1000元买18只）
+  if(principal < sel.length*perMin){
+    const byAsset={};
+    sel.forEach(v=>{ const a=v.asset||"其它"; if(!byAsset[a]||(v.score||0)>(byAsset[a].score||0)) byAsset[a]=v; });
+    sel=Object.values(byAsset);
+    toast("本金较小，已按精选模式（每类1只）生成，共 "+sel.length+" 只");
+  }
+  const funds=sel.map(v=>({code:v.code,name:v.name,weight:v.weight,asset:v.asset}));
   const exist=holdings.map(h=>({code:h.code,name:h.name,value:(+h.value||0),asset:h.asset||h.type||""}));
   box.innerHTML='<div class="empty"><span class="spinner"></span>正在结合数据分析生成配资方案（多因子＋相关性＋估值，并对照你已有组合）…通常 20–40 秒</div>';
   const d=await api("/api/allocate", 200000, {method:"POST", body:JSON.stringify({funds, principal, existing:exist})}).catch(e=>({ok:false,error:String(e)}));
