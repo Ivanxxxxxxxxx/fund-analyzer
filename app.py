@@ -768,9 +768,8 @@ def get_market_env():
 # 基金池：覆盖主要资产类别的候选标的，工具实时拉取多因子数据、按类别筛选 Top N
 
 
-def get_rank_list(ft, pn=100, name_filter=None):
-    """动态拉取天天基金开放式基金排行，返回 [(code, name, y1, est_date)]。
-    彻底替代内置名单：每次调用都是实时榜单。"""
+def _get_rank_list_raw(ft, pn, name_filter):
+    """动态拉取天天基金开放式基金排行，返回 [(code, name, y1, est_date)]。"""
     sd = (datetime.date.today() - datetime.timedelta(days=365)).strftime("%Y-%m-%d")
     ed = datetime.date.today().strftime("%Y-%m-%d")
     dt = "money" if ft == "money" else "kf"
@@ -796,6 +795,12 @@ def get_rank_list(ft, pn=100, name_filter=None):
                 y1 = 0.0
             out.append((p[0], p[1], y1, p[16] if len(p) > 16 else ""))
     return out
+
+
+def get_rank_list(ft, pn=100, name_filter=None):
+    """动态拉取天天基金开放式基金排行；日频缓存，避免每次推荐都重复实时打接口。"""
+    k = "%s_%d_%s" % (ft, pn, name_filter or "")
+    return cached("rank", k, _daily_ttl(), lambda: _get_rank_list_raw(ft, pn, name_filter))
 
 
 # 动态推荐类别规格：(rankhandler ft, 展示类别名, 大类资产桶, 粗筛取头部数, 需成立>=2年过滤)
@@ -876,7 +881,7 @@ def recommend_portfolio():
         if need_age:
             rows = [r for r in rows if _est_years(r[3]) >= 2.0]
         rows.sort(key=lambda r: r[2], reverse=True)
-        head = rows[:topn]
+        head = rows[:topn * 2]  # 候选池放大，最终由综合分定 top3，缓解纯按近1年涨幅追涨
         for code, name, y1, ed in head:
             candidates.append((cat_label, asset, code, name))
         if not head:
@@ -913,8 +918,9 @@ def recommend_portfolio():
         top = lst[:3]
         asset = top[0][0]
         w = alloc.get(asset, 0.0)
-        per = w / len(top) if top else 0.0
+        s = sum(fac["composite"] for _, fac in top) or 1.0
         for asset, fac in top:
+            per = w * (fac["composite"] / s)  # 权重按综合分归一化，评分高的拿更多，而非机械均分
             verdict = "推荐" if fac["composite"] >= 68 else ("谨慎关注" if fac["composite"] >= 50 else "暂不推荐")
             reasons = ["多因子综合 %.0f 分；近一年 %s、夏普 %.2f、最大回撤 %s、估值分位 %s%%。"
                        % (fac["composite"], _s(fac["r250"]), fac["sharpe"], _s(fac["mdd"]),
@@ -1168,17 +1174,46 @@ def _find_replacement(repl, keep, codes, rets_map, topn=8):
     cands.sort(key=lambda x: x[2], reverse=True)
     keep_rets = rets_map.get(keep.get("code"), [])
     best = None
-    for code, name, y1 in cands[:topn]:
+    best_cr = 2.0
+    best_score = -1
+    for code, name, y1 in cands[:topn * 2]:
         cr = _corr(_fund_returns(code, 730), keep_rets)
-        if cr is None:
+        if cr is None or cr > 0.6:
             continue
-        if best is None or cr < best[1]:
+        try:
+            fac = _compute_factors(code)
+        except Exception:
+            fac = None
+        score = (fac or {}).get("composite") or 0
+        if score < 55:
+            continue
+        if best is None or cr < best_cr or (abs(cr - best_cr) < 1e-6 and score > best_score):
             best = ((code, name, y1), cr)
+            best_cr = cr
+            best_score = score
     if not best:
         return None
     (code, name, y1), cr = best
     return {"code": code, "name": name, "corr": round(cr, 2),
-            "reason": "近1年收益 +%.0f%%，与保留基金相关系数仅 %.2f，分散效果显著优于原基金。" % (y1, cr)}
+            "reason": "近1年收益 +%.0f%%，多因子综合分 %d，与保留基金相关系数仅 %.2f，分散效果显著优于原基金。" % (y1, best_score, cr)}
+
+
+def _norm_asset(a):
+    """把细分类型归并到大类资产桶，与 recommend_portfolio 的 alloc 口径对齐。
+    否则'混合型/指数型'在持仓里单列，会绕过权益集中度预警。"""
+    if not a:
+        return a
+    if "股票" in a or "混合" in a or "指数" in a:
+        return "股票型"
+    if "QDII" in a or "海外" in a:
+        return "海外(QDII)"
+    if "债券" in a:
+        return "债券型"
+    if "货币" in a:
+        return "货币型"
+    if "黄金" in a:
+        return "黄金"
+    return a
 
 
 def build_allocate(funds, principal, existing=None):
@@ -1197,7 +1232,7 @@ def build_allocate(funds, principal, existing=None):
         except Exception:
             fac = None
         rets_map[code] = _fund_returns(code, 730)
-        items.append({"code": code, "name": f.get("name"), "asset": f.get("asset"),
+        items.append({"code": code, "name": f.get("name"), "asset": _norm_asset(f.get("asset")),
                       "weight": round(w, 4), "amount": amount,
                       "type": (fac or {}).get("type", ""), "composite": (fac or {}).get("composite"),
                       "valPct": (fac or {}).get("valPct")})
@@ -1211,7 +1246,7 @@ def build_allocate(funds, principal, existing=None):
             if not c:
                 continue
             exist_items.append({"code": c, "name": h.get("name"),
-                                "asset": h.get("asset") or h.get("type") or "",
+                                "asset": _norm_asset(h.get("asset") or h.get("type") or ""),
                                 "value": float(h.get("value") or 0)})
     exist_codes = [e["code"] for e in exist_items]
     all_codes = codes + exist_codes
@@ -1298,16 +1333,16 @@ def build_allocate(funds, principal, existing=None):
             by_asset[it["asset"]] = by_asset.get(it["asset"], 0) + it["amount"]
         for e in exist_items:
             by_asset[e["asset"]] = by_asset.get(e["asset"], 0) + e["value"]
-        for asset, val in by_asset.items():
-            if asset in ("股票型", "海外(QDII)") and val / combined_total > 0.6:
-                exist_val = sum(e["value"] for e in exist_items if e["asset"] == asset)
-                new_val = sum(it["amount"] for it in items if it["asset"] == asset)
-                over = principal * (val / combined_total - 0.6)
-                opts.append({"type": "concentration", "level": "warn",
-                    "text": "合并你已有持仓后，%s 占组合 %.0f%%（已有 ¥%s + 本次 ¥%s），过于集中。建议降至 60%% 以内，本次可将约 ¥%s 改配债券型 / 货币型等防御资产。"
-                             % (asset, val / combined_total * 100,
-                                format(round(exist_val), ","), format(round(new_val), ","),
-                                format(round(over), ","))})
+        equity = by_asset.get("股票型", 0) + by_asset.get("海外(QDII)", 0)
+        if equity / combined_total > 0.6:
+            exist_val = sum(e["value"] for e in exist_items if e["asset"] in ("股票型", "海外(QDII)"))
+            new_val = sum(it["amount"] for it in items if it["asset"] in ("股票型", "海外(QDII)"))
+            over = principal * (equity / combined_total - 0.6)
+            opts.append({"type": "concentration", "level": "warn",
+                "text": "合并你已有持仓后，权益类（股票型+海外QDII）占组合 %.0f%%（已有 ¥%s + 本次 ¥%s），过于集中。建议降至 60%% 以内，本次可将约 ¥%s 改配债券型 / 货币型等防御资产。"
+                         % (equity / combined_total * 100,
+                            format(round(exist_val), ","), format(round(new_val), ","),
+                            format(round(over), ","))})
 
     # 买入方案（具体到金额 + 估值策略 + 购买入口）
     buy = []
