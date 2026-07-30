@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>基金组合健康度分析</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%8A%3C/text%3E%3C/svg%3E">
 <script src="/static/chart.umd.js"></script>
@@ -218,7 +218,7 @@
     .prob-grid{grid-template-columns:repeat(2,1fr);gap:10px}
     table{font-size:12px}
     th,td{padding:10px 9px}
-    .toast{bottom:14px;font-size:12px;padding:10px 16px;max-width:90vw;text-align:center}
+    .toast{bottom:calc(14px + env(safe-area-inset-bottom,0px));font-size:12px;padding:10px 16px;max-width:90vw;text-align:center}
     /* 持仓表在手机上改为卡片堆叠，避免 10 列横向滚动 + 输入框难编辑 */
     #holdingsBox table,#holdingsBox thead,#holdingsBox tbody,#holdingsBox tr,#holdingsBox td{display:block;width:auto}
     #holdingsBox thead{display:none}
@@ -228,6 +228,19 @@
     #holdingsBox td[data-label=""]{display:none}
     #holdingsBox td input.num{width:130px !important;text-align:right}
     #holdingsBox td.del{justify-content:flex-end;padding-top:2px}
+    /* 触控目标放大到 ≥40px（手机），降低误触 */
+    .rf-sel{padding:8px 14px;font-size:13px}
+    .preset-btn{padding:9px 15px;font-size:13px}
+    .btn-buy{padding:8px 14px;font-size:13px}
+    .btn-sm{padding:9px 15px;font-size:13px}
+    .modal-close{width:38px;height:38px}
+    .alloc-bar{padding:11px 14px;gap:10px}
+    .alloc-bar .cnt{font-size:12px}
+    .alloc-bar .cnt b{font-size:15px}
+    /* 相关性热力表在基金多时横向滚动，不撑破页面 */
+    .heat{display:block;max-width:100%;overflow-x:auto}
+    /* 浮动栏出现时给底部留滚动空间，避免遮住最后一行 */
+    body.alloc-open{padding-bottom:96px}
   }
   /* 横屏手机微调 */
   @media(max-width:767px) and (max-height:480px){
@@ -281,9 +294,9 @@
   .rf-sel{margin-left:6px;border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;cursor:pointer;transition:.15s}
   .rf-sel:hover{background:rgba(91,140,255,.12)}
   .rf-sel.on{background:var(--accent);color:#fff}
-  .alloc-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:40;display:none;
+  .alloc-bar{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;display:none;
     align-items:center;gap:14px;background:rgba(20,24,33,.96);border:1px solid var(--accent);border-radius:14px;
-    padding:10px 16px;box-shadow:0 12px 40px rgba(0,0,0,.45);max-width:94vw}
+    padding:10px 16px;box-shadow:0 12px 40px rgba(0,0,0,.45);max-width:94vw;flex-wrap:wrap;justify-content:center}
   .alloc-bar.show{display:flex}
   .alloc-bar .cnt{font-size:13px}
   .alloc-bar .cnt b{color:var(--accent);font-size:16px}
@@ -1250,6 +1263,7 @@ function renderSelBar(){
   let w=0; selFunds.forEach(v=>w+=(v.weight||0));
   document.getElementById("selW").textContent=(w*100).toFixed(0)+"%";
   bar.classList.toggle("show", selFunds.size>0);
+  document.body.classList.toggle("alloc-open", selFunds.size>0);
 }
 function openAllocate(){
   if(selFunds.size===0){ toast("请先在推荐里选入基金"); return; }
