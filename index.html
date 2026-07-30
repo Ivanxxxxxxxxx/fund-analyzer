@@ -21,6 +21,7 @@
     --warn:#ffb020; --good:#19c37d; --bad:#ff4d5e;
     --radius:16px;
     --shadow:0 12px 34px rgba(0,0,0,0.40);
+    --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,Consolas,"Courier New",monospace;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -158,8 +159,8 @@
   .heat .corner{color:var(--muted);font-weight:400;background:transparent}
   /* ---------- suggestions ---------- */
   .suggestions{list-style:none;margin:0;padding:0}
-  .suggestions li{margin-bottom:12px;padding:12px 14px;border-radius:12px;line-height:1.55;
-    background:rgba(255,255,255,0.03);border:1px solid var(--line);border-left:3px solid var(--muted);font-size:13.5px}
+  .suggestions li{margin-bottom:10px;padding:12px 14px;border-radius:12px;line-height:1.55;
+    background:rgba(255,255,255,0.025);border:1px solid var(--line);border-left:3px solid var(--muted);font-size:13.5px}
   .suggestions .s-good{border-left-color:var(--good)}
   .suggestions .s-warn{border-left-color:var(--warn)}
   .suggestions .s-bad{border-left-color:var(--bad)}
@@ -179,6 +180,10 @@
   .toast.show{opacity:1}
   .pill{display:inline-flex;gap:6px;align-items:center;font-size:11px;color:var(--muted);
     border:1px solid var(--line);border-radius:999px;padding:4px 11px;background:rgba(255,255,255,0.03)}
+  /* 加载转圈 */
+  .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.22);border-top-color:var(--accent);
+    border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:-3px;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
 
   /* ---------- 平板 (<1024) ---------- */
   @media(max-width:1023px){
@@ -245,8 +250,9 @@
   }
   /* 多因子推荐基金卡片 */
   .reco-cat{margin:10px 0 4px}
-  .reco-cat-h{font-size:12px;font-weight:700;color:var(--muted);margin:8px 0 6px;letter-spacing:.5px}
-  .reco-fund{background:rgba(255,255,255,0.035);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;cursor:pointer;transition:border-color .15s,background .15s}
+  .reco-cat-h{font-size:13px;font-weight:700;color:var(--text);margin:14px 0 4px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+  .reco-cat-h:before{content:"";width:3px;height:13px;border-radius:2px;background:linear-gradient(var(--accent),var(--accent2))}
+  .reco-fund{background:rgba(255,255,255,0.025);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;padding:12px 14px;margin:10px 0;cursor:pointer;transition:border-color .15s,background .15s}
   .reco-fund:hover{border-color:var(--accent);background:rgba(91,140,255,0.08)}
   .rf-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .rf-code{font-family:var(--mono);font-size:12px;color:var(--muted)}
@@ -273,15 +279,31 @@
   .alloc-bar .cnt b{color:var(--accent);font-size:16px}
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:28px 12px}
   .overlay.show{display:flex}
-  .modal{width:min(820px,96vw);background:var(--bg-2);border:1px solid var(--line);border-radius:16px;padding:20px;margin:auto}
-  .modal h2{font-size:18px;margin:0 0 4px}
-  .modal .sub{font-size:12.5px;color:var(--muted);margin-bottom:14px}
+  .overlay.show .modal{animation:modalIn .24s cubic-bezier(.22,1,.36,1)}
+  @keyframes modalIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+  .modal{width:min(860px,96vw);max-height:92vh;overflow:auto;margin:auto;position:relative;
+    background:linear-gradient(180deg, rgba(28,36,58,.98), rgba(18,24,40,.98));
+    border:1px solid var(--line2);border-radius:18px;padding:22px 22px 20px;
+    box-shadow:0 30px 80px rgba(0,0,0,.6);backdrop-filter:blur(20px)}
+  .modal h2{font-size:19px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .modal .sub{font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.55}
+  .modal-close{position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:9px;
+    background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--muted);
+    font-size:18px;display:grid;place-items:center;cursor:pointer;transition:.15s}
+  .modal-close:hover{background:rgba(255,255,255,.12);color:var(--text)}
   .sel-list{display:flex;flex-direction:column;gap:6px;margin:8px 0 14px;max-height:200px;overflow:auto}
   .sel-row{display:flex;align-items:center;gap:10px;font-size:13px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
   .sel-row .x{margin-left:auto;cursor:pointer;color:var(--muted);border:none;background:none;font-size:15px}
-  .principal-in{display:flex;align-items:center;gap:8px;font-size:14px;margin:6px 0 12px}
-  .principal-in input{width:160px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:15px}
-  .plan-sec{margin:16px 0 6px;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.3px}
+  .principal-in{display:flex;align-items:center;justify-content:space-between;font-size:14px;margin:6px 0 12px}
+  .principal-card{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0 12px}
+  .principal-card .pc-top{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--muted)}
+  .principal-card .pc-top .pv{font-size:20px;font-weight:700;color:var(--text)}
+  .principal-card input{width:100%;margin-top:8px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:18px;font-weight:600;outline:none;transition:.18s}
+  .principal-card input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,140,255,.18)}
+  .principal-presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .preset-btn{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--muted);border-radius:999px;padding:5px 13px;font-size:12px;cursor:pointer;transition:.15s}
+  .preset-btn:hover{background:rgba(91,140,255,.14);color:var(--text);border-color:var(--accent)}
+  .plan-sec{margin:0 0 8px;font-size:13px;font-weight:700;color:var(--text);letter-spacing:.3px}
   table.plan{width:100%;border-collapse:collapse;font-size:12.5px}
   table.plan th,table.plan td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left}
   table.plan th{color:var(--muted);font-weight:600}
@@ -294,8 +316,31 @@
   .btn-buy{display:inline-block;margin-top:8px;padding:5px 12px;border-radius:999px;background:var(--good);color:#04210f;font-weight:700;font-size:12px;text-decoration:none}
   .opt-line{font-size:13px;line-height:1.6;margin:6px 0;padding-left:18px;position:relative}
   .opt-line:before{content:"⚠";position:absolute;left:0;color:var(--warn)}
-  .amount-cell{font-weight:700;color:var(--fg)}
+  .amount-cell{font-weight:700;color:var(--text)}
   .alloc-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+  /* 一键配资：优化版视觉 */
+  .alloc-summary{display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 4px}
+  .alloc-summary .chip{background:rgba(91,140,255,.12);border:1px solid rgba(91,140,255,.3);border-radius:10px;padding:8px 13px;font-size:12.5px;color:var(--muted)}
+  .alloc-summary .chip b{color:var(--accent);font-size:16px;margin-left:5px;font-weight:700}
+  .plan-card{background:rgba(255,255,255,.025);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;padding:12px 14px;margin:10px 0}
+  .rep-tag{display:inline-block;font-size:11px;font-weight:700;color:#ffcf80;background:rgba(255,176,32,.16);border:1px solid rgba(255,176,32,.4);border-radius:999px;padding:2px 11px;margin-bottom:8px}
+  .corr-pill{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 10px;background:rgba(25,195,125,.14);color:#7fe3a8;border:1px solid rgba(25,195,125,.35)}
+  .rep-flow{margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+  .modal::-webkit-scrollbar,.sel-list::-webkit-scrollbar,.table-scroll::-webkit-scrollbar{width:8px;height:8px}
+  .modal::-webkit-scrollbar-thumb,.sel-list::-webkit-scrollbar-thumb,.table-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:8px}
+  .modal::-webkit-scrollbar-track,.sel-list::-webkit-scrollbar-track,.table-scroll::-webkit-scrollbar-track{background:transparent}
+  /* 分配弹窗：手机适配 */
+  @media(max-width:767px){
+    .modal{padding:18px 14px 16px;border-radius:14px}
+    .modal h2{font-size:17px}
+    table.plan th,table.plan td{padding:7px 5px;font-size:11.5px}
+    table.plan td br{display:none}
+    .alloc-summary .chip{padding:6px 10px;font-size:11.5px}
+    .alloc-summary .chip b{font-size:14px}
+    .principal-card{padding:11px 12px}
+    .principal-card input{font-size:16px}
+    .rep-flow{font-size:12.5px}
+  }
 </style>
 </head>
 <body>
@@ -508,11 +553,21 @@
 
 <div class="overlay" id="allocOverlay" onclick="if(event.target===this)closeAllocate()">
   <div class="modal" id="allocModal">
+    <button class="modal-close" onclick="closeAllocate()" aria-label="关闭">×</button>
     <h2>⚡ 一键配资</h2>
     <div class="sub">从推荐选入的基金，结合实时多因子、相关性、估值分位，给出具体买入金额与可执行优化方案。</div>
     <div class="sel-list" id="selList"></div>
-    <div class="principal-in">本金（¥）<input id="principalInput2" type="number" value="100000" min="0" step="1000"></div>
-    <button class="btn-primary" onclick="genPlan()">生成配资方案</button>
+    <div class="principal-card">
+      <div class="pc-top"><span>投资本金（¥）</span><span class="pv" id="principalPreview">¥100,000</span></div>
+      <input id="principalInput2" type="number" value="100000" min="0" step="1000" oninput="syncPrincipalPreview()">
+      <div class="principal-presets">
+        <span class="preset-btn" onclick="setPrincipal(50000)">5 万</span>
+        <span class="preset-btn" onclick="setPrincipal(100000)">10 万</span>
+        <span class="preset-btn" onclick="setPrincipal(500000)">50 万</span>
+        <span class="preset-btn" onclick="setPrincipal(1000000)">100 万</span>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="genPlan()" style="width:100%">生成配资方案</button>
     <div id="planBox"></div>
   </div>
 </div>
@@ -1180,13 +1235,16 @@ function openAllocate(){
   document.getElementById("allocOverlay").classList.add("show");
 }
 function closeAllocate(){ document.getElementById("allocOverlay").classList.remove("show"); }
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ const o=document.getElementById("allocOverlay"); if(o&&o.classList.contains("show")) closeAllocate(); } });
 
+function setPrincipal(v){const i=document.getElementById("principalInput2"); if(i){i.value=v; syncPrincipalPreview();}}
+function syncPrincipalPreview(){const i=document.getElementById("principalInput2"); const p=document.getElementById("principalPreview"); if(i&&p){const v=Math.max(0,(+i.value)||0); p.textContent="¥"+Math.round(v).toLocaleString("en-US");}}
 async function genPlan(){
   const box=document.getElementById("planBox");
   const principal=Math.max(0, (+document.getElementById("principalInput2").value)||0);
   if(principal<=0){ toast("请输入本金"); return; }
   const funds=[...selFunds.values()].map(v=>({code:v.code,name:v.name,weight:v.weight,asset:v.asset}));
-  box.innerHTML='<div class="empty">正在结合数据分析生成配资方案（多因子＋相关性＋估值）…通常 20–40 秒</div>';
+  box.innerHTML='<div class="empty"><span class="spinner"></span>正在结合数据分析生成配资方案（多因子＋相关性＋估值）…通常 20–40 秒</div>';
   const d=await api("/api/allocate", 200000, {method:"POST", body:JSON.stringify({funds, principal})}).catch(e=>({ok:false,error:String(e)}));
   if(!d.ok){ box.innerHTML='<div class="empty">生成失败：'+(d.error||"")+'</div>'; return; }
   window.__lastPlan=d;
@@ -1194,7 +1252,14 @@ async function genPlan(){
 }
 
 function renderPlan(d){
+  const box=document.getElementById("planBox");
   const total=d.principal||0;
+  const n=(d.buyPlan||[]).length;
+  const summary=`<div class="alloc-summary">
+    <span class="chip">投资本金<b>${yuan(total)}</b></span>
+    <span class="chip">配置基金<b>${n} 只</b></span>
+    <span class="chip">优化建议<b>${(d.optimizations||[]).length} 条</b></span>
+  </div>`;
   const buyRows=(d.buyPlan||[]).map(b=>`<tr>
       <td>${b.code}<br><span class="muted" style="font-size:11px">${b.name}</span></td>
       <td>${(b.weight*100).toFixed(1)}%</td>
@@ -1204,21 +1269,28 @@ function renderPlan(d){
   const optHtml=(d.optimizations&&d.optimizations.length)? d.optimizations.map(o=>{
     if(o.replace){
       const r=o.replace;
-      return `<div class="rep-card"><div class="opt-line">${o.text}</div>
-        <div style="margin-top:6px"><span class="old">${r.from.name}（${r.from.code}）</span><span class="arrow">➜</span><span class="new">${r.to.name}（${r.to.code}）</span></div>
-        <div class="rep-corrs">相关性 ${r.oldCorr} → <b style="color:var(--good)">${r.newCorr}</b>　<a class="btn-buy" href="${r.to.link}" target="_blank" rel="noopener">查看并购买候选 ↗</a></div>
+      return `<div class="rep-card">
+        <span class="rep-tag">替换建议</span>
+        <div class="opt-line">${o.text}</div>
+        <div class="rep-flow"><span class="old">${r.from.name}（${r.from.code}）</span><span class="arrow">➜</span><span class="new">${r.to.name}（${r.to.code}）</span></div>
+        <div class="rep-corrs">相关性 <span class="corr-pill">${r.oldCorr} → ${r.newCorr}</span>　<a class="btn-buy" href="${r.to.link}" target="_blank" rel="noopener">查看并购买候选 ↗</a></div>
         <div class="rep-reason">${r.reason}</div></div>`;
     }
     return `<div class="opt-line">${o.text}</div>`;
   }).join("") : '<div class="opt-line" style="color:var(--good)">相关性良好，无需替换，可按下表直接建仓。</div>';
   box.innerHTML=`
-    <div class="plan-sec">① 配置明细（本金 ${yuan(total)}）</div>
-    <div class="table-scroll"><table class="plan"><thead><tr><th>基金</th><th>权重</th><th>买入金额</th><th>估值策略（怎么买）</th><th>购买</th></tr></thead><tbody>${buyRows}</tbody></table></div>
-    <div class="plan-sec">② 相关性诊断与可执行优化</div>
-    ${optHtml}
+    ${summary}
+    <div class="plan-card">
+      <div class="plan-sec">① 配置明细（按权重分配本金）</div>
+      <div class="table-scroll"><table class="plan"><thead><tr><th>基金</th><th>权重</th><th>买入金额</th><th>估值策略（怎么买）</th><th>购买</th></tr></thead><tbody>${buyRows}</tbody></table></div>
+    </div>
+    <div class="plan-card">
+      <div class="plan-sec">② 相关性诊断与可执行优化</div>
+      ${optHtml}
+    </div>
     <div class="alloc-actions">
       <button class="rf-sel" onclick="closeAllocate()">稍后</button>
-      <button class="btn-primary" onclick="confirmAllocate(${total})">✅ 确认并加入我的组合</button>
+      <button class="btn-primary" onclick="confirmAllocate(${total})">✅ 确认加入（${yuan(total)}）</button>
     </div>`;
 }
 
@@ -1257,7 +1329,10 @@ async function loadOptimize(){
     const r=o.replace;
     const li=document.createElement("li");
     li.className="s-warn";
-    li.innerHTML=`⚠ ${o.text} 建议将 <b>${r.from.name}</b> 替换为 <b>${r.to.name}（${r.to.code}）</b>，相关性 ${r.oldCorr}→<b>${r.newCorr}</b>。<a class="btn-buy" href="${r.to.link}" target="_blank" rel="noopener">去购买候选 ↗</a>`;
+    li.innerHTML=`<span class="rep-tag">替换建议</span>
+      <div class="opt-line">${o.text}</div>
+      <div class="rep-flow"><span class="old">${r.from.name}（${r.from.code}）</span><span class="arrow">➜</span><span class="new">${r.to.name}（${r.to.code}）</span></div>
+      <div class="rep-corrs">相关性 <span class="corr-pill">${r.oldCorr} → ${r.newCorr}</span>　<a class="btn-buy" href="${r.to.link}" target="_blank" rel="noopener">查看并购买候选 ↗</a></div>`;
     box.appendChild(li);
   });
 }
