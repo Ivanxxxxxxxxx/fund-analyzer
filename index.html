@@ -377,6 +377,22 @@
     .principal-card input{font-size:16px}
     .rep-flow{font-size:12.5px}
   }
+  /* ---------- 应用内确认弹窗（替代原生 confirm） ---------- */
+  .modal.confirm-modal{max-width:380px;padding:22px 22px 20px}
+  .confirm-modal .ct{font-size:15px;font-weight:600;margin:0 0 6px;display:flex;align-items:center;gap:8px}
+  .confirm-modal .cm{font-size:13px;color:var(--muted);line-height:1.6;margin:0}
+  .cf-actions{display:flex;gap:12px;margin-top:18px;justify-content:flex-end}
+  .btn-danger{background:linear-gradient(135deg,#ff6b6b,#ff4d5e);color:#fff;box-shadow:0 8px 20px rgba(255,77,94,.35)}
+  .btn-danger:hover{filter:brightness(1.06)}
+  /* ---------- 回到顶部 ---------- */
+  .to-top{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:40;
+    width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-size:18px;color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 10px 28px rgba(91,140,255,.4);
+    opacity:0;pointer-events:none;transform:translateY(8px);transition:.25s ease}
+  .to-top.show{opacity:1;pointer-events:auto;transform:none}
+  .to-top:hover{filter:brightness(1.06)}
+  /* 禁用态光标 */
+  .btn-primary:disabled{cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -400,7 +416,7 @@
   <div class="card">
     <div class="add-bar">
       <div class="add-input-wrap">
-        <input type="text" id="codeInput" autocomplete="off"
+        <input type="text" id="codeInput" autocomplete="off" inputmode="numeric"
                placeholder="输入基金代码(如 110011) 或名称(如 沪深300 / 易方达)"
                oninput="onSearchInput()" onkeydown="if(event.key==='Enter')quickAdd()">
         <div id="searchDropdown" class="search-dropdown"></div>
@@ -476,7 +492,7 @@
           <input type="text" id="adviseInput" autocomplete="off" placeholder="输入基金代码(如 110011) 诊断是否值得买、适合买多少"
                  onkeydown="if(event.key==='Enter')runAdvise()">
         </div>
-        <input class="num" id="capitalInput" type="number" min="1000" step="10000" value="100000" title="可用于投资基金的总本金(元)"
+        <input class="num" id="capitalInput" type="number" min="1000" step="10000" value="100000" title="可用于投资基金的总本金(元)" inputmode="decimal"
                style="width:150px" placeholder="本金¥">
         <button class="btn-primary" onclick="runAdvise()">开始诊断</button>
         <span class="muted">本金用于估算「建议买入金额」</span>
@@ -491,7 +507,7 @@
     <div class="fold-h" role="button" tabindex="0" onclick="toggleFold(this)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleFold(this)}">
       <span class="ico">📑</span>
       <span class="t">深度分析报告</span>
-      <span class="sum" id="sumReport">分析后生成 9 项指标</span>
+      <span class="sum" id="sumReport">4 大维度 · 10 项诊断</span>
       <svg class="ch" width="16" height="16" viewBox="0 0 16 16"><polyline points="6,5 10,8 6,11" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
     </div>
     <div class="fold-b"><div><div class="fold-inner">
@@ -505,7 +521,7 @@
       <div class="grid analysis-grid">
 <div class="card" id="overviewCard" style="grid-column:1/-1">
       <h3 class="sec"><span class="ic">🎯</span>组合健康速览（分析后生成）</h3>
-      <div id="overviewBox"><div class="empty">点击「开始分析」后，这里汇总评分、风险与 Top 3 可执行动作。</div></div>
+      <div id="overviewBox" aria-live="polite"><div class="empty">点击「开始分析」后，这里汇总评分、风险与 Top 3 可执行动作。</div></div>
     </div>
 <div class="card">
       <h3 class="sec"><span class="ic">🩺</span>组合健康评分</h3>
@@ -536,11 +552,11 @@
       <div class="grid analysis-grid">
 <div class="card">
       <h3 class="sec"><span class="ic">💡</span>可执行的优化建议</h3>
-      <ul class="suggestions" id="suggBox"><li class="muted" style="border-left-color:var(--muted)">分析后自动生成针对你组合的诊断与建议。</li></ul>
+      <ul class="suggestions" id="suggBox" aria-live="polite"><li class="muted" style="border-left-color:var(--muted)">分析后自动生成针对你组合的诊断与建议。</li></ul>
     </div>
 <div class="card">
       <h3 class="sec"><span class="ic">📡</span>实时操作信号（加仓 / 减仓 / 平仓 / 持仓）</h3>
-      <div id="signalBox"><div class="empty">点击「开始分析」生成实时操作信号（交易时段每 2 分钟自动刷新）。</div></div>
+      <div id="signalBox" aria-live="polite"><div class="empty">点击「开始分析」生成实时操作信号（交易时段每 2 分钟自动刷新）。</div></div>
     </div>
       </div>
     </div>
@@ -606,7 +622,7 @@
     <div class="sel-list" id="selList"></div>
     <div class="principal-card">
       <div class="pc-top"><span>投资本金（¥）</span><span class="pv" id="principalPreview">¥100,000</span></div>
-      <input id="principalInput2" type="number" value="100000" min="0" step="1000" oninput="syncPrincipalPreview()">
+      <input id="principalInput2" type="number" value="100000" min="0" step="1000" inputmode="decimal" oninput="syncPrincipalPreview()">
       <div class="principal-presets">
         <span class="preset-btn" onclick="setPrincipal(50000)">5 万</span>
         <span class="preset-btn" onclick="setPrincipal(100000)">10 万</span>
@@ -618,6 +634,20 @@
     <div id="planBox"></div>
   </div>
 </div>
+
+<!-- 应用内确认弹窗（替代浏览器原生 confirm） -->
+<div class="overlay" id="confirmOverlay" onclick="if(event.target===this)closeConfirm()">
+  <div class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="cfTitle">
+    <p class="ct" id="cfTitle">⚠ 请确认</p>
+    <p class="cm" id="cfMsg"></p>
+    <div class="cf-actions">
+      <button class="btn-ghost btn-sm" onclick="closeConfirm()">取消</button>
+      <button class="btn-danger btn-sm" id="cfYes">确认</button>
+    </div>
+  </div>
+</div>
+
+<button class="to-top" id="toTop" aria-label="回到顶部" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
 
 <script>
 const FMT = n => (n==null||isNaN(n)) ? "—" : n;
@@ -737,7 +767,7 @@ document.addEventListener("click", e=>{
 
 function renderHoldings(){
   const box=document.getElementById("holdingsBox");
-  if(!holdings.length){ box.innerHTML='<div class="empty">还没有基金，先在上方输入代码添加吧。</div>'; return; }
+  if(!holdings.length){ box.innerHTML='<div class="empty">还没有基金，先在上方输入代码添加吧。<br><button class="btn-ghost btn-sm" style="margin-top:12px" onclick="sampleAndAnalyze()">✨ 载入示例并一键分析</button></div>'; return; }
   const total=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
   const totalCost=holdings.reduce((s,h)=>s+(+h.cost||0),0);
   const totalPL=total-totalCost;
@@ -753,9 +783,9 @@ function renderHoldings(){
       <td data-label="类型"><span class="tag ${tcls}">${h.type||"?"}</span></td>
       <td class="num" data-label="最新净值">${h.nav!=null?h.nav.toFixed(4):"—"}<div class="muted" style="font-size:11px">${h.navDate||""}</div></td>
       <td class="num ${cls(h.changePct)}" data-label="日涨跌">${signPctPct(h.changePct)}</td>
-      <td class="num" data-label="持仓市值(¥)"><input class="num" type="number" min="0" step="100" value="${h.value}" onchange="setVal(${i},this.value)"></td>
+      <td class="num" data-label="持仓市值(¥)"><input class="num" type="number" min="0" step="100" value="${h.value}" inputmode="decimal" onchange="setVal(${i},this.value)"></td>
       <td class="num" data-label="占比">${pct(w)}</td>
-      <td class="num" data-label="成本(¥)"><input class="num" type="number" min="0" step="100" value="${h.cost}" onchange="setCost(${i},this.value)"></td>
+      <td class="num" data-label="成本(¥)"><input class="num" type="number" min="0" step="100" value="${h.cost}" inputmode="decimal" onchange="setCost(${i},this.value)"></td>
       <td class="num ${cls(pl)}" data-label="累计盈亏(¥)">${pl>=0?"+":""}${yuan(pl)}</td>
       <td class="num ${cls(plpct)}" data-label="收益率">${signPct(plpct)}</td>
       <td class="num del" data-label="" onclick="delFund(${i})">✕</td>
@@ -774,7 +804,16 @@ function renderHoldings(){
 function setVal(i,v){ holdings[i].value=Math.max(0,+v||0); saveHoldings(); renderHoldings(); }
 function setCost(i,v){ holdings[i].cost=Math.max(0,+v||0); saveHoldings(); renderHoldings(); }
 function delFund(i){ holdings.splice(i,1); saveHoldings(); renderHoldings(); }
-function clearAll(){ if(!confirm("确定清空所有持仓？此操作不可撤销。")) return; holdings=[]; saveHoldings(); renderHoldings(); setDataStamp(); toast("已清空组合"); }
+function clearAll(){ confirmDialog("确定清空所有持仓？", "此操作不可撤销，示例与真实持仓都会清除。", ()=>{ holdings=[]; saveHoldings(); renderHoldings(); setDataStamp(); toast("已清空组合"); }); }
+let __cfCb=null;
+function confirmDialog(title, msg, onYes){
+  __cfCb=onYes;
+  document.getElementById("cfTitle").textContent=title;
+  document.getElementById("cfMsg").textContent=msg;
+  document.getElementById("confirmOverlay").classList.add("show");
+  document.getElementById("cfYes").onclick=()=>{ closeConfirm(); if(__cfCb) __cfCb(); };
+}
+function closeConfirm(){ document.getElementById("confirmOverlay").classList.remove("show"); __cfCb=null; }
 async function fillSample(){
   const sample=[["000961","天弘沪深300ETF联接A"],["003095","中欧医疗健康混合A"],["100018","富国天利增长债券"],["000216","华安黄金易ETF联接A"]];
   for(const [code,name] of sample){
@@ -784,6 +823,11 @@ async function fillSample(){
       value:25000,cost:25000,assetAllocation:f.assetAllocation||[],industry:f.industry||[],industryBasis:f.industryBasis||"",holdings:f.holdings||[]});
   }
   saveHoldings(); renderHoldings(); toast("已填充示例组合，可点「开始分析」");
+}
+async function sampleAndAnalyze(){
+  if(holdings.length){ await runAnalysis(); return; }
+  await fillSample();
+  await runAnalysis();
 }
 async function refreshNav(silent=false){
   if(!holdings.length){ if(!silent) toast("请先添加基金"); return; }
@@ -1336,6 +1380,7 @@ async function genPlan(){
   if(!d.ok){ box.innerHTML='<div class="empty">生成失败：'+(d.error||"")+'</div>'; return; }
   window.__lastPlan=d;
   renderPlan(d);
+  setTimeout(()=>{ const p=document.getElementById("planBox"); if(p) p.scrollIntoView({behavior:"smooth", block:"nearest"}); }, 80);
 }
 
 function renderPlan(d){
@@ -1540,6 +1585,7 @@ async function runAnalysis(){
   await analyze();
   setFold("report", true);
   setFold("portfolio", false);
+  setTimeout(()=>{ const rep=document.querySelector('section.fold[data-key="report"]'); if(rep) rep.scrollIntoView({behavior:"smooth", block:"start"}); }, 320);
 }
 function toggleFold(h){
   const sec=h.closest(".fold");
@@ -1569,6 +1615,8 @@ function initFolds(){
   });
 }
 function updateSummaries(){
+  const ab=document.getElementById("analyzeBtn");
+  if(ab) ab.disabled = holdings.length<1;
   const sp=document.getElementById("sumPortfolio");
   if(sp){
     const n=holdings.length;
@@ -1589,7 +1637,7 @@ function updateSummaries(){
     if(window.__score!=null){
       sr.textContent="评分 "+window.__score+" · 风险"+(window.__risk||"")+" · "+document.querySelectorAll("#suggBox li").length+" 建议";
     } else {
-      sr.textContent="分析后生成 9 项指标";
+      sr.textContent="分析后生成 4 大维度共 10 项诊断";
     }
   }
 }
@@ -1629,6 +1677,8 @@ function renderOverview(){
 renderHoldings();
 initFolds();
 updateSummaries();
+const toTop=document.getElementById("toTop");
+window.addEventListener("scroll", ()=>{ if(toTop) toTop.classList.toggle("show", window.scrollY>600); }, {passive:true});
 // 方案A：按基金交易规则调度自动刷新（北京时间，无夏令时）
 function beijingTime(){
   const now=new Date();
