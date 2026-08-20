@@ -4,3 +4,8 @@ __pycache__/
 .DS_Store
 *.zip
 
+# 本地密钥与环境（切勿提交，防止泄露腾讯云凭证）
+.env
+.env.*
+venv/
+
