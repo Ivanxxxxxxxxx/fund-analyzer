@@ -1426,13 +1426,17 @@ def _compute_factors(code, bench_rets=None):
     # 货币基金：净值恒稳、历史接口仅 20 条，无法走多因子；作为现金管理工具给稳健基准分
     if "货币" in (f.get("type") or ""):
         return {"code": code, "name": f["name"], "type": f.get("type", "货币型"),
-                "composite": 70, "r250": 0.02, "sharpe": 1.5, "mdd": -0.001,
+                "nav": f.get("nav"), "navDate": f.get("navDate"),
+                "composite": 70, "r20": 0.0017, "r60": 0.005, "r120": 0.01, "r250": 0.02,
+                "sharpe": 1.5, "mdd": -0.001, "ann": 0.02, "z": 0.0,
                 "valPct": None, "valBasis": "不适用（固收／货币类）",
                 "avr": None, "dims": {}, "vol": 0.0, "calmar": 0.0,
                 "beta": 0.0, "alpha": 0.0, "ir": 0.0,
                 "r500": None, "maxMdd": 0.0, "sortino": 0.0,
                 "fee": f.get("feeRate"), "scale": f.get("scale"), "instPct": f.get("instPct"),
                 "tenure": None, "age": None, "r3y": None, "r2y": None,
+                "managers": f.get("managers") or [],
+                "m": 0.00025, "s": 0.0006, "mu": 0.00025, "sigma": 0.0006,
                 "sc": {"fee": 90.0, "scale": 60.0, "inst": 50.0, "age": 80.0,
                        "tenure": 60.0, "sortino": 60.0, "mdd": 95.0, "long": 60.0}}
     hist = get_history(code, 730)
@@ -1443,6 +1447,9 @@ def _compute_factors(code, bench_rets=None):
     n = len(closes)
     rets = [closes[i] / closes[i - 1] - 1 for i in range(1, n)]
     m, s = _mean(rets), _std(rets)
+    # 对数日收益（蒙特卡洛盈利概率用）：几何漂移天然正确、数值稳定（不会出现 1+r<0）
+    log_rets = [_log(1.0 + r) for r in rets if 1.0 + r > 0]
+    mu, sigma = _mean(log_rets), _std(log_rets)
 
     def ret(k):
         return closes[-1] / closes[-1 - k] - 1 if n > k else 0.0
@@ -1454,8 +1461,8 @@ def _compute_factors(code, bench_rets=None):
     mdd = closes[-1] / peak - 1
     sharpe = (ann - 0.02) / vol if vol > 0 else 0.0
     win = closes[-120:]
-    mu, sd = _mean(win), _std(win) or 1e-9
-    z = (closes[-1] - mu) / sd
+    zmu, zsd = _mean(win), _std(win) or 1e-9
+    z = (closes[-1] - zmu) / zsd
 
     # 与沪深300回归：Beta / 年化Alpha / 信息比率
     if bench_rets is None:
@@ -1597,7 +1604,7 @@ def _compute_factors(code, bench_rets=None):
             "r20": r20, "r60": r60, "r120": r120, "r250": r250, "r500": r500,
             "vol": vol, "ann": ann, "mdd": mdd, "maxMdd": maxMdd, "sharpe": sharpe,
             "sortino": sortino, "z": z,
-            "m": m, "s": s,
+            "m": m, "s": s, "mu": mu, "sigma": sigma,
             "beta": beta, "alpha": alpha, "ir": ir, "calmar": calmar,
             "avr": avr, "dims": dims,
             "valPct": vp, "valBasis": val_basis,
@@ -1896,19 +1903,25 @@ def advise_fund(code, capital=100000):
     fac = _compute_factors(code)
     if fac is None:
         return {"ok": False, "error": "未找到基金或历史净值不足 60 个交易日，无法稳健评估"}
-    m, s = fac["m"], fac["s"]
+    mu, sigma = fac.get("mu"), fac.get("sigma")
+    if mu is None or sigma is None or sigma <= 0:
+        # 无收益序列（异常兜底）：货币类收益极稳，盈利概率近似 100%
+        p1, p3, p6, p12 = 0.999, 0.999, 0.999, 0.999
+    else:
+        # 对数收益蒙特卡洛：g=Σ ln(1+r)，g>0 ⇔ 持有期满盈利。
+        # 几何漂移 ln 均值天然含复利拖累（μ≈m−σ²/2），不会像算术版那样系统性高估；
+        # 对数累加数值稳定，也不会出现 1+r<0 的负净值路径。
+        def mc(days, sims=2000):
+            win_cnt = 0
+            for _ in range(sims):
+                g = 0.0
+                for _ in range(days):
+                    g += _norm_box(mu, sigma)
+                if g > 0:
+                    win_cnt += 1
+            return win_cnt / sims
 
-    def mc(days, sims=2000):
-        win_cnt = 0
-        for _ in range(sims):
-            g = 1.0
-            for _ in range(days):
-                g *= 1 + _norm_box(m, s)
-            if g > 1:
-                win_cnt += 1
-        return win_cnt / sims
-
-    p1, p3, p6, p12 = mc(21), mc(63), mc(126), mc(252)
+        p1, p3, p6, p12 = mc(21), mc(63), mc(126), mc(252)
 
     composite = fac["composite"]
     verdict = "推荐" if composite >= 68 else ("谨慎关注" if composite >= 50 else "暂不推荐")
