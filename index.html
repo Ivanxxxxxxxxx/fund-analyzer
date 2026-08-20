@@ -446,6 +446,9 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
 .sig-reduce{background:rgba(240,162,58,.15);color:#f0a23a;border:1px solid rgba(240,162,58,.4)}
 .sig-close{background:rgba(244,83,107,.15);color:#fb7185;border:1px solid rgba(244,83,107,.45)}
 .sig-hold{background:rgba(34,197,139,.13);color:#34d399;border:1px solid rgba(34,197,139,.4)}
+.sig-btn{cursor:pointer;transition:filter .15s,transform .1s}
+.sig-btn:hover{filter:brightness(1.2)}
+.sig-btn:active{transform:translateY(1px)}
 .trend-wrap{position:relative;height:300px}
 .prob-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 @media(max-width:760px){.prob-grid{grid-template-columns:repeat(2,1fr);gap:10px}}
@@ -1545,8 +1548,10 @@ function renderPlan(d){
       <td>${b.code}<br><span class="muted" style="font-size:11px">${b.name}</span></td>
       <td>${(b.weight*100).toFixed(1)}%</td>
       <td class="amount-cell">${yuan(b.amount)}</td>
-      <td style="font-size:11.5px;color:var(--muted);max-width:260px">${b.strategy}</td>
-      <td><a class="btn-buy" href="${b.link}" target="_blank" rel="noopener">去购买 ↗</a></td></tr>`).join("");
+      <td style="font-size:11.5px;color:var(--muted);max-width:240px">${b.strategy}</td>
+      <td><div class="row" style="gap:6px;flex-wrap:wrap">
+        <button class="btn-primary btn-sm" onclick="quickAddHolding('${b.code}')" title="把该基金按建议金额直接加入你的组合">加入组合</button>
+        <a class="btn-buy" href="${b.link}" target="_blank" rel="noopener">去购买 ↗</a></div></td></tr>`).join("");
   const optHtml=(d.optimizations&&d.optimizations.length)? d.optimizations.map(o=>{
     if(o.type==="dup"){
       return `<div class="rep-card">
@@ -1573,7 +1578,7 @@ function renderPlan(d){
     ${summary}
     <div class="plan-card">
       <div class="plan-sec">① 配置明细（按权重分配本金）</div>
-      <div class="table-scroll"><table class="plan"><thead><tr><th>基金</th><th>权重</th><th>买入金额</th><th>估值策略（怎么买）</th><th>购买</th></tr></thead><tbody>${buyRows}</tbody></table></div>
+      <div class="table-scroll"><table class="plan"><thead><tr><th>基金</th><th>权重</th><th>买入金额</th><th>估值策略（怎么买）</th><th>操作</th></tr></thead><tbody>${buyRows}</tbody></table></div>
     </div>
     <div class="plan-card">
       <div class="plan-sec">② 相关性诊断与可执行优化</div>
@@ -1670,6 +1675,54 @@ function applyReplaceHolding(fromCode, toCode, toName){
     changePct:ex.changePct, value:val, cost:val, assetAllocation:ex.assetAllocation||[], industry:ex.industry||[], industryBasis:"", holdings:[]});
   saveHoldings(); renderHoldings(); if(window.analyze) analyze();
   toast("已替换："+fromCode+" ➜ "+toName+"，组合规模不变");
+}
+
+// 单只一键加入组合：按配资方案里该基金的建议金额直接加入（无需等底部「确认加入」）
+async function quickAddHolding(code){
+  const plan=window.__lastPlan||{buyPlan:[]};
+  const b=(plan.buyPlan||[]).find(x=>x.code===code);
+  if(!b){ toast("方案中没有该基金"); return; }
+  const amt=Math.round(b.amount||0);
+  if(amt<=0){ toast("该基金建议金额为 0，无需加入"); return; }
+  const ex=holdings.find(h=>h.code===code);
+  if(ex){ ex.cost=amt; ex.value=amt; }
+  else{
+    const f=await api("/api/fund/"+code).catch(()=>({}));
+    holdings.push({code:code, name:f.name||b.name, type:f.type||"", nav:f.nav, navDate:f.navDate,
+      changePct:f.changePct, value:amt, cost:amt, assetAllocation:f.assetAllocation||[],
+      industry:f.industry||[], industryBasis:"", holdings:f.holdings||[]});
+  }
+  saveHoldings(); renderHoldings(); setDataStamp();
+  toast("已把 "+code+"（¥"+yuan(amt)+"）加入组合");
+}
+
+// 报告 Top 3 可执行动作：加仓/减仓/平仓直接在页面内操作持仓
+function quickAdjust(code, action){
+  const h=holdings.find(x=>x.code===code);
+  if(!h){ toast("组合中没有 "+code); return; }
+  const val=+h.value||0;
+  if(action==="add"){
+    const dft=Math.max(1000, Math.round(val*0.1));
+    const amt=Math.round(Number(window.prompt("加仓金额（元）？当前市值 ¥"+yuan(val), String(dft)))||0);
+    if(amt<=0){ toast("已取消或金额无效"); return; }
+    h.value=val+amt; h.cost=(+h.cost||0)+amt;
+  } else if(action==="reduce"){
+    const dft=Math.max(1000, Math.round(val*0.5));
+    const amt=Math.round(Number(window.prompt("减仓金额（元）？当前市值 ¥"+yuan(val), String(dft)))||0);
+    if(amt<=0){ toast("已取消或金额无效"); return; }
+    h.value=Math.max(0, val-amt); h.cost=Math.max(0, (+h.cost||0)-amt);
+  } else if(action==="close"){
+    confirmDialog("确认平仓 "+h.name+"（"+code+"）？", "将把该基金从组合中移除，当前市值 ¥"+yuan(val)+"。", ()=>{
+      holdings.splice(holdings.findIndex(x=>x.code===code),1);
+      saveHoldings(); renderHoldings(); setDataStamp();
+      if(window.analyze) analyze();
+      toast("已平仓 "+code);
+    });
+    return;
+  }
+  saveHoldings(); renderHoldings(); setDataStamp();
+  if(window.analyze) analyze();
+  toast("已"+(action==="add"?"加仓":"减仓")+" "+code+"，市值 ¥"+yuan(h.value));
 }
 
 // ---------------- 单基金买入诊断 ----------------
@@ -2167,7 +2220,9 @@ function renderOverview(){
   const top=sigs.slice().sort((a,b)=>pri[a.action]-pri[b.action]).slice(0,3)
     .map(r=>{const lbl={add:"加仓",reduce:"减仓",close:"平仓",hold:"持仓"}[r.action];
       const sc={add:"sig-add",reduce:"sig-reduce",close:"sig-close",hold:"sig-hold"}[r.action];
-      return `<span class="sig ${sc}">${lbl} ${r.h.name||r.h.code}</span>`;});
+      if(r.action==="hold") return `<span class="sig ${sc}">${lbl} ${r.h.name||r.h.code}</span>`;
+      const tip={add:"按金额加仓该基金（点击执行）",reduce:"减仓该基金（点击执行）",close:"全部卖出平仓（点击执行）"}[r.action];
+      return `<button class="sig ${sc} sig-btn" onclick="quickAdjust('${r.h.code}','${r.action}')" title="${tip}">${lbl} ${r.h.name||r.h.code} ➤</button>`;});
   box.innerHTML=`
     <div class="row" style="gap:18px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:14px">
