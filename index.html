@@ -2061,16 +2061,16 @@ function renderZhTrend(d, distRef){
   const chgs=[];
   for(let i=0;i<tr.length;i++) chgs.push(i>0?((tr[i].price-tr[i-1].price)/tr[i-1].price*100):null);
   const labels=tr.map(t=>t.month.replace("-","年")+"月");
-  const ds=[{label:"全市挂牌均价",data:tr.map(t=>t.price),borderColor:"#e8b339",
-    backgroundColor:"rgba(232,179,57,.10)",fill:true,tension:.25,pointRadius:3.5,pointHoverRadius:6}];
+  const ds=[{label:"全市挂牌均价",data:tr.map(t=>t.price),borderColor:"#f2c14e",
+    backgroundColor:"rgba(242,193,78,.10)",fill:true,tension:.25,pointRadius:3.5,pointHoverRadius:6,borderWidth:2.5}];
   if(distRef){
     if(distRef.trend && distRef.trend.length){
-      // 各区近 12 个月月度线（有波动），与全市线同形
-      ds.push({label:distRef.name+"挂牌均价",data:distRef.trend.map(t=>t.price),borderColor:"#8b97ad",
-        backgroundColor:"rgba(139,151,173,.12)",borderDash:[],fill:true,tension:.25,pointRadius:3,pointHoverRadius:6});
+      // 各区近 12 个月月度线（有波动）：亮蓝色与全市金色形成鲜明冷暖对比
+      ds.push({label:distRef.name+"挂牌均价",data:distRef.trend.map(t=>t.price),borderColor:"#4da3ff",
+        backgroundColor:"rgba(77,163,255,.14)",borderDash:[],fill:true,tension:.25,pointRadius:3,pointHoverRadius:6,borderWidth:2.5});
     }else{
       // 无月度序列时回退水平虚线（理论上不会走到，因后端已补算）
-      ds.push({label:distRef.name+"当前",data:tr.map(()=>distRef.price),borderColor:"#8b97ad",
+      ds.push({label:distRef.name+"当前",data:tr.map(()=>distRef.price),borderColor:"#4da3ff",
         borderDash:[5,4],pointRadius:0,fill:false,tension:0});
     }
   }
