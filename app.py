@@ -32,6 +32,12 @@ except Exception:
 
 
 def fetch(url, headers=None, timeout=20):
+    # 全局 socket 兜底：确保 DNS/连接/读取各阶段都受超时约束，杜绝个别环境（如 SCF 容器）请求挂死
+    try:
+        import socket as _s
+        _s.setdefaulttimeout(timeout)
+    except Exception:
+        pass
     h = {"User-Agent": UA, "Accept": "*/*", "Connection": "close"}
     if headers:
         h.update(headers)
@@ -652,7 +658,7 @@ def _market_from_fund_breadth():
     """海外节点取不到指数日线时，用实时开放式基金榜单的收益率广度推断市场温度。
     返回 ok=True 的精简市场状态；样本不足时返回 None。完全依赖可达的 rankhandler 接口。"""
     rets = []
-    for ft in ("gp", "hh", "zs"):
+    for ft in ("gp",):  # 预算优先：只拉股票型一个榜单即可满足样本，避免冷启动拖满超时
         try:
             rows = get_rank_list(ft, 150)
         except Exception:
@@ -777,7 +783,7 @@ def _get_rank_list_raw(ft, pn, name_filter):
            "&sc=1nz&st=desc&sd=%s&ed=%s&qdii=&tabSubtype=,,,&pi=1&pn=%d&dx=1&v=%s"
            ) % (dt, ft, sd, ed, pn, random.random())
     try:
-        html = fetch(url, headers={"Referer": "https://fund.eastmoney.com/"}, timeout=20)
+        html = fetch(url, headers={"Referer": "https://fund.eastmoney.com/"}, timeout=10)
     except Exception:
         return []
     m = re.search(r'datas:\s*\[(.*?)\]\s*,\s*allRecords', html, re.S)
@@ -941,6 +947,32 @@ _FALLBACK_SPECIAL = {
     "gold": [("000216", "华安黄金ETF联接A", 0.0, "2013-08-22"),
              ("002610", "博时黄金ETF联接A", 0.0, "2016-05-05"),
              ("320013", "诺安全球黄金(QDII-FOF)A", 0.0, "2011-01-13")],
+    # 权益/债券/QDII 内置核心名单：实时榜单不可达（SCF 网络慢/挂死）时的兜底候选，仍走 _compute_factors 实时评分
+    "gp": [("110011", "易方达优质精选混合", 0.0, "2008-06-19"),
+           ("100020", "富国天惠成长混合A", 0.0, "2005-11-16"),
+           ("163406", "兴全合润混合", 0.0, "2010-04-22"),
+           ("519069", "汇添富价值精选混合A", 0.0, "2009-01-23"),
+           ("005827", "易方达蓝筹精选混合", 0.0, "2018-09-05")],
+    "hh": [("260108", "景顺长城新兴成长混合A", 0.0, "2006-06-28"),
+           ("161005", "富国天惠成长混合C", 0.0, "2005-11-16"),
+           ("000001", "华夏成长混合", 0.0, "2001-12-18"),
+           ("163415", "兴全商业模式混合", 0.0, "2012-12-18"),
+           ("110022", "易方达消费行业股票", 0.0, "2010-08-20")],
+    "zs": [("110003", "易方达上证50增强A", 0.0, "2004-03-22"),
+           ("000961", "天弘沪深300ETF联接A", 0.0, "2015-01-20"),
+           ("110020", "易方达沪深300ETF联接A", 0.0, "2009-08-26"),
+           ("001594", "天弘中证500指数A", 0.0, "2015-06-30"),
+           ("161017", "富国中证500指数增强A", 0.0, "2011-10-12")],
+    "zq": [("100018", "华夏债券A", 0.0, "2002-10-23"),
+           ("110027", "易方达安心回报债券A", 0.0, "2011-06-21"),
+           ("000171", "易方达裕丰回报债券", 0.0, "2013-08-21"),
+           ("202101", "南方宝元债券A", 0.0, "2002-09-20"),
+           ("270049", "广发纯债债券A", 0.0, "2012-12-12")],
+    "qdii": [("270042", "广发纳斯达克100指数A", 0.0, "2012-08-15"),
+             ("000834", "大成纳斯达克100指数A", 0.0, "2014-11-13"),
+             ("050025", "博时标普500ETF联接A", 0.0, "2012-06-13"),
+             ("160213", "国泰纳斯达克100指数", 0.0, "2010-04-29"),
+             ("006479", "广发纳斯达克100指数C", 0.0, "2018-10-25")],
 }
 
 
@@ -980,7 +1012,22 @@ def _fit_reason(asset, fac, env):
 
 
 def recommend_portfolio():
-    env = get_market_env()
+    # 全局时间预算：SCF 函数超时上限有限，冷启动时东财接口响应慢，
+    # 市场温度/基准/候选扫描/评分共享同一预算，超时即降级返回，绝不整体超时（否则前端 Failed to fetch）。
+    _BUDGET = 25.0
+    _t0 = time.time()
+
+    def _left():
+        return _BUDGET - (time.time() - _t0)
+
+    # 市场温度：只复用已缓存的日频结果（由 /api/market 单独刷新），冷启动无缓存时直接用默认配置，
+    # 绝不在推荐流程里重新联网拉取（那是 SCF 超时的最大来源）。
+    _mc = _CACHE.get("market:env")
+    env = None
+    if _mc and time.time() - _mc[0] < _mc[1]:
+        env = _mc[2]
+    if not isinstance(env, dict):
+        env = {"ok": False}
     # 大类资产配置（含估值分位微调）— 与实时市场温度联动
     if not env.get("ok"):
         alloc = {"股票型": 0.35, "海外(QDII)": 0.18, "债券型": 0.30, "货币型": 0.12, "黄金": 0.05}
@@ -1018,7 +1065,12 @@ def recommend_portfolio():
         note = ("当前市场：%s（温度 %d）。%s%s%s" % (env["regime"], env["score"], vtxt, tilt or "据此给出如下配置建议。", src_hint))
 
     # === 动态候选：实时拉取全市场榜单（不再使用内置名单） ===
-    bench = cached("bench", "hs300", _daily_ttl(), lambda: _bench_daily_returns(730))
+    # 基准日线同样只复用缓存；冷启动无缓存时用空基准（评分侧已容错），避免联网拖慢推荐
+    _bc = _CACHE.get("bench:hs300")
+    if _bc and time.time() - _bc[0] < _bc[1]:
+        bench = _bc[2]
+    else:
+        bench = []
     now = datetime.date.today()
     candidates = []
     empty_cats = []
@@ -1030,20 +1082,33 @@ def recommend_portfolio():
         except Exception:
             return 99.0
 
+    def _call_rank(ft, pn, name_filter=None, wait_s=6):
+        """带超时的榜单拉取：SCF 上偶发 socket 挂死，绝不让单个请求拖死推荐，超时即回退内置名单。"""
+        from concurrent.futures import ThreadPoolExecutor
+        ex = ThreadPoolExecutor(max_workers=1)
+        try:
+            fut = ex.submit(get_rank_list, ft, pn, name_filter)
+            return fut.result(timeout=wait_s) or []
+        except Exception:
+            return []
+        finally:
+            ex.shutdown(wait=False)
+
     for ft, cat_label, asset, topn, need_age in _RECO_CATS:
+        if _left() < 13:  # 预留时间给评分，候选扫描提前收工
+            break
+        key = "gold" if ft == "__gold" else ("money" if ft == "__money" else ft)
         try:
             if ft == "__gold":
-                rows = get_rank_list("all", 2000, name_filter="黄金")
-                if not rows:
-                    rows = list(_FALLBACK_SPECIAL["gold"])
+                rows = _call_rank("all", 200, name_filter="黄金")
             elif ft == "__money":
-                rows = get_rank_list("money", 30)
-                if not rows:
-                    rows = list(_FALLBACK_SPECIAL["money"])
+                rows = _call_rank("money", 30)
             else:
-                rows = get_rank_list(ft, 100)
+                rows = _call_rank(ft, 100)
+            if not rows:
+                rows = list(_FALLBACK_SPECIAL.get(key, []))
         except Exception:
-            rows = []
+            rows = list(_FALLBACK_SPECIAL.get(key, []))
         if need_age:
             rows = [r for r in rows if _est_years(r[3]) >= 2.0]
         rows.sort(key=lambda r: r[2], reverse=True)
@@ -1054,10 +1119,7 @@ def recommend_portfolio():
             empty_cats.append(cat_label)
 
     # === 多因子精评（实时净值/五维/经理/估值） ===
-    # 时间预算：SCF 函数有执行超时上限（默认约 60s），冷启动时全市场扫描较慢，
-    # 必须在预算内返回，宁可少评几只也不能整体超时（否则前端收不到响应 → Failed to fetch）。
-    _RECO_DEADLINE = 28.0
-    _reco_start = time.time()
+    # 时间预算：与全局 _BUDGET 共享，宁可少评几只也不能整体超时。
 
     def _score(item):
         cat_label, asset, code, name = item
@@ -1067,26 +1129,29 @@ def recommend_portfolio():
         except Exception:
             return None
 
-    def _reco_time_left():
-        return (_reco_start + _RECO_DEADLINE) - time.time()
-
     scored = []
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
-        ex = ThreadPoolExecutor(max_workers=8)
+        ex = ThreadPoolExecutor(max_workers=5)
         futs = {}
         try:
             # 懒提交：只在预算内提交任务，避免一次性排队上百个网络请求
             for it in candidates:
-                if _reco_time_left() <= 0:
+                if _left() <= 0:
                     break
                 futs[ex.submit(_score, it)] = it
-            for fut in as_completed(futs):
-                if _reco_time_left() <= 0:
-                    break
-                r = fut.result()
-                if r:
-                    scored.append(r)
+            # 用带超时的 wait 收集：预算到点立即返回，绝不阻塞等待慢请求
+            from concurrent.futures import wait, FIRST_COMPLETED
+            pending = set(futs)
+            while pending and _left() > 0:
+                done, pending = wait(pending, timeout=max(0.2, _left()), return_when=FIRST_COMPLETED)
+                for fut in done:
+                    try:
+                        r = fut.result()
+                        if r:
+                            scored.append(r)
+                    except Exception:
+                        pass
         finally:
             # 超时后取消未启动的任务并立即返回（不阻塞等待已发出的请求）
             try:
@@ -1095,7 +1160,7 @@ def recommend_portfolio():
                 ex.shutdown(wait=False)
     except Exception:
         for it in candidates:
-            if _reco_time_left() <= 0:
+            if _left() <= 0:
                 break
             r = _score(it)
             if r:
@@ -1763,7 +1828,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/recommend":
             # 动态全市场扫描较重，结果缓存 30 分钟（数据日频变化，足够动态且避免每次点击都大扫描拖垮服务）
-            data = cached("reco", "dyn", 1800, recommend_portfolio)
+            try:
+                data = cached("reco", "dyn", 1800, recommend_portfolio)
+            except Exception as e:
+                data = {"ok": False, "error": str(e), "funds": [], "note": "推荐计算异常，请稍后重试。"}
             self._send(200, json.dumps(data, ensure_ascii=False))
             return
         if path.startswith("/api/advise/"):
