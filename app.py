@@ -910,6 +910,41 @@ _FALLBACK_SPECIAL = {
 }
 
 
+def _median(xs):
+    xs = sorted([x for x in xs if x is not None])
+    n = len(xs)
+    if not n:
+        return None
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2.0
+
+
+def _fit_reason(asset, fac, env):
+    """解释该基金与当前市场环境的适配性，让「为什么推荐它」落到具体场景。"""
+    reg = env.get("regime", "震荡市")
+    vol = fac.get("vol") or 0
+    mdd = fac.get("mdd") or 0
+    r250 = fac.get("r250") or 0
+    if asset in ("股票型", "海外(QDII)"):
+        if reg == "熊市氛围":
+            if vol < 0.18:
+                return "熊市氛围下波动低于同类（年化 %.0f%%），作为低波权益底仓更抗跌。" % (vol * 100)
+            return "熊市氛围下仍偏进攻，建议小仓位试探、严控回撤。"
+        if reg == "牛市氛围":
+            if r250 > 0.15:
+                return "牛市氛围下近一年 %s、弹性足，适合作为进攻主力。" % _s(r250)
+            return "牛市氛围下作为权益组合的稳定器参与。"
+        return "震荡市中风险收益均衡，适配中性仓位、分批建仓。"
+    if asset == "债券型":
+        if mdd > -0.05:
+            return "回撤长期控制在 %s 以内，防御属性强，是组合的波动缓冲垫。" % _s(mdd)
+        return "波动偏大（年化 %.0f%%），更偏「固收+」进攻，防御性弱于纯债。" % (vol * 100)
+    if asset == "货币型":
+        return "现金管理工具，流动性最佳、几乎无回撤，用于闲置资金与择机补仓。"
+    if asset == "黄金":
+        return "与股债低相关，在通胀／避险情绪升温时往往走出独立行情，提升组合韧性。"
+    return ""
+
+
 def recommend_portfolio():
     env = get_market_env()
     # 大类资产配置（含估值分位微调）— 与实时市场温度联动
@@ -1006,33 +1041,112 @@ def recommend_portfolio():
             if r:
                 scored.append(r)
 
+    # ---------- 用已评分的「全市场候选宇宙」反推市场温度 ----------
+    # 即使本节点取不到沪深300指数日线，也能从扫描到的数百只基金聚合出
+    # 动量中位数 / 估值分位中位数 / 波动中位数，让推荐理由更扎实。
+    _eq = [f for _, _, f in scored if f.get("asset") in ("股票型", "海外(QDII)")]
+    uni = {
+        "mom_med": _median([f.get("r250") for _, _, f in scored]),
+        "vol_med": _median([f.get("vol") for _, _, f in scored]),
+        "val_med": _median([f.get("valPct") for _, _, f in scored if f.get("valPct") is not None]),
+        "eq_mom_med": _median([f.get("r250") for f in _eq]),
+        "sample": len(scored),
+    }
+    env = dict(env)
+    env["uni"] = uni
+
+    # 用宇宙动量补充 note（指数不可用时尤其有意义）
+    uni_txt = ""
+    if uni["mom_med"] is not None:
+        um = uni["mom_med"]
+        if abs(um) >= 0.001:
+            uni_txt = "全市场扫描（%d 只候选）显示近一年收益中位数 %s，%s。" % (
+                uni["sample"], _s(um),
+                "整体偏暖、赚钱效应尚可" if um > 0.05 else ("赚钱效应偏弱、需控制节奏" if um < -0.05 else "整体震荡、结构分化"))
+    if uni_txt:
+        note = (note.rstrip("。") + "；" + uni_txt) if note else uni_txt
+
+    # 各类别「大类配置理由」：解释为什么给这一类这个比例
+    def _cat_reason(asset, w):
+        wpct = "%.0f%%" % (w * 100)
+        reg = env.get("regime", "震荡市")
+        if asset == "股票型":
+            if reg == "牛市氛围":
+                extra = "：牛市氛围下弹性足，但估值/波动约束下不追满，保留防御垫。"
+            elif reg == "熊市氛围":
+                extra = "：熊市氛围下主动压低权益，仅留核心底仓控制回撤。"
+            else:
+                extra = "：震荡市中按中性仓位参与，攻守兼顾。"
+            if uni["vol_med"] is not None and uni["vol_med"] > 0.22:
+                extra += "（全市场年化波动中位数 %.0f%% 偏高，故控制仓位）" % (uni["vol_med"] * 100)
+            return "权益类给到 %s 作为进攻仓位%s" % (wpct, extra)
+        if asset == "海外(QDII)":
+            return "海外(QDII) 配置 %s：跨市场分散 A 股单一系统性风险，与境内权益低相关。" % wpct
+        if asset == "债券型":
+            return "债券型给到 %s 作为压舱石：在权益波动加大时提供稳定票息，平滑组合回撤。" % wpct
+        if asset == "货币型":
+            return "货币型保留 %s 现金仓位：兼顾流动性与机会成本，便于回调时补仓。" % wpct
+        if asset == "黄金":
+            return "黄金配置 %s：对冲汇率与通胀、与股债低相关，提升组合韧性。" % wpct
+        return "%s 配置 %s。" % (asset, wpct)
+
     by_cat = {}
     for cat_label, asset, fac in scored:
         by_cat.setdefault(cat_label, []).append((asset, fac))
     funds = []
+    cat_reasons = {}
     for cat_label, lst in by_cat.items():
         lst.sort(key=lambda x: x[1]["composite"], reverse=True)
         top = lst[:3]
         asset = top[0][0]
         w = alloc.get(asset, 0.0)
         s = sum(fac["composite"] for _, fac in top) or 1.0
-        for asset, fac in top:
+        peer_n = len(lst)
+        peer_mdd = _median([f["mdd"] for _, f in lst])
+        cat_reasons[cat_label] = _cat_reason(asset, w)
+        for idx, (asset, fac) in enumerate(top):
             per = w * (fac["composite"] / s)  # 权重按综合分归一化，评分高的拿更多，而非机械均分
             verdict = "推荐" if fac["composite"] >= 68 else ("谨慎关注" if fac["composite"] >= 50 else "暂不推荐")
-            reasons = ["多因子综合 %.0f 分；近一年 %s、夏普 %.2f、最大回撤 %s、估值分位 %s%%。"
-                       % (fac["composite"], _s(fac["r250"]), fac["sharpe"], _s(fac["mdd"]),
-                          (fac["valPct"] if fac["valPct"] is not None else 0))]
+            rank = idx + 1
+            reasons = []
+            # 1) 为什么是这一只：同类排名 + 风险调整后表现
+            mdd_cmp = ""
+            if peer_mdd is not None:
+                # 最大回撤为非负亏损，越接近 0（数值越大）越好
+                if fac["mdd"] > peer_mdd:
+                    mdd_cmp = "回撤优于同类平均 %s" % _s(peer_mdd)
+                elif fac["mdd"] < peer_mdd:
+                    mdd_cmp = "回撤弱于同类平均 %s" % _s(peer_mdd)
+                else:
+                    mdd_cmp = "回撤与同类平均 %s 持平" % _s(peer_mdd)
+            reasons.append("在 %d 只候选「%s」中综合分第 %d（%.0f 分）：近一年 %s、夏普 %.2f、最大回撤 %s%s。"
+                           % (peer_n, cat_label, rank, fac["composite"], _s(fac["r250"]), fac["sharpe"], _s(fac["mdd"]),
+                              ("，" + mdd_cmp) if mdd_cmp else ""))
+            # 2) 估值分位（固收/货币不适用时如实标注，不再误显 0%）
+            if fac["valPct"] is not None:
+                reasons.append("估值分位 %s%%（%s）：%s" % (fac["valPct"], fac["valBasis"],
+                               "偏低、具备布局价值" if fac["valPct"] < 30 else ("中性" if fac["valPct"] < 70 else "偏高、注意追高")))
+            else:
+                reasons.append("估值分位：不适用（固收／货币类）。")
+            # 3) 东方财富五维
             if fac["avr"]:
-                reasons.append("东方财富五维综合 %.0f。" % fac["avr"])
+                keys = ["选证能力", "收益率", "抗风险", "稳定性", "择时能力"]
+                reasons.append("东方财富五维综合 %.0f（选证/收益/抗风险/稳定/择时 = %s）。"
+                               % (fac["avr"], "/".join("%.0f" % (fac["dims"].get(k, 0) or 0) for k in keys)))
+            # 4) 与当前市场环境的适配
+            fit = _fit_reason(asset, fac, env)
+            if fit:
+                reasons.append(fit)
             funds.append({"category": cat_label, "asset": asset, "code": fac["code"], "name": fac["name"],
                           "type": fac["type"], "score": fac["composite"], "verdict": verdict,
-                          "weight": round(per, 4), "valPct": fac["valPct"], "reasons": reasons})
+                          "weight": round(per, 4), "valPct": fac["valPct"], "reasons": reasons,
+                          "peerRank": rank, "peerN": peer_n})
     funds.sort(key=lambda x: (x["asset"], -x["score"]))
     dyn_note = ""
     if empty_cats:
         dyn_note = "（%s 的实时榜单在本节点暂不可用，本次该仓位为空，可手动添加对应基金）" % "、".join(empty_cats)
     return {"ok": True, "env": env, "alloc": alloc, "note": note + dyn_note,
-            "universe": len(candidates), "funds": funds, "dynamic": True,
+            "catReasons": cat_reasons, "universe": len(candidates), "funds": funds, "dynamic": True,
             "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 
