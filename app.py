@@ -1014,18 +1014,24 @@ def _fit_reason(asset, fac, env):
 def recommend_portfolio():
     # 全局时间预算：SCF 函数超时上限有限，冷启动时东财接口响应慢，
     # 市场温度/基准/候选扫描/评分共享同一预算，超时即降级返回，绝不整体超时（否则前端 Failed to fetch）。
-    _BUDGET = 25.0
+    _BUDGET = 38.0
     _t0 = time.time()
 
     def _left():
         return _BUDGET - (time.time() - _t0)
 
-    # 市场温度：只复用已缓存的日频结果（由 /api/market 单独刷新），冷启动无缓存时直接用默认配置，
-    # 绝不在推荐流程里重新联网拉取（那是 SCF 超时的最大来源）。
+    # 市场温度：优先复用日频缓存；冷启动无缓存且预算充足时，用基金榜单收益率广度快速推断一次并缓存
     _mc = _CACHE.get("market:env")
     env = None
     if _mc and time.time() - _mc[0] < _mc[1]:
         env = _mc[2]
+    elif _left() > 22:
+        try:
+            env = _market_from_fund_breadth()
+            if env and isinstance(env, dict):
+                _CACHE["market:env"] = (time.time(), _daily_ttl(), env)
+        except Exception:
+            env = None
     if not isinstance(env, dict):
         env = {"ok": False}
     # 大类资产配置（含估值分位微调）— 与实时市场温度联动
@@ -1117,6 +1123,20 @@ def recommend_portfolio():
             candidates.append((cat_label, asset, code, name))
         if not head:
             empty_cats.append(cat_label)
+
+    # 类别轮转：让每类候选交替进入评分队列，避免排在候选最前的股票型独占预算，
+    # 导致债券/货币/黄金/海外等类别一个都评不出来（线上曾出现"仅 3 只股票型"的问题）。
+    _rot = {}
+    for it in candidates:
+        _rot.setdefault(it[0], []).append(it)
+    cand_order = []
+    _rkeys = list(_rot.keys())
+    _rmax = max((len(v) for v in _rot.values()), default=0)
+    for i in range(_rmax):
+        for k in _rkeys:
+            if i < len(_rot[k]):
+                cand_order.append(_rot[k][i])
+    candidates = cand_order
 
     # === 多因子精评（实时净值/五维/经理/估值） ===
     # 时间预算：与全局 _BUDGET 共享，宁可少评几只也不能整体超时。
@@ -1253,7 +1273,7 @@ def recommend_portfolio():
                               ("，" + mdd_cmp) if mdd_cmp else ""))
             # 2) 估值分位（固收/货币不适用时如实标注，不再误显 0%）
             if fac["valPct"] is not None:
-                reasons.append("估值分位 %s%%（%s）：%s" % (fac["valPct"], fac["valBasis"],
+                reasons.append("估值分位 %s%%（%s）：%s" % (fac["valPct"], fac.get("valBasis", "不适用（固收／货币类）"),
                                "偏低、具备布局价值" if fac["valPct"] < 30 else ("中性" if fac["valPct"] < 70 else "偏高、注意追高")))
             else:
                 reasons.append("估值分位：不适用（固收／货币类）。")
@@ -1316,7 +1336,9 @@ def _compute_factors(code, bench_rets=None):
     if "货币" in (f.get("type") or ""):
         return {"code": code, "name": f["name"], "type": f.get("type", "货币型"),
                 "composite": 70, "r250": 0.02, "sharpe": 1.5, "mdd": -0.001,
-                "valPct": 0, "avr": None}
+                "valPct": None, "valBasis": "不适用（固收／货币类）",
+                "avr": None, "dims": {}, "vol": 0.0, "calmar": 0.0,
+                "beta": 0.0, "alpha": 0.0, "ir": 0.0}
     hist = get_history(code, 730)
     data = hist.get("data") or []
     if len(data) < 60:
