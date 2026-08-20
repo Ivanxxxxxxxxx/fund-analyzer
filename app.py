@@ -1054,6 +1054,11 @@ def recommend_portfolio():
             empty_cats.append(cat_label)
 
     # === 多因子精评（实时净值/五维/经理/估值） ===
+    # 时间预算：SCF 函数有执行超时上限（默认约 60s），冷启动时全市场扫描较慢，
+    # 必须在预算内返回，宁可少评几只也不能整体超时（否则前端收不到响应 → Failed to fetch）。
+    _RECO_DEADLINE = 28.0
+    _reco_start = time.time()
+
     def _score(item):
         cat_label, asset, code, name = item
         try:
@@ -1062,18 +1067,43 @@ def recommend_portfolio():
         except Exception:
             return None
 
+    def _reco_time_left():
+        return (_reco_start + _RECO_DEADLINE) - time.time()
+
     scored = []
     try:
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=6) as ex:
-            for r in ex.map(_score, candidates):
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        ex = ThreadPoolExecutor(max_workers=8)
+        futs = {}
+        try:
+            # 懒提交：只在预算内提交任务，避免一次性排队上百个网络请求
+            for it in candidates:
+                if _reco_time_left() <= 0:
+                    break
+                futs[ex.submit(_score, it)] = it
+            for fut in as_completed(futs):
+                if _reco_time_left() <= 0:
+                    break
+                r = fut.result()
                 if r:
                     scored.append(r)
+        finally:
+            # 超时后取消未启动的任务并立即返回（不阻塞等待已发出的请求）
+            try:
+                ex.shutdown(wait=False, cancel_futures=True)
+            except TypeError:
+                ex.shutdown(wait=False)
     except Exception:
         for it in candidates:
+            if _reco_time_left() <= 0:
+                break
             r = _score(it)
             if r:
                 scored.append(r)
+    # 预算内评分过少时给出提示（仍返回，不超时）
+    if len(scored) < 6:
+        _tip = "（本次候选评分受时间预算限制结果偏少，刷新可重试。）"
+        note = (note + _tip) if note else _tip
 
     # ---------- 用已评分的「全市场候选宇宙」反推市场温度 ----------
     # 即使本节点取不到沪深300指数日线，也能从扫描到的数百只基金聚合出
