@@ -541,6 +541,10 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
   <div class="card">
     <div id="configHealth"></div>
   </div>
+<!-- 每月定投指引：告诉用户定投怎么投、投哪只、投多少 -->
+  <div class="card">
+    <div id="dcaGuide"></div>
+  </div>
 <!-- 持仓明细 -->
   <div class="card">
     <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-briefcase"/></svg></span>持仓明细（市值 / 占比 / 成本 / 盈亏）
@@ -987,8 +991,79 @@ function renderConfigHealth(){
     </div>`;
 }
 
+// 每月定投指引：告诉用户"每月定投怎么投、投哪只、投多少"（按持仓市值占比分配）
+function renderDcaGuide(){
+  const box=document.getElementById("dcaGuide"); if(!box) return;
+  const store=JSON.parse(localStorage.getItem("fp_dca")||"{}");
+  const amount=+store.amount||0;
+  let day=+store.day||10; if(day<1||day>28) day=10;
+  const head=`<div class="sec-h" style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    <svg class="i"><use href="#i-activity"/></svg> 每月定投计划
+    <span class="muted" style="font-size:11px;font-weight:600">怎么投、投哪只、投多少，一目了然</span></div>`;
+  const daySel=`<select id="dcaDay" style="background:var(--bg2);border:1px solid var(--line);border-radius:7px;color:var(--fg);padding:3px 6px;font-size:12px" onchange="setDcaDay(this.value)">`+
+    Array.from({length:28},(_,i)=>`<option value="${i+1}" ${i+1===day?"selected":""}>${i+1}日</option>`).join("")+`</select>`;
+  if(!holdings.length){
+    box.innerHTML=head+`<div class="muted" style="font-size:12px">还没有持仓。用「智能决策 → ⚡ 一键配置」建仓时填写每月定投金额，这里会自动给出每只基金的定投分配。</div>`;
+    return;
+  }
+  if(!amount){
+    box.innerHTML=head+
+      `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0">
+        <span style="font-size:12.5px">每月定投金额（¥）</span>
+        <input id="dcaAmt" type="number" class="num" style="width:120px" placeholder="如 1000" min="0" inputmode="decimal">
+        <button class="btn-ghost btn-sm" onclick="saveDcaAmt()">保存</button>
+        <span class="muted" style="font-size:11px">未设置定投</span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin-top:2px">每月 <span>${daySel}</span> 日执行</div>
+      <div class="note" style="margin-top:8px;font-size:11.5px">也可以去「智能决策 → ⚡ 一键配置」建仓时一起设置，金额自动带到这里。</div>`;
+    return;
+  }
+  const total=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
+  const parts=holdings.map(h=>{ const w=(+h.value||0)/total; return {h,w,amt:Math.round(amount*w)}; });
+  const sum=parts.reduce((s,p)=>s+p.amt,0);
+  if(parts.length){
+    const mi=parts.reduce((a,b,i)=>((+b.h.value||0)>(+parts[a].h.value||0)?i:a),0);
+    parts[mi].amt += amount-sum;   // 四舍五入差额补到市值最大的一只，保证总和精确
+  }
+  const rows=parts.map(p=>{
+    const pct=(p.w*100).toFixed(0);
+    return `<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px dashed var(--line)">
+      <div style="min-width:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.h.name||p.h.code}</div>
+      <div class="muted" style="font-size:11px">${p.h.code} · 占组合 ${pct}%</div></div>
+      <div style="text-align:right;white-space:nowrap"><div style="font-size:13.5px;font-weight:700;color:var(--gold)">${yuan(p.amt)}</div>
+      <div class="muted" style="font-size:11px">每月定投</div></div></div>`;
+  }).join("");
+  box.innerHTML=head+
+    `<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:6px 0 8px">
+      <span style="font-size:13px;font-weight:700">每月合计 <b style="color:var(--gold)">${yuan(amount)}</b></span>
+      <span style="display:flex;gap:6px;align-items:center;font-size:12.5px">每月 <span>${daySel}</span> 日执行
+        <span class="muted" style="font-size:11px">（可改）</span></span>
+    </div>
+    ${rows}
+    <div class="note" style="margin-top:8px;font-size:11.5px">按当前持仓市值比例分配（市值大的多投），与你的组合配置保持一致；如果某只涨太多想少投，可在「持仓明细」调小它的市值，分配会实时更新。</div>`;
+}
+
+function setDcaDay(v){
+  const s=JSON.parse(localStorage.getItem("fp_dca")||"{}");
+  s.day=Math.max(1,Math.min(28,+v||10));
+  localStorage.setItem("fp_dca", JSON.stringify(s));
+  renderDcaGuide();
+  toast("定投日已设为每月 "+s.day+" 日");
+}
+
+function saveDcaAmt(){
+  const v=Math.max(0, +document.getElementById("dcaAmt").value||0);
+  if(v<=0){ toast("请输入每月定投金额（大于 0）"); return; }
+  const s=JSON.parse(localStorage.getItem("fp_dca")||"{}");
+  s.amount=v; s.at=Date.now();
+  localStorage.setItem("fp_dca", JSON.stringify(s));
+  renderDcaGuide(); renderHoldings();
+  toast("已设置每月定投 ¥"+yuan(v)+"，按持仓比例分配到每只基金");
+}
+
 function renderHoldings(){
   renderConfigHealth();
+  renderDcaGuide();
   const dca=(JSON.parse(localStorage.getItem("fp_dca")||"{}").amount)||0;
   const box=document.getElementById("holdingsBox");
   if(!holdings.length){ box.innerHTML='<div class="empty">还没有基金，先在上方输入代码添加吧。<br><button class="btn-ghost btn-sm" style="margin-top:12px" onclick="sampleAndAnalyze()"><svg class="i"><use href="#i-wand"/></svg> 载入示例并一键分析</button></div>'; return; }
