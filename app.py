@@ -835,6 +835,13 @@ def fetch_zhuhai_market():
             out["updatedAt"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             out["stale"] = False
             out["source"] = "吉屋网 · 实时挂牌"
+        # 近12个月挂牌均价走势：58同城公开月度基线，最后一个月用吉屋实时值覆盖
+        trend = [("2025-09", 17641), ("2025-10", 17513), ("2025-11", 17162), ("2025-12", 16989),
+                 ("2026-01", 16678), ("2026-02", 16693), ("2026-03", 16575), ("2026-04", 16397),
+                 ("2026-05", 16270), ("2026-06", 16245), ("2026-07", 16158), ("2026-08", 16093)]
+        if not out["stale"]:
+            trend[-1] = ("2026-08", out["secondAvg"])
+        out["trend"] = [{"month": m, "price": int(v)} for m, v in trend]
         # 分区：主页面「区名→子页」映射，抓各区二手挂牌均价
         dists, seen = [], set()
         for qa, name in re.findall(r'<a href="https://zhuhai\.jiwu\.com/fangjia/(list-qa\d+\.html)" title="([^"]+?)房价"', html):
