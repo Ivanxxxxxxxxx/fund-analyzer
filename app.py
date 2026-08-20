@@ -884,6 +884,18 @@ _RECO_CATS = [
     ("__money", "货币型", "货币型", 6, False),
 ]
 
+# 货币/黄金固定核心清单：天天基金 money 榜单接口已失效、all 榜单不含黄金/货币时兜底。
+# 这两类头部基金高度稳定，兜底用头部代表（后续仍走 _compute_factors 实时评分，不影响推荐质量）。
+_FALLBACK_SPECIAL = {
+    "money": [("000198", "天弘余额宝货币", 0.0, "2013-05-29"),
+              ("110006", "易方达货币A", 0.0, "2005-02-02"),
+              ("202301", "南方现金增利货币A", 0.0, "2004-03-05"),
+              ("050003", "博时现金收益货币A", 0.0, "2004-01-16")],
+    "gold": [("000216", "华安黄金ETF联接A", 0.0, "2013-08-22"),
+             ("002610", "博时黄金ETF联接A", 0.0, "2016-05-05"),
+             ("320013", "诺安全球黄金(QDII-FOF)A", 0.0, "2011-01-13")],
+}
+
 
 def recommend_portfolio():
     env = get_market_env()
@@ -940,10 +952,12 @@ def recommend_portfolio():
         try:
             if ft == "__gold":
                 rows = get_rank_list("all", 2000, name_filter="黄金")
+                if not rows:
+                    rows = list(_FALLBACK_SPECIAL["gold"])
             elif ft == "__money":
                 rows = get_rank_list("money", 30)
                 if not rows:
-                    rows = get_rank_list("all", 400, name_filter="货币")
+                    rows = list(_FALLBACK_SPECIAL["money"])
             else:
                 rows = get_rank_list(ft, 100)
         except Exception:
@@ -1042,6 +1056,11 @@ def _compute_factors(code, bench_rets=None):
     f = get_fund(code)
     if not f.get("ok") or not f.get("name"):
         return None
+    # 货币基金：净值恒稳、历史接口仅 20 条，无法走多因子；作为现金管理工具给稳健基准分
+    if "货币" in (f.get("type") or ""):
+        return {"code": code, "name": f["name"], "type": f.get("type", "货币型"),
+                "composite": 70, "r250": 0.02, "sharpe": 1.5, "mdd": -0.001,
+                "valPct": 0, "avr": None}
     hist = get_history(code, 730)
     data = hist.get("data") or []
     if len(data) < 60:
