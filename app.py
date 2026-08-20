@@ -854,7 +854,9 @@ def fetch_zhuhai_market():
                             headers=hdrs, timeout=15)
                 ms = re.search(r'二手房房价：([\d,]+)元/平米', sub)
                 if ms:
-                    dists.append({"name": name, "secondAvg": num(ms.group(1))})
+                    mc = re.search(r'环比：([\d.]+)%([↑↓])', sub)
+                    chg = ("+" if mc and mc.group(2) == "↑" else "-") + (mc.group(1) if mc else "0")
+                    dists.append({"name": name, "secondAvg": num(ms.group(1)), "chg": chg})
             except Exception:
                 pass
         if dists:
