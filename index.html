@@ -535,6 +535,10 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     <span class="pill">数据来源：天天基金公开接口（仅作分析参考，非投资建议）</span>
     <span class="pill pill-soft"><svg class="i"><use href="#i-lightbulb"/></svg> 支付宝/蚂蚁财富销售的是同一批公募基金，6 位代码通用</span>
   </div>
+<!-- 配置合理性速览：让用户一眼看懂自己配置的组合合不合理（核心功能定位） -->
+  <div class="card">
+    <div id="configHealth"></div>
+  </div>
 <!-- 持仓明细 -->
   <div class="card">
     <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-briefcase"/></svg></span>持仓明细（市值 / 占比 / 成本 / 盈亏）
@@ -901,7 +905,64 @@ document.addEventListener("click", e=>{
   if(dd && !dd.contains(e.target) && e.target.id!=="codeInput") dd.style.display="none";
 });
 
+// 配置合理性速览：按市值把组合归为 权益/海外/债券/货币/黄金 五大类，
+// 用比例条 + 自动提示回答「我这样配合不合理」（纯前端，实时更新）
+function renderConfigHealth(){
+  const box=document.getElementById("configHealth"); if(!box) return;
+  const cats={
+    "海外(QDII)":{kw:["QDII","海外","纳指","标普","恒生","港股"],color:"#a78bfa",cur:0},   // 放最前：QDII 名称常含"指数"，需先于权益匹配
+    "权益":      {kw:["股票","混合","指数"],color:"#f4536b",cur:0},
+    "债券":      {kw:["债券","债"],color:"#e8b339",cur:0},
+    "货币":      {kw:["货币"],color:"#22c58b",cur:0},
+    "黄金":      {kw:["黄金"],color:"#f0a23a",cur:0},
+  };
+  const total=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
+  if(!holdings.length){
+    box.innerHTML=`<div class="sec-h" style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <svg class="i"><use href="#i-activity"/></svg> 配置合理性速览
+      <span class="muted" style="font-size:11px;font-weight:600">添加基金后，这里实时分析你的配置合不合理</span></div>
+      <div class="muted" style="font-size:12px">还没有持仓，先在上方添加基金，或点「示例」快速体验。</div>`;
+    return;
+  }
+  holdings.forEach(h=>{
+    const t=(h.asset||"")+" "+(h.type||"")+" "+(h.name||"");   // 类型+名称联合匹配（黄金ETF类型常为"商品"，靠名称补判）
+    let hit=null;
+    for(const k in cats){ if(cats[k].kw.some(w=>t.includes(w))){ hit=k; break; } }
+    cats[hit||"权益"].cur+=(+h.value||0);
+  });
+  const bars=Object.keys(cats).map(k=>{
+    const p=cats[k].cur/total*100;
+    if(p<0.5) return "";
+    return `<div style="flex:${p.toFixed(2)};min-width:8px;height:26px;background:${cats[k].color};border-radius:6px;position:relative" title="${k} ${p.toFixed(1)}%">
+      <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.55);white-space:nowrap">${k} ${p.toFixed(0)}%</span></div>`;
+  }).join("");
+  const tips=[];
+  const maxH=holdings.reduce((m,h)=>(+h.value||0)>m.v?{v:+h.value||0,n:h.name||h.code,c:h.code}:m,{v:0,n:"",c:""});
+  if(holdings.length>1 && maxH.v/total>0.4) tips.push({lv:"bad",t:`⚠ 单一基金占比过高：${maxH.n} 占 ${(maxH.v/total*100).toFixed(0)}%，集中风险大，建议分散到 4 只以上。`});
+  else if(holdings.length===1) tips.push({lv:"warn",t:`只持有 ${maxH.n} 一只基金，单一基金风险集中，建议分散配置 3-5 只不同类别。`});
+  const bondP=cats["债券"].cur/total*100, cashP=cats["货币"].cur/total*100;
+  if(bondP+cashP<10) tips.push({lv:"warn",t:`防御资产（债券+货币）仅 ${(bondP+cashP).toFixed(0)}%，市场波动时缺少缓冲，建议配置 20-40% 压舱。`});
+  if(cashP>50) tips.push({lv:"warn",t:`现金（货币）占比 ${cashP.toFixed(0)}% 偏高，闲置较多，可考虑再平衡到权益/债券。`});
+  const rec=window.__recoAlloc;
+  if(rec){
+    const recEq=((rec["股票型"]||0)+(rec["海外(QDII)"]||0))*100;
+    const eqP=cats["权益"].cur/total*100 + cats["海外(QDII)"].cur/total*100;
+    if(Math.abs(eqP-recEq)>15) tips.push({lv:"info",t:`权益（含海外）占比 ${eqP.toFixed(0)}% vs 智能推荐 ${recEq.toFixed(0)}%（按当前市场温度）——偏离较大，可参考「一键配资」再平衡。`});
+  }
+  if(!tips.length) tips.push({lv:"good",t:"✓ 组合配置整体均衡，无明显集中或偏科问题。"});
+  box.innerHTML=`
+    <div class="sec-h" style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <svg class="i"><use href="#i-activity"/></svg> 配置合理性速览
+      <span class="muted" style="font-size:11px;font-weight:600">（按当前市值实时计算）</span>
+    </div>
+    <div class="row" style="gap:4px;margin-bottom:10px">${bars}</div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      ${tips.map(t=>`<div style="font-size:12px;line-height:1.65;color:${t.lv==="good"?"var(--good)":t.lv==="warn"?"var(--warn)":"var(--bad)"}">${t.t}</div>`).join("")}
+    </div>`;
+}
+
 function renderHoldings(){
+  renderConfigHealth();
   const box=document.getElementById("holdingsBox");
   if(!holdings.length){ box.innerHTML='<div class="empty">还没有基金，先在上方输入代码添加吧。<br><button class="btn-ghost btn-sm" style="margin-top:12px" onclick="sampleAndAnalyze()"><svg class="i"><use href="#i-wand"/></svg> 载入示例并一键分析</button></div>'; return; }
   const total=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
@@ -947,7 +1008,7 @@ function confirmDialog(title, msg, onYes){
   document.getElementById("cfTitle").textContent=title;
   document.getElementById("cfMsg").textContent=msg;
   document.getElementById("confirmOverlay").classList.add("show");
-  document.getElementById("cfYes").onclick=()=>{ closeConfirm(); if(__cfCb) __cfCb(); };
+  document.getElementById("cfYes").onclick=()=>{ const cb=__cfCb; closeConfirm(); if(cb) cb(); };
 }
 function closeConfirm(){ document.getElementById("confirmOverlay").classList.remove("show"); __cfCb=null; }
 async function fillSample(){
@@ -1394,6 +1455,7 @@ async function loadRecommend(){
   box.innerHTML='<div class="empty">🔄 正在动态扫描全市场基金（实时榜单＋多因子精评）…首次约需 30-60 秒，结果缓存 30 分钟。</div>';
   const d=await api("/api/recommend", 180000).catch(e=>({ok:false,error:String(e)}));
   if(!d.ok){ box.innerHTML='<div class="empty">推荐生成失败：'+(d.error||"")+'</div>'; return; }
+  window.__recoAlloc=d.alloc;   // 供「配置合理性速览」与你的组合实时对比
   const env=d.env||{};
   const regimeTxt = env.ok ? (env.regime+"（市场温度 "+env.score+"）") : "市场数据获取受限";
   const allocHtml = Object.entries(d.alloc).map(([k,v])=>
