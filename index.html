@@ -1995,21 +1995,25 @@ function renderZhMarket(d){
         <div class="zhd-title"><span id="zhTrendTitle">近 12 个月挂牌均价走势（元/㎡）</span></div>
         <div style="position:relative;height:230px"><canvas id="zhTrendCanvas"></canvas></div>
         <div class="zh-table" id="zhTrendTable"></div>
-        <div class="t-note" id="zhTrendNote">金色线：全市二手挂牌均价（月度序列，最新月为实时值）。分区月度历史走势暂无公开数据，可切换地区查看各区最新挂牌价与环比。成交价暂无公开实时序列，实际成交请以议价为准。表中涨跌按 A 股习惯：红涨绿跌。</div>
+        <div class="t-note" id="zhTrendNote">金色线：全市二手挂牌均价（月度序列，最新月为实时值）；切换地区后灰色线为该区近 12 个月挂牌均价（按全市环比形态还原，因分区历史公开数据缺失，仅供参考）。成交价暂无公开实时序列，实际成交请以议价为准。表中涨跌按 A 股习惯：红涨绿跌。</div>
       </div>`;
     top=document.getElementById("zhMarketTop");
   }
   top.innerHTML=headHtml;
   const tt=document.getElementById("zhTrendTitle");
-  if(tt) tt.textContent="近 12 个月挂牌均价走势（元/㎡）"+(cur!=="all"?" · "+dname+" 当前 "+Math.round(avg).toLocaleString("en-US")+" 元/㎡":"");
+  if(tt) tt.textContent="近 12 个月挂牌均价走势（元/㎡）"+(cur!=="all"?" · "+dname+" 近 12 个月":"");
   const tn=document.getElementById("zhTrendNote");
-  if(tn) tn.innerHTML="金色线：全市二手挂牌均价（月度序列，最新月为实时值）"+(cur!=="all"?"；灰色虚线："+dname+" 当前挂牌价":"")+"。分区月度历史走势暂无公开数据，可切换地区查看各区最新挂牌价与环比。成交价暂无公开实时序列，实际成交请以议价为准。表中涨跌按 A 股习惯：红涨绿跌。";
+  if(tn) tn.innerHTML="金色线：全市二手挂牌均价（月度序列，最新月为实时值）"+(cur!=="all"?"；灰色线："+dname+" 近 12 个月挂牌均价（按全市环比形态还原，仅供参考）":"")+"。成交价暂无公开实时序列，实际成交请以议价为准。表中涨跌按 A 股习惯：红涨绿跌。";
   let trend=(d.trend&&d.trend.length)?d.trend:null;
   if(!trend){
     trend=ZH_TREND_BASE.map(m=>({month:m[0],price:m[1]}));
     if(d.secondAvg) trend[trend.length-1]={month:trend[trend.length-1].month,price:Math.round(d.secondAvg)};
   }
-  if(trend.length){ d.trend=trend; renderZhTrend(d, cur!=="all"?{name:dname,price:avg}:null); }
+  if(trend.length){ d.trend=trend;
+    let distRef=null;
+    if(cur!=="all"){ const dd=dists.find(x=>x.name===cur); distRef={name:dname,price:avg,trend:dd?dd.trend||null:null}; }
+    renderZhTrend(d, distRef);
+  }
 }
 function switchZhDist(name){
   window.__zhDist=name;
@@ -2050,8 +2054,17 @@ function renderZhTrend(d, distRef){
   const labels=tr.map(t=>t.month.replace("-","年")+"月");
   const ds=[{label:"全市挂牌均价",data:tr.map(t=>t.price),borderColor:"#e8b339",
     backgroundColor:"rgba(232,179,57,.10)",fill:true,tension:.25,pointRadius:3.5,pointHoverRadius:6}];
-  if(distRef) ds.push({label:distRef.name+"当前",data:tr.map(()=>distRef.price),borderColor:"#8b97ad",
-    borderDash:[5,4],pointRadius:0,fill:false,tension:0});
+  if(distRef){
+    if(distRef.trend && distRef.trend.length){
+      // 各区近 12 个月月度线（有波动），与全市线同形
+      ds.push({label:distRef.name+"挂牌均价",data:distRef.trend.map(t=>t.price),borderColor:"#8b97ad",
+        backgroundColor:"rgba(139,151,173,.12)",borderDash:[],fill:true,tension:.25,pointRadius:3,pointHoverRadius:6});
+    }else{
+      // 无月度序列时回退水平虚线（理论上不会走到，因后端已补算）
+      ds.push({label:distRef.name+"当前",data:tr.map(()=>distRef.price),borderColor:"#8b97ad",
+        borderDash:[5,4],pointRadius:0,fill:false,tension:0});
+    }
+  }
   // 复用已有实例：只更新数据重绘，canvas 不重建（根治切换空白）
   if(window.__zhTrendChart){
     try{
