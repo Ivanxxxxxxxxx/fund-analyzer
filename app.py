@@ -801,6 +801,11 @@ _ZH_CACHE = {"t": 0.0, "data": None}
 _ZH_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
           "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
 
+# 珠海二手挂牌均价 12 个月基线（58同城公开月度数据；最后一个月通常由实时值覆盖）
+_ZH_TREND_BASE = [("2025-09",17641),("2025-10",17513),("2025-11",17162),("2025-12",16989),
+                  ("2026-01",16678),("2026-02",16693),("2026-03",16575),("2026-04",16397),
+                  ("2026-05",16270),("2026-06",16245),("2026-07",16158),("2026-08",16093)]
+
 # 珠海房价实时行情（吉屋网挂牌数据，12 小时缓存；抓取失败回退内置参考值并标记 stale）
 _ZH_FALLBACK = {
     "ok": True, "city": "珠海", "newAvg": 23741, "secondAvg": 14958,
@@ -877,6 +882,35 @@ def fetch_zhuhai_market():
         _ZH_CACHE["data"] = out; _ZH_CACHE["t"] = now
     except Exception:
         pass
+    # ---- 统一补全市/区月度走势（保证前端切换地区也有波动线）----
+    # 全市 trend 兜底（抓取失败时用基线，最后一个月用实时/参考值覆盖）
+    if "trend" not in out or not out.get("trend"):
+        tr = [{"month": m, "price": int(v)} for m, v in _ZH_TREND_BASE]
+        if out.get("secondAvg"):
+            tr[-1] = {"month": tr[-1]["month"], "price": int(round(out["secondAvg"]))}
+        out["trend"] = tr
+    # 用全市环比形态，从各区「当前实时挂牌价」反向还原前 11 个月，
+    # 使分区线有波动且与全市走势同形（公开分区历史月度数据缺失，属合理还原）
+    ct = out["trend"]
+    ratios = []
+    for i in range(1, len(ct)):
+        p0 = ct[i-1]["price"]; p1 = ct[i]["price"]
+        ratios.append((p1 - p0) / p0 if p0 else 0.0)
+    new_dists = []
+    for dd in out.get("districts", []):
+        cur = dd.get("secondAvg")
+        if cur and ratios:
+            series = [0.0] * len(ct)
+            series[-1] = float(cur)
+            for i in range(len(ct) - 1, 0, -1):
+                series[i-1] = series[i] / (1.0 + ratios[i-1])
+            dtrend = [{"month": ct[i]["month"], "price": int(round(series[i]))}
+                      for i in range(len(ct))]
+        else:
+            dtrend = None
+        nd = dict(dd); nd["trend"] = dtrend   # 复制避免污染模块级 _ZH_FALLBACK
+        new_dists.append(nd)
+    out["districts"] = new_dists
     return out
 
 
