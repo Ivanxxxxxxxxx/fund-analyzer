@@ -218,8 +218,9 @@ table.plan th{color:var(--muted);font-weight:600}
 .modal .sub{font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.55}
 .modal-close{position:absolute;top:0;right:0;width:32px;height:32px;border-radius:9px;
   background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--muted);
-  font-size:18px;display:grid;place-items:center;cursor:pointer;transition:.15s}
+  font-size:18px;display:grid;place-items:center;cursor:pointer;transition:.15s;z-index:2}
 .modal-close:hover{background:rgba(232,179,57,.15);color:var(--gold)}
+.modal .modal-head{padding-right:44px}   /* 避开右上角关闭按钮，标题不被挤压/遮挡 */
 .sel-list{display:flex;flex-direction:column;gap:6px;margin:8px 0 14px;max-height:200px;overflow:auto}
 .sel-row{display:flex;align-items:center;gap:10px;font-size:13px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
 .sel-row .x{margin-left:auto;cursor:pointer;color:var(--muted);border:none;background:none;font-size:15px}
@@ -1411,11 +1412,16 @@ function renderSignals(rows){
    </div>`;
   let html=sum+`<div class="table-scroll"><table><thead><tr><th>基金</th><th class="num">最新净值</th><th class="num">日涨跌</th><th>操作信号</th><th>建议理由</th><th class="num">参考占比</th></tr></thead><tbody>`;
   rows.forEach(r=>{
+    const lbl=label[r.action];
+    const canAct = r.action!=="hold";   // 加仓/减仓/平仓 → 可点按钮；继续持仓保持纯文本
+    const sigCell = canAct
+      ? `<button class="sig sig-${r.action} sig-btn" onclick="quickAdjust('${r.h.code}','${r.action}')" title="点击执行${lbl}：${r.reason}">${lbl} ➤</button>`
+      : `<span class="sig sig-${r.action}" title="${r.reason}">${lbl}</span>`;
     html+=`<tr>
       <td><div class="code">${r.h.code}</div><div class="muted" style="font-size:12px">${r.h.name||""}</div></td>
       <td class="num">${r.h.nav!=null?r.h.nav.toFixed(4):"—"}</td>
       <td class="num ${cls(r.chg)}">${signPctPct(r.chg)}</td>
-      <td><span class="sig sig-${r.action}">${label[r.action]}</span></td>
+      <td>${sigCell}</td>
       <td style="font-size:12.5px;max-width:440px">${r.reason}</td>
       <td class="num">${(r.wt*100).toFixed(0)}%</td>
     </tr>`;
