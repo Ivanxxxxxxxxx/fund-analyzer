@@ -797,6 +797,67 @@ def _get_rank_list_raw(ft, pn, name_filter):
     return out
 
 
+_ZH_CACHE = {"t": 0.0, "data": None}
+_ZH_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+          "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+
+# 珠海房价实时行情（吉屋网挂牌数据，12 小时缓存；抓取失败回退内置参考值并标记 stale）
+_ZH_FALLBACK = {
+    "ok": True, "city": "珠海", "newAvg": 23741, "secondAvg": 14958,
+    "newChg": "-0.41", "secondChg": "-0.89", "stale": True,
+    "updatedAt": "2026-08 参考值", "source": "吉屋网（实时获取失败，展示最近参考值）",
+    "districts": [
+        {"name": "横琴", "secondAvg": 35300}, {"name": "高新区", "secondAvg": 19960},
+        {"name": "香洲", "secondAvg": 19808}, {"name": "金湾", "secondAvg": 9678},
+        {"name": "斗门", "secondAvg": 7782}, {"name": "高栏港", "secondAvg": 7441},
+    ],
+}
+
+def fetch_zhuhai_market():
+    """实时抓取珠海新房/二手房挂牌均价与分区价格（吉屋网）。"""
+    now = time.time()
+    if _ZH_CACHE["data"] and now - _ZH_CACHE["t"] < 43200:  # 12 小时缓存
+        return _ZH_CACHE["data"]
+    out = dict(_ZH_FALLBACK)
+    try:
+        hdrs = {"User-Agent": _ZH_UA, "Accept-Language": "zh-CN,zh;q=0.9",
+                "Referer": "https://zhuhai.jiwu.com/fangjia/"}
+        html = fetch("https://zhuhai.jiwu.com/fangjia/", headers=hdrs, timeout=20)
+        m_new = re.search(r'新房房价：([\d,]+)元/平米', html)
+        m_sec = re.search(r'二手房房价：([\d,]+)元/平米', html)
+        chgs = re.findall(r'环比：([\d.]+)%([↑↓])', html)
+        def num(s): return float(s.replace(",", ""))
+        if m_new and m_sec:
+            out["newAvg"] = num(m_new.group(1)); out["secondAvg"] = num(m_sec.group(1))
+            if len(chgs) >= 2:
+                out["newChg"] = ("+" if chgs[0][1] == "↑" else "-") + chgs[0][0]
+                out["secondChg"] = ("+" if chgs[1][1] == "↑" else "-") + chgs[1][0]
+            out["updatedAt"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            out["stale"] = False
+            out["source"] = "吉屋网 · 实时挂牌"
+        # 分区：主页面「区名→子页」映射，抓各区二手挂牌均价
+        dists, seen = [], set()
+        for qa, name in re.findall(r'<a href="https://zhuhai\.jiwu\.com/fangjia/(list-qa\d+\.html)" title="([^"]+?)房价"', html):
+            name = name.replace("房价", "").replace("珠海", "")
+            if not name or name in seen or name in ("其他",):
+                continue
+            seen.add(name)
+            try:
+                sub = fetch("https://zhuhai.jiwu.com/fangjia/%s" % qa,
+                            headers=hdrs, timeout=15)
+                ms = re.search(r'二手房房价：([\d,]+)元/平米', sub)
+                if ms:
+                    dists.append({"name": name, "secondAvg": num(ms.group(1))})
+            except Exception:
+                pass
+        if dists:
+            out["districts"] = dists
+        _ZH_CACHE["data"] = out; _ZH_CACHE["t"] = now
+    except Exception:
+        pass
+    return out
+
+
 def get_rank_list(ft, pn=100, name_filter=None):
     """动态拉取天天基金开放式基金排行；日频缓存，避免每次推荐都重复实时打接口。"""
     k = "%s_%d_%s" % (ft, pn, name_filter or "")
@@ -1437,6 +1498,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_OPTIONS(self):
+        # CORS 预检：前端静态托管(COS)跨域调用本函数 URL 时，浏览器先发 OPTIONS，
+        # 必须返回 200 + CORS 头，否则 POST /api/* 会被浏览器拦截。
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Disposition", "inline")
+        self.send_header("Content-Length", "0")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.end_headers()
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path, qs = parsed.path, urllib.parse.parse_qs(parsed.query)
@@ -1461,6 +1535,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/search":
             self._send(200, json.dumps(search_fund(qs.get("key", [""])[0]), ensure_ascii=False))
+            return
+        if path == "/api/zhuhai-market":
+            self._send(200, json.dumps(fetch_zhuhai_market(), ensure_ascii=False))
             return
         if path == "/api/market":
             self._send(200, json.dumps(get_market_env(), ensure_ascii=False))
