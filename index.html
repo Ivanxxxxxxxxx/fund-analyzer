@@ -1953,6 +1953,8 @@ let __zhMarket=null, __zhLoaded=false;
 async function loadZhMarket(force){
   const box=document.getElementById("zhMarket"); if(!box) return;
   if(__zhLoaded && !force){ renderZhMarket(__zhMarket); return; }
+  // 即将重建容器（含走势图 canvas）：先销毁旧图表实例，避免残留实例绑定已移除的 canvas 导致走势图消失
+  if(window.__zhTrendChart){ try{ window.__zhTrendChart.destroy(); }catch(e){} window.__zhTrendChart=null; }
   box.innerHTML='<div class="zhm-h"><span><svg class="i"><use href="#i-activity"/></svg> 珠海实时行情</span><button class="btn-ghost btn-sm" onclick="loadZhMarket(true)"><svg class="i"><use href="#i-refresh"/></svg> 刷新</button></div><div class="muted" style="padding:6px 0">正在获取珠海挂牌价…</div>';
   let d=await api("/api/zhuhai-market", 40000).catch(()=>null);
   if(!d || !d.ok){
@@ -2072,14 +2074,21 @@ function renderZhTrend(d, distRef){
         borderDash:[5,4],pointRadius:0,fill:false,tension:0});
     }
   }
-  // 复用已有实例：只更新数据重绘，canvas 不重建（根治切换空白）
+  // 复用已有实例：只更新数据重绘，canvas 不重建（根治切换空白）。
+  // 必须校验实例仍绑定「当前」canvas——force 刷新会重建容器生成新 canvas，
+  // 若残留旧实例（绑定已移除的 canvas）会复用到不可见画布，导致走势图消失。
   if(window.__zhTrendChart){
-    try{
-      window.__zhTrendChart.data.labels=labels;
-      window.__zhTrendChart.data.datasets=ds;
-      window.__zhTrendChart.update();
-    }catch(e){ console.error("走势图更新失败:", e); }
-    return;
+    if(window.__zhTrendChart.canvas===cv){
+      try{
+        window.__zhTrendChart.data.labels=labels;
+        window.__zhTrendChart.data.datasets=ds;
+        window.__zhTrendChart.update();
+      }catch(e){ console.error("走势图更新失败:", e); }
+      return;
+    }
+    // 实例与当前 canvas 不匹配（容器被重建过）：销毁残留实例，走下方重建
+    try{ window.__zhTrendChart.destroy(); }catch(e){}
+    window.__zhTrendChart=null;
   }
   try{
     window.__zhTrendChart=new Chart(cv,{type:"line",
