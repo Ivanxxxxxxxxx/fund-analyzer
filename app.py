@@ -256,19 +256,33 @@ def _extract_perf_eval(txt):
 
 
 def _extract_managers(txt):
-    """现任基金经理：名称 + 任职起始日（用于计算任职年限）。"""
-    m = re.search(r'Data_currentFundManager\s*=\s*(\[.*?\]);', txt, re.S)
+    """现任基金经理：名称 + 任职起始日/任职时长（括号平衡提取，兼容对象内嵌套数组）。"""
+    m = re.search(r'Data_currentFundManager\s*=\s*(\[)', txt)
     if not m:
         return []
+    start = m.start(1)
+    depth, i = 0, start
+    while i < len(txt):
+        c = txt[i]
+        if c == '[':
+            depth += 1
+        elif c == ']':
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    if depth != 0:
+        return []
     try:
-        arr = json.loads(m.group(1))
+        arr = json.loads(txt[start:i + 1])
         out = []
         for x in arr:
             if not isinstance(x, dict):
                 continue
             name = x.get("name") or x.get("xm") or ""
             sdate = x.get("sdate") or x.get("beginDate") or ""
-            out.append({"name": name, "sdate": str(sdate)})
+            work = x.get("workTime") or ""   # 新结构：如 "9年又34天"
+            out.append({"name": name, "sdate": str(sdate), "workTime": str(work)})
         return out
     except Exception:
         return []
@@ -279,7 +293,8 @@ def _get_detail_raw(code):
     res = {"ok": True, "code": code, "name": "", "type": "", "nav": None,
            "navDate": None, "changePct": None,
            "assetAllocation": [], "industry": [], "holdings": [],
-           "perfEval": None, "managers": []}
+           "perfEval": None, "managers": [],
+           "scale": None, "instPct": None, "feeRate": None}
     txt = None
     for host in ("https://fund.eastmoney.com", "https://fundf10.eastmoney.com"):
         try:
@@ -366,6 +381,26 @@ def _get_detail_raw(code):
         res["managers"] = _extract_managers(txt)
     except Exception:
         res["managers"] = []
+    # 机构持有比例（最新报告期，%）
+    try:
+        raw = _extract_var(txt, "Data_holderStructure")
+        if raw:
+            hs = json.loads(raw)
+            for s in (hs.get("series") or []):
+                if "机构" in (s.get("name") or ""):
+                    d = s.get("data") or []
+                    if d:
+                        res["instPct"] = float(d[-1])
+                    break
+    except Exception:
+        pass
+    # 申购费率（打折后，%）
+    try:
+        m = re.search(r'fund_Rate\s*=\s*"([^"]*)"', txt)
+        if m and re.fullmatch(r"\d+(\.\d+)?", m.group(1)):
+            res["feeRate"] = float(m.group(1))
+    except Exception:
+        pass
     return res
 
 
@@ -403,7 +438,9 @@ def _get_fund_raw(code):
             "industryBasis": detail.get("industryBasis") or "",
             "holdings": detail.get("holdings") or [],
             "perfEval": detail.get("perfEval") or None,
-            "managers": detail.get("managers") or []}
+            "managers": detail.get("managers") or [],
+            "scale": detail.get("scale"), "instPct": detail.get("instPct"),
+            "feeRate": detail.get("feeRate")}
 
 
 def _get_history_raw(code, days=365):
@@ -1286,6 +1323,13 @@ def recommend_portfolio():
             fit = _fit_reason(asset, fac, env)
             if fit:
                 reasons.append(fit)
+            # 5) 质地（费率/规模/成立年限/经理任职——长期持有更看重）
+            qual = []
+            if fac.get("fee") is not None: qual.append("申购费 %.2f%%" % fac["fee"])
+            if fac.get("scale") is not None: qual.append("规模 %.0f 亿" % fac["scale"])
+            if fac.get("age") is not None: qual.append("成立 %s 年" % fac["age"])
+            if fac.get("tenure") is not None: qual.append("经理任职 %s 年" % fac["tenure"])
+            if qual: reasons.append("质地：%s。" % "、".join(qual))
             funds.append({"category": cat_label, "asset": asset, "code": fac["code"], "name": fac["name"],
                           "type": fac["type"], "score": fac["composite"], "verdict": verdict,
                           "weight": round(per, 4), "valPct": fac["valPct"], "reasons": reasons,
@@ -1326,6 +1370,53 @@ def _fund_bench_secid(name, ftype):
     return None
 
 
+def _fetch_basic_meta(code):
+    """基金基础元数据：成立日期 / 最新规模(亿元) / 近2年 / 近3年收益率。
+    来源：天天基金移动端接口（需移动端 UA），日频缓存；任一失败自动降级。"""
+    out = {}
+    ua = ("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+          "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148")
+    hdrs = {"Referer": "http://fund.eastmoney.com/", "User-Agent": ua}
+    try:  # 规模 + 成立日 + 公司 + 经理
+        url = ("https://fundmobapi.eastmoney.com/FundMNewApi/FundMNDetailInformation?FCODE=%s"
+               "&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0" % code)
+        txt = fetch(url, headers=hdrs, timeout=10)
+        d = json.loads(txt)
+        dp = d.get("Datas") or {}
+        if dp.get("ESTABDATE"):
+            out["estab"] = dp["ESTABDATE"]
+        if dp.get("JJGS"):
+            out["company"] = dp["JJGS"]
+        v = dp.get("ENDNAV")
+        if v not in (None, ""):
+            try:
+                out["scale"] = float(v) / 1e8   # 元 → 亿元
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:  # 近2年 / 近3年收益率
+        url = ("https://fundmobapi.eastmoney.com/FundMNewApi/FundMNBasicInformation?FCODE=%s"
+               "&deviceid=Wap&plat=Wap&product=EFund&version=2.0.0" % code)
+        txt = fetch(url, headers=hdrs, timeout=10)
+        d = json.loads(txt)
+        dp = d.get("Datas") or {}
+        for k, dst in (("SYL_2N", "r2y"), ("SYL_3N", "r3y")):
+            v = dp.get(k)
+            if v not in (None, "", "--"):
+                try:
+                    out[dst] = float(v) / 100.0
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return out
+
+
+def _get_basic_meta(code):
+    return cached("meta", code, _daily_ttl(), lambda: _fetch_basic_meta(code))
+
+
 def _compute_factors(code, bench_rets=None):
     """多因子计算：收益/风险/风险调整收益/Alpha-Beta/卡玛/信息比率/估值分位/东财五维/经理任职。
     各因子归一化为 0-100 贡献后加权得到 composite。"""
@@ -1338,7 +1429,12 @@ def _compute_factors(code, bench_rets=None):
                 "composite": 70, "r250": 0.02, "sharpe": 1.5, "mdd": -0.001,
                 "valPct": None, "valBasis": "不适用（固收／货币类）",
                 "avr": None, "dims": {}, "vol": 0.0, "calmar": 0.0,
-                "beta": 0.0, "alpha": 0.0, "ir": 0.0}
+                "beta": 0.0, "alpha": 0.0, "ir": 0.0,
+                "r500": None, "maxMdd": 0.0, "sortino": 0.0,
+                "fee": f.get("feeRate"), "scale": f.get("scale"), "instPct": f.get("instPct"),
+                "tenure": None, "age": None, "r3y": None, "r2y": None,
+                "sc": {"fee": 90.0, "scale": 60.0, "inst": 50.0, "age": 80.0,
+                       "tenure": 60.0, "sortino": 60.0, "mdd": 95.0, "long": 60.0}}
     hist = get_history(code, 730)
     data = hist.get("data") or []
     if len(data) < 60:
@@ -1381,6 +1477,30 @@ def _compute_factors(code, bench_rets=None):
 
     calmar = ann / abs(mdd) if mdd < 0 else (ann / 0.01 if ann > 0 else 0.0)
 
+    # ---- 新增：更细的风险与质地因子（多方查证：晨星 MRAR 惩罚下跌、Sortino/Treynor、规模、费率、成立年限、机构持有）----
+    r500 = ret(500) if n > 500 else None                     # 近 2 年收益（长期动量，防短期冲高）
+    neg = [x for x in rets if x < 0]                         # 下行收益样本
+    down_dev = _std(neg) if len(neg) > 2 else None           # 下行标准差
+    sortino = ((ann - 0.02) / (down_dev * _sqrt(252))) if (down_dev and down_dev > 0) else 0.0
+    peak2, maxMdd = closes[0], 0.0                           # 历史最大回撤（区别于当前回撤 mdd）
+    for c in closes:
+        if c > peak2:
+            peak2 = c
+        dd2 = c / peak2 - 1
+        if dd2 < maxMdd:
+            maxMdd = dd2
+    meta = _get_basic_meta(code)                             # 成立日 / 规模 / 近2年 / 近3年收益
+    age_years = None
+    if meta.get("estab"):
+        try:
+            e0 = datetime.datetime.strptime(meta["estab"], "%Y-%m-%d").date()
+            age_years = round((datetime.date.today() - e0).days / 365.25, 1)
+        except Exception:
+            pass
+    scale = meta.get("scale")                                # 规模（亿元，来自移动端接口）
+    r3y = meta.get("r3y")
+    r2y = meta.get("r2y") or (r500 if r500 is not None else None)
+
     # 东方财富五维评分
     pe = f.get("perfEval") or {}
     avr = pe.get("avr") or 0.0
@@ -1406,7 +1526,7 @@ def _compute_factors(code, bench_rets=None):
         vp = round(sum(1 for x in closes if x <= closes[-1]) / len(closes) * 100, 1)
         val_basis = "自身净值近3年分位（主动股基估值代理）"
 
-    # 基金经理任职年限
+    # 基金经理任职年限（sdate 或 workTime 两种格式兼容）
     managers = f.get("managers") or []
     tenure = None
     if managers:
@@ -1417,37 +1537,76 @@ def _compute_factors(code, bench_rets=None):
                 tenure = round((datetime.date.today() - d0).days / 365.25, 1)
             except Exception:
                 tenure = None
+        if tenure is None:
+            wm = re.match(r"(\d+(?:\.\d+)?)年", managers[0].get("workTime", ""))
+            if wm:
+                tenure = float(wm.group(1))
 
     # 因子归一化 → 0-100 贡献
     def clamp(x):
         return max(0.0, min(100.0, x))
 
-    sc_mom = clamp(50 + r250 * 100 * 1.5)
+    mom_val = 0.5 * r250 + 0.3 * (r500 if r500 is not None else r250) + 0.2 * r120   # 动量：1年/2年/120日 加权
+    sc_mom = clamp(50 + mom_val * 100 * 1.5)
+    sc_long = clamp(50 + (r3y if r3y is not None else (r500 if r500 is not None else 0.0)) * 100 * 1.2)  # 长期稳健
     sc_val = clamp(100 - (vp if vp is not None else 50))
     sc_sharpe = clamp(sharpe / 2.0 * 100)
+    sc_sortino = clamp(sortino / 2.0 * 100)
     sc_calmar = clamp(calmar / 3.0 * 100)
     sc_alpha = clamp(50 + alpha * 100 * 2)
-    sc_dd = clamp(50 + mdd * 100)
+    sc_dd = clamp(50 + mdd * 100)          # 当前回撤越浅越好
+    sc_mdd = clamp(50 + maxMdd * 100)      # 历史最大回撤越浅越好
     sc_ir = clamp(50 + ir * 50)
     sc_avr = clamp(avr)
+    # 费率（申购费率%）：越低越好（长期成本关键）
+    fee = f.get("feeRate")
+    sc_fee = clamp(100 - (fee if fee is not None else 1.0) * 33)
+    # 规模（亿元）：适中偏好（<1亿迷你/清盘风险，>800亿 灵活度差）
+    if scale is None:
+        sc_scale = 50.0
+    elif scale < 1: sc_scale = 40
+    elif scale < 10: sc_scale = 65
+    elif scale < 100: sc_scale = 92
+    elif scale < 300: sc_scale = 80
+    elif scale < 800: sc_scale = 60
+    else: sc_scale = 45
+    # 成立年限：≥3 年满分（晨星评级门槛），次新基金扣分
+    sc_age = clamp((age_years if age_years is not None else 3.0) / 3.0 * 100)
+    # 机构持有占比：5%-70% 加分（<2% 散户化，>70% 波动集中）
+    inst = f.get("instPct")
+    if inst is None: sc_inst = 50.0
+    elif inst < 2: sc_inst = 45
+    elif inst < 5: sc_inst = 60
+    elif inst < 70: sc_inst = 88
+    else: sc_inst = 60
+    # 经理任职年限：≥5 年满分（经历牛熊周期的经验价值）
+    sc_tenure = clamp((tenure if tenure is not None else 2.0) / 5.0 * 100)
 
-    w = {"avr": 0.20, "mom": 0.18, "val": 0.15, "sharpe": 0.12,
-         "calmar": 0.12, "alpha": 0.12, "dd": 0.06, "ir": 0.05}
-    composite = (sc_avr * w["avr"] + sc_mom * w["mom"] + sc_val * w["val"]
-                 + sc_sharpe * w["sharpe"] + sc_calmar * w["calmar"]
-                 + sc_alpha * w["alpha"] + sc_dd * w["dd"] + sc_ir * w["ir"])
+    w = {"avr": 0.12, "mom": 0.12, "long": 0.05, "val": 0.09, "sharpe": 0.06,
+         "sortino": 0.08, "calmar": 0.06, "alpha": 0.07, "dd": 0.04, "mdd": 0.04,
+         "ir": 0.04, "fee": 0.07, "scale": 0.05, "age": 0.04, "inst": 0.03, "tenure": 0.04}
+    composite = (sc_avr * w["avr"] + sc_mom * w["mom"] + sc_long * w["long"]
+                 + sc_val * w["val"] + sc_sharpe * w["sharpe"] + sc_sortino * w["sortino"]
+                 + sc_calmar * w["calmar"] + sc_alpha * w["alpha"] + sc_dd * w["dd"]
+                 + sc_mdd * w["mdd"] + sc_ir * w["ir"] + sc_fee * w["fee"]
+                 + sc_scale * w["scale"] + sc_age * w["age"] + sc_inst * w["inst"]
+                 + sc_tenure * w["tenure"])
 
     return {"code": code, "name": f.get("name"), "type": f.get("type", ""),
             "nav": f.get("nav"), "navDate": f.get("navDate"),
-            "r20": r20, "r60": r60, "r120": r120, "r250": r250,
-            "vol": vol, "ann": ann, "mdd": mdd, "sharpe": sharpe, "z": z,
+            "r20": r20, "r60": r60, "r120": r120, "r250": r250, "r500": r500,
+            "vol": vol, "ann": ann, "mdd": mdd, "maxMdd": maxMdd, "sharpe": sharpe,
+            "sortino": sortino, "z": z,
             "m": m, "s": s,
             "beta": beta, "alpha": alpha, "ir": ir, "calmar": calmar,
             "avr": avr, "dims": dims,
             "valPct": vp, "valBasis": val_basis,
             "managers": managers, "tenure": tenure,
-            "sc": {"mom": sc_mom, "val": sc_val, "sharpe": sc_sharpe, "calmar": sc_calmar,
-                   "alpha": sc_alpha, "dd": sc_dd, "ir": sc_ir, "avr": sc_avr},
+            "fee": fee, "scale": scale, "instPct": inst, "age": age_years, "r3y": r3y, "r2y": r2y,
+            "sc": {"mom": sc_mom, "long": sc_long, "val": sc_val, "sharpe": sc_sharpe,
+                   "sortino": sc_sortino, "calmar": sc_calmar, "alpha": sc_alpha, "dd": sc_dd,
+                   "mdd": sc_mdd, "ir": sc_ir, "avr": sc_avr, "fee": sc_fee, "scale": sc_scale,
+                   "age": sc_age, "inst": sc_inst, "tenure": sc_tenure},
             "composite": round(composite, 1)}
 
 
