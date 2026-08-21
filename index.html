@@ -1737,6 +1737,7 @@ function renderSignals(rows){
 
 // ---------------- 组合走势折线图 ----------------
 let trendChart=null;
+let advCharts={};
 function renderTrend(dates, portCum, benchCum, benchName){
   const box=document.getElementById("trendBox");
   const wrap=document.getElementById("trendCanvasWrap");
@@ -2361,9 +2362,69 @@ async function runAdvise(){
     <div class="note" style="margin:10px 0">基金经理：${(d.managers&&d.managers.length)?(d.managers[0].name+(d.tenure?("（任职 "+d.tenure+" 年）"):"")):"—"} ｜ 东财五维（选证/收益/抗风险/稳定/择时）：${(d.dims&&Object.keys(d.dims).length)?Object.entries(d.dims).map(([k,v])=>k.slice(0,2)+Math.round(v)).join("/"):"—"}</div>
     <div class="note" style="margin:12px 0">盈利可能性（蒙特卡洛）：1月 ${(d.p1*100).toFixed(0)}% · 3月 ${(d.p3*100).toFixed(0)}% · 6月 ${(d.p6*100).toFixed(0)}% · 1年 ${(d.p12*100).toFixed(0)}%</div>
     <div class="note">近一年收益 ${signPctPct(d.r250)} · 年化波动 ${pct(d.vol)} <span style="color:${volGrade(d.vol).color}">(${volGrade(d.vol).label})</span> · 最大回撤 ${pct(d.mdd)} · 夏普 ${FMT(d.sharpe.toFixed(2))} · 估值Z(相对120日均线) ${d.z.toFixed(1)}</div>
-    <ul class="suggestions">${d.reasons.map(r=>`<li class="s-warn">${r}</li>`).join("")}</ul>
+
+    <div class="plan-sec" style="margin-top:16px">📈 净值累计涨幅走势（本基金 vs 沪深300，起点=100）</div>
+    <div style="position:relative;height:240px"><canvas id="advNavCanvas"></canvas></div>
+
+    <div class="plan-sec" style="margin-top:16px">📊 阶段涨幅对比（本基金 / 同类平均 / 沪深300）</div>
+    <div style="position:relative;height:240px"><canvas id="advStageCanvas"></canvas></div>
+    <div style="overflow-x:auto;margin-top:8px">
+      <table class="holdings" style="width:100%;font-size:12px">
+        <thead><tr><th>阶段</th><th>本基金</th><th>同类平均</th><th>沪深300</th></tr></thead>
+        <tbody>
+          ${d.stageGrowth.map(s=>`<tr><td>${s.label}</td><td style="color:${s.fund>=0?'var(--good)':'var(--bad)'}">${s.fund==null?'—':signPctPct(s.fund)}</td><td style="color:${s.peer>=0?'var(--good)':'var(--bad)'}">${s.peer==null?'—':signPctPct(s.peer)}</td><td style="color:${s.csi>=0?'var(--good)':'var(--bad)'}">${s.csi==null?'—':signPctPct(s.csi)}</td></tr>`).join("")}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="plan-sec" style="margin-top:16px">📋 近 4 个季度涨幅（本基金）</div>
+    <div style="position:relative;height:200px"><canvas id="advQuarterCanvas"></canvas></div>
+
+    <div class="plan-sec" style="margin-top:16px">🗓️ 年度涨幅对比（近 3 个完整自然年）</div>
+    <div style="position:relative;height:220px"><canvas id="advYearCanvas"></canvas></div>
+
+    <ul class="suggestions" style="margin-top:16px">${d.reasons.map(r=>`<li class="s-warn">${r}</li>`).join("")}</ul>
     <div class="note">诊断基于历史统计与量化规则，仅供参考，不构成投资意见。</div>`;
+  renderAdvCharts(d);
   window.__advisedCode=code; updateSummaries();
+}
+
+function renderAdvCharts(d){
+  ["advNav","advStage","advQuarter","advYear"].forEach(k=>{ if(advCharts[k]) advCharts[k].destroy(); });
+  const GOLD="#f2c14e", BLUE="#4da3ff", GREEN="#22c58b", RED="#f4536b", GRID="rgba(255,255,255,.05)", TXT="#9896a6";
+  const baseOpts=()=>({
+    maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:"#f1f0ea",boxWidth:12}},
+      tooltip:{callbacks:{label:c=>c.dataset.label+": "+(c.parsed.y==null?"—":(c.parsed.y>=0?"+":"")+c.parsed.y+"%")}}},
+    scales:{x:{ticks:{color:TXT,maxTicksLimit:10},grid:{color:GRID}},
+      y:{ticks:{color:TXT,callback:v=>v+"%"},grid:{color:GRID}}}
+  });
+  // 净值累计走势（折线）
+  const nt=d.navTrend||{dates:[],fund:[],csi:[]};
+  const navDs=[{label:"本基金",data:nt.fund,borderColor:GOLD,backgroundColor:"rgba(242,193,78,.12)",fill:true,tension:.25,pointRadius:0}];
+  if(nt.csi&&nt.csi.some(v=>v!=null)) navDs.push({label:"沪深300",data:nt.csi,borderColor:BLUE,backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0});
+  advCharts.advNav=new Chart(document.getElementById("advNavCanvas"),{type:"line",
+    data:{labels:nt.dates,datasets:navDs},options:baseOpts()});
+  // 阶段涨幅（分组柱）
+  const sg=d.stageGrowth||[];
+  advCharts.advStage=new Chart(document.getElementById("advStageCanvas"),{type:"bar",
+    data:{labels:sg.map(s=>s.label),datasets:[
+      {label:"本基金",data:sg.map(s=>s.fund==null?null:+(s.fund*100).toFixed(2)),backgroundColor:GOLD},
+      {label:"同类平均",data:sg.map(s=>s.peer==null?null:+(s.peer*100).toFixed(2)),backgroundColor:GREEN},
+      {label:"沪深300",data:sg.map(s=>s.csi==null?null:+(s.csi*100).toFixed(2)),backgroundColor:BLUE}]},options:baseOpts()});
+  // 近4季度（柱）
+  const qg=d.quarterGrowth||[];
+  advCharts.advQuarter=new Chart(document.getElementById("advQuarterCanvas"),{type:"bar",
+    data:{labels:qg.map(s=>s.label),datasets:[{label:"季度涨幅",
+      data:qg.map(s=>s.fund==null?null:+(s.fund*100).toFixed(2)),
+      backgroundColor:qg.map(s=>(s.fund>=0?GREEN:RED))}]},options:baseOpts()});
+  // 年度涨幅（分组柱）
+  const yg=d.yearGrowth||[];
+  advCharts.advYear=new Chart(document.getElementById("advYearCanvas"),{type:"bar",
+    data:{labels:yg.map(s=>s.year+"年"),datasets:[
+      {label:"本基金",data:yg.map(s=>s.fund==null?null:+(s.fund*100).toFixed(2)),backgroundColor:GOLD},
+      {label:"同类平均",data:yg.map(s=>s.peer==null?null:+(s.peer*100).toFixed(2)),backgroundColor:GREEN},
+      {label:"沪深300",data:yg.map(s=>s.csi==null?null:+(s.csi*100).toFixed(2)),backgroundColor:BLUE}]},options:baseOpts()});
 }
 
 // ---------------- 组合导入/导出 + 时间戳 ----------------
