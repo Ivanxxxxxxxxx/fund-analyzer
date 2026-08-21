@@ -1430,7 +1430,8 @@ function renderProb(mean,volDaily){
     out.map(o=>{
       // 盈利概率阈值分色：≥60% 绿（较稳）/ 45-60% 橙黄（中性）/ <45% 红（谨慎）——与图例一致，一眼可读
       const c=o.p>=0.6?"#34d399":o.p>=0.45?"#f0a23a":"#fb7185";
-      const ec=o.exp>=0?"#34d399":"#fb7185";
+      // 预期收益：A股习惯红涨绿跌（正=红 涨，负=绿 跌）
+      const ec=o.exp>=0?"var(--up)":"var(--down)";
       return `<div class="prob"><div class="p" style="color:${c}">${(o.p*100).toFixed(0)}%</div>
         <div class="t">${o.t}盈利概率</div>
         <div class="bar"><i style="width:${o.p*100}%;background:${c}"></i></div>
@@ -1672,14 +1673,14 @@ async function loadRecommend(){
   let probHtml="";
   if(rp && rp.p12m!=null){
     const pc=v=>v==null?"var(--muted)":(v>=0.6?"#34d399":v>=0.45?"#f0a23a":"#fb7185");
-    const ec=v=>v==null?"var(--muted)":(v>=0?"#34d399":"#fb7185");
+    const ec=v=>v==null?"var(--muted)":(v>=0?"var(--up)":"var(--down)");   // 预期收益：红涨绿跌
     const span=(t,p,e)=>`<span>${t} <b style="color:${pc(p)}">${p==null?"—":(p*100).toFixed(0)+"%"}</b> 预期 <b style="color:${ec(e)}">${e==null?"—":signPct(e)}</b></span>`;
     probHtml=`<div class="note" style="margin:10px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03)">
       <div style="font-size:13px;font-weight:700;margin-bottom:6px"><svg class="i"><use href="#i-trending-up"/></svg> 推荐组合盈利预期（蒙特卡洛模拟，按推荐权重）</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">
         ${span("1月",rp.p1m,rp.exp1m)}${span("3月",rp.p3m,rp.exp3m)}${span("6月",rp.p6m,rp.exp6m)}${span("1年",rp.p12m,rp.exp12m)}
       </div>
-      <div class="muted" style="font-size:10.5px;margin-top:4px">盈利概率：≥60% 绿（较稳）/ 45-60% 橙（中性）/ &lt;45% 红（谨慎）；预期收益：正绿负红。按近 3 年历史波动假设模拟，非收益承诺。</div>
+      <div class="muted" style="font-size:10.5px;margin-top:4px">盈利概率：≥60% 绿（较稳）/ 45-60% 橙（中性）/ &lt;45% 红（谨慎）；预期收益：红涨绿跌（A股习惯）。按近 3 年历史波动假设模拟，非收益承诺。</div>
     </div>`;
   }
   box.innerHTML=`
