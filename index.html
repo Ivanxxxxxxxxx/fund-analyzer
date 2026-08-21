@@ -1080,9 +1080,50 @@ function saveDcaAmt(){
   toast("已设置每月定投 ¥"+yuan(v)+"，按持仓比例分配到每只基金");
 }
 
+// 组合历史收益统计：按【实际持仓】市值加权计算年化收益/年化波动（一键配置选的 N 只基金）
+// 用 __histCache 复用历史净值；结果按"持仓组合+日期"缓存到 localStorage（当天有效），避免每次刷新重拉
+async function calcPortfolioStats(){
+  if(!holdings.length) return null;
+  const codes=holdings.map(h=>h.code).join(",");
+  const today=new Date().toDateString();
+  const ck="fp_stats:"+codes+":"+today;
+  const cached=JSON.parse(localStorage.getItem(ck)||"null");
+  if(cached && cached.ann!=null) return cached;
+  if(!window.__histCache) window.__histCache={};
+  const missing=holdings.filter(h=>!window.__histCache[h.code]);
+  for(const h of missing){
+    const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]}));
+    window.__histCache[h.code]=r.data||[];
+  }
+  const allDates=new Set();
+  holdings.forEach(h=>(window.__histCache[h.code]||[]).forEach(d=>{ if(d&&d.date) allDates.add(d.date); }));
+  const dates=[...allDates].sort();
+  const series=holdings.map(h=>{
+    const m={}; (window.__histCache[h.code]||[]).forEach(d=>{ if(d&&d.date!=null) m[d.date]=d.nav; });
+    const arr=[]; let last=null;
+    dates.forEach(dt=>{ if(m[dt]!=null) last=m[dt]; arr.push(last); });
+    return arr;
+  });
+  const rets=series.map(s=>{ const r=[]; for(let i=1;i<s.length;i++){ const a=s[i-1],b=s[i]; if(a>0&&isFinite(b)){ const x=(b-a)/a; if(Math.abs(x)<0.5) r.push(x); } } return r; });
+  const total=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
+  const w=holdings.map(h=>(+h.value||0)/total);
+  const L=Math.min(...rets.map(r=>r.length));
+  if(L<60) return null;
+  const pr=[];
+  for(let t=0;t<L;t++){ let s=0; for(let i=0;i<holdings.length;i++) s+=w[i]*rets[i][rets[i].length-L+t]; pr.push(s); }
+  const mean=pr.reduce((a,b)=>a+b,0)/L;
+  const variance=pr.reduce((a,b)=>a+(b-mean)**2,0)/(L-1);
+  const vol=Math.sqrt(variance)*Math.sqrt(252);
+  const growth=pr.reduce((acc,r)=>acc*(1+r),1);
+  const ann=Math.pow(growth,252/L)-1;
+  const out={ann, vol};
+  try{ localStorage.setItem(ck, JSON.stringify(out)); }catch(e){}
+  return out;
+}
+
 // 投资概览：本金/定投/总成本/预期收益/总金额 + 复利曲线（实时，关联「一键配置」输入数据）
 let planChart=null;
-function renderPlanOverview(){
+async function renderPlanOverview(){
   const box=document.getElementById("planOverview"); if(!box) return;
   const plan=JSON.parse(localStorage.getItem("fp_plan")||"{}");
   const P=Math.max(0, +plan.principal||0);
@@ -1093,11 +1134,16 @@ function renderPlanOverview(){
     box.innerHTML='<div class="empty">用「智能决策 → 一键配置最优基金」输入本金、每月定投、持有时间并建仓后，这里自动生成投资概览与复利曲线。</div>';
     return;
   }
-  // 年化收益：优先最近一次分析的组合历史年化；未分析时用推荐组合预期(exp12m)；再兜底 6%
-  let r = (window.__annRet!=null && isFinite(window.__annRet)) ? window.__annRet : 0.06;
-  if((window.__annRet==null || !isFinite(window.__annRet)) && window.__recoProb && window.__recoProb.exp12m!=null && isFinite(window.__recoProb.exp12m)) r = window.__recoProb.exp12m;
-  r = Math.max(-0.4, Math.min(0.4, r));
-  const vol = Math.max(0.05, Math.min(0.6, (window.__annVol!=null&&isFinite(window.__annVol))?window.__annVol:0.15));
+  // 年化收益/波动：优先按【实际持仓】实时计算（一键配置选的 N 只基金，市值加权）
+  const stats = await calcPortfolioStats();
+  let r=null, vol=null;
+  if(stats){ r=stats.ann; vol=stats.vol; }
+  else if(window.__annRet!=null && isFinite(window.__annRet)){ r=window.__annRet; vol=window.__annVol||0.15; }
+  else if(window.__recoProb && window.__recoProb.exp12m!=null && isFinite(window.__recoProb.exp12m)){ r=window.__recoProb.exp12m; vol=0.15; }
+  if(r==null || !isFinite(r)) r=0.06;
+  if(vol==null || !isFinite(vol) || vol<=0) vol=0.15;
+  r=Math.max(-0.4, Math.min(0.4, r));
+  vol=Math.max(0.05, Math.min(0.6, vol));
   const rm=r/12, totalCost=Math.round(P + A*months);
   // 理想（无波动复利），按月
   const idealY=[];
@@ -1130,7 +1176,7 @@ function renderPlanOverview(){
       ${stat("预期收益", (gain>=0?"+":"-")+yuan(Math.abs(gain)), "年化 "+ (r*100).toFixed(1) +"%")}
     </div>
     <div style="position:relative;height:240px"><canvas id="planChartCanvas"></canvas></div>
-    <div class="note" style="font-size:11px;margin-top:8px">年化收益 ${(r*100).toFixed(1)}%（${(window.__annRet!=null&&isFinite(window.__annRet))?"来自你组合最近一次分析":"默认/推荐预期"}）· 波动 ${(vol*100).toFixed(0)}% · ${SIMS} 条路径模拟；理想=无波动复利、中位=50%分位、悲观/乐观=5%/95% 分位。模拟基于历史假设，非收益承诺。</div>`;
+    <div class="note" style="font-size:11px;margin-top:8px">年化收益 ${(r*100).toFixed(1)}% · 波动 ${(vol*100).toFixed(0)}% —— 按你<b>实际持仓 ${holdings.length} 只基金</b>的历史净值（市值加权）实时计算${stats?"，每只基金近 2 年数据":""}；理想=无波动复利、中位=50%分位、悲观/乐观=5%/95% 分位（${SIMS} 条路径）。模拟基于历史假设，非收益承诺。</div>`;
   if(planChart) planChart.destroy();
   const cv=document.getElementById("planChartCanvas"); if(!cv) return;
   // 标签：按持有月数选间隔（月数≤24 每月一标，否则每 12 月一标）
