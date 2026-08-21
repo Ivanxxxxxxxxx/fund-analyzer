@@ -618,8 +618,20 @@ INDEX_MAP = {
 }
 
 
+def _norm_secid(secid):
+    """东财 secid 必须带市场前缀（沪市指数 1.、深市 0.、美股 100.）；纯 6 位数字时自动补：
+    399 开头 → 深市 0.，否则 → 沪市 1.。修复 '/api/index/000300' 无前缀被东财 rc:102 拒绝的问题。"""
+    s = str(secid or "").strip()
+    if not s or "." in s:
+        return s
+    if s.isdigit() and len(s) == 6:
+        return ("0." if s.startswith("399") else "1.") + s
+    return s
+
+
 def _get_index_kline(secid, days=300):
     """指数日线收盘序列（多 host 重试，失败容错返回 [] 而非抛异常）。"""
+    secid = _norm_secid(secid)
     hosts = ["https://push2his.eastmoney.com", "https://push2.eastmoney.com", "https://quote.eastmoney.com"]
     for host in hosts:
         try:
@@ -646,6 +658,7 @@ def _get_index_kline(secid, days=300):
 
 def _get_index_series(secid, days=800):
     """返回指数日期序列与收盘值，用于组合走势基准对比（多 host 重试容错）。"""
+    secid = _norm_secid(secid)
     hosts = ["https://push2his.eastmoney.com", "https://push2.eastmoney.com", "https://quote.eastmoney.com"]
     for host in hosts:
         try:
