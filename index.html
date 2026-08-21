@@ -598,7 +598,7 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
       <div class="setup-card">
         <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
           <svg class="i"><use href="#i-zap"/></svg> 一键配置最优基金
-          <span class="muted" style="font-size:11px;font-weight:600">按推荐自动分散选基、分配本金、建立仓位，支持每月定投</span>
+          <span class="muted" style="font-size:11px;font-weight:600">按综合分择优（同类≤2只防扎堆）分配本金、建立仓位，支持每月定投</span>
         </div>
         <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
           <div>
@@ -1700,15 +1700,24 @@ async function quickSetup(){
   const principal=Math.max(0, +document.getElementById("setupP").value||0);
   const dca=Math.max(0, +document.getElementById("setupD").value||0);
   if(principal<=0){ toast("请输入本金金额"); return; }
-  // 跨类别分散选基：各类 top1 → top2 → … 轮转，直到凑满 N 只（避免全选同一类）
+  // 最优选基：全局按综合分从高到低择优，同类最多 2 只防扎堆。
+  // 无论选 3/5/8 只，拿到的都是当前推荐池里综合分最优的组合（旧版按类别轮转会漏掉高分基金）
   const byCat={};
   list.forEach(f=>{ (byCat[f.category]=byCat[f.category]||[]).push(f); });
-  Object.values(byCat).forEach(a=>a.sort((x,y)=>(y.score||0)-(x.score||0)));
-  const cats=Object.keys(byCat);
-  const picked=[];
-  const maxLen=Math.max(0,...Object.values(byCat).map(a=>a.length));
-  for(let i=0;i<maxLen && picked.length<n;i++){
-    for(const c of cats){ if(i<byCat[c].length && picked.length<n) picked.push(byCat[c][i]); }
+  const sorted=[...list].sort((x,y)=>(y.score||0)-(x.score||0));
+  const picked=[]; const catCnt={};
+  for(const f of sorted){
+    if(picked.length>=n) break;
+    const c=f.category||"其他";
+    if((catCnt[c]||0)>=2) continue;          // 同类最多 2 只（跨类分散，防单类扎堆）
+    picked.push(f); catCnt[c]=(catCnt[c]||0)+1;
+  }
+  if(picked.length<n){                        // 若因同类限制未凑满，放宽补足（极端场景）
+    for(const f of sorted){
+      if(picked.length>=n) break;
+      if(picked.indexOf(f)>=0) continue;
+      picked.push(f);
+    }
   }
   if(!picked.length){ toast("推荐结果为空，无法配置"); return; }
   // 按综合分归一化分配本金（评分高的多配）
