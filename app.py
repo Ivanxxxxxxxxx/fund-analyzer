@@ -604,6 +604,7 @@ def _norm_box(mean, sd):
 _cos = __import__("math").cos
 _sqrt = __import__("math").sqrt
 _log = __import__("math").log
+_erf = __import__("math").erf
 
 
 # 用于判断市场环境的宽基/海外/避险指数（东方财富 secid）
@@ -1281,15 +1282,40 @@ def recommend_portfolio():
         by_cat.setdefault(cat_label, []).append((asset, fac))
     funds = []
     cat_reasons = {}
+    def _prob12(fac):
+        """单只基金 1 年盈利概率（对数收益正态近似 Φ(√252·μ/σ)）。"""
+        mu = fac.get("mu"); sigma = fac.get("sigma")
+        if mu is None or not sigma or sigma <= 0:
+            return None
+        return 0.5 * (1 + _erf(_sqrt(252.0) * mu / sigma / _sqrt(2.0)))
+
+    # 权益类（股票/混合/指数/海外）：1 年盈利概率 <50% 或近 3 年收益为负 → 不推荐。
+    # 推荐必须与盈利预期一致：宁可少推，也不推"预期大概率不赚"的基金。
+    _EQ_ASSETS = {"股票型", "混合型", "指数型", "海外(QDII)"}
     for cat_label, lst in by_cat.items():
         lst.sort(key=lambda x: x[1]["composite"], reverse=True)
         top = lst[:3]
+        keep, skipped = [], []
+        for asset, fac in top:
+            p12 = _prob12(fac)
+            r3y = fac.get("r3y")
+            if asset in _EQ_ASSETS and ((p12 is not None and p12 < 0.50) or (r3y is not None and r3y < 0)):
+                skipped.append((fac, p12, r3y))
+                continue
+            keep.append((asset, fac))
+        if not keep and top:
+            # 该类候选全部不达标：保留综合分最高的一只（标注谨慎），避免类别空缺
+            keep = [top[0]]
+            skipped = []
+        top = keep
         asset = top[0][0]
         w = alloc.get(asset, 0.0)
         s = sum(fac["composite"] for _, fac in top) or 1.0
         peer_n = len(lst)
         peer_mdd = _median([f["mdd"] for _, f in lst])
         cat_reasons[cat_label] = _cat_reason(asset, w)
+        if skipped:
+            cat_reasons[cat_label] += "（已剔除 %d 只近 3 年收益为负/盈利概率低的候选）" % len(skipped)
         for idx, (asset, fac) in enumerate(top):
             per = w * (fac["composite"] / s)  # 权重按综合分归一化，评分高的拿更多，而非机械均分
             verdict = "推荐" if fac["composite"] >= 68 else ("谨慎关注" if fac["composite"] >= 50 else "暂不推荐")
@@ -1333,13 +1359,36 @@ def recommend_portfolio():
             funds.append({"category": cat_label, "asset": asset, "code": fac["code"], "name": fac["name"],
                           "type": fac["type"], "score": fac["composite"], "verdict": verdict,
                           "weight": round(per, 4), "valPct": fac["valPct"], "reasons": reasons,
-                          "peerRank": rank, "peerN": peer_n})
+                          "peerRank": rank, "peerN": peer_n, "prob12": _prob12(fac),
+                          "mu": fac.get("mu"), "sigma": fac.get("sigma")})
     funds.sort(key=lambda x: (x["asset"], -x["score"]))
+
+    # === 推荐组合级盈利预期（蒙特卡洛对数近似，按推荐权重加权，独立假设） ===
+    recoProb = None
+    if funds:
+        wsum = sum(x["weight"] for x in funds) or 1.0
+        mu_p = sum(x["weight"] * (x.get("mu") or 0.0) for x in funds) / wsum
+        var_p = sum((x["weight"] / wsum) ** 2 * ((x.get("sigma") or 0.0) ** 2) for x in funds)
+        sigma_p = _sqrt(var_p) if var_p > 0 else 0.0
+        _e = __import__("math").exp
+
+        def _pd(days):
+            if sigma_p <= 0:
+                return None
+            return 0.5 * (1 + _erf(_sqrt(float(days)) * mu_p / sigma_p / _sqrt(2.0)))
+
+        recoProb = {
+            "p1m": _pd(21), "p3m": _pd(63), "p6m": _pd(126), "p12m": _pd(252),
+            "exp1m": _e(mu_p * 21) - 1, "exp3m": _e(mu_p * 63) - 1,
+            "exp6m": _e(mu_p * 126) - 1, "exp12m": _e(mu_p * 252) - 1,
+            "mu": mu_p, "sigma": sigma_p,
+        }
     dyn_note = ""
     if empty_cats:
         dyn_note = "（%s 的实时榜单在本节点暂不可用，本次该仓位为空，可手动添加对应基金）" % "、".join(empty_cats)
     return {"ok": True, "env": env, "alloc": alloc, "note": note + dyn_note,
             "catReasons": cat_reasons, "universe": len(candidates), "funds": funds, "dynamic": True,
+            "recoProb": recoProb,
             "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 
