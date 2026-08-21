@@ -1735,12 +1735,17 @@ _REPL_FT = {"股票型": ["gp", "hh", "zs"], "债券型": ["zq"],
 
 
 def _find_replacement(repl, keep, codes, rets_map, topn=8):
-    """为相关性过高的 repl 找一个与 keep 低相关的同类替代基金。"""
+    """为相关性过高的 repl 找一个同类替代基金。
+
+    全局相关性约束（修复替换死循环）：候选不仅要与 keep 低相关（≤0.6），
+    还必须与组合内【其他所有基金】都低相关（<0.7）——否则换完又和第三只基金高相关，
+    重新分析又会提示新的一对，用户陷入"替换→再提示→再替换"死循环。"""
     asset = repl.get("asset")
     fts = _REPL_FT.get(asset, [])
     if not fts:
         return None
     have = set(codes) | {repl.get("code")}
+    others = [c for c in codes if c not in (keep.get("code"), repl.get("code"))]
     cands = []
     for ft in fts:
         try:
@@ -1762,6 +1767,15 @@ def _find_replacement(repl, keep, codes, rets_map, topn=8):
         cr = _corr(_fund_returns(code, 730), keep_rets)
         if cr is None or cr > 0.6:
             continue
+        # 全局约束：与组合内其他所有基金相关性 <0.7（有一只觉得高相关即放弃该候选）
+        ok = True
+        for oc in others:
+            ocr = _corr(_fund_returns(code, 730), rets_map.get(oc, []))
+            if ocr is not None and ocr >= 0.7:
+                ok = False
+                break
+        if not ok:
+            continue
         try:
             fac = _compute_factors(code)
         except Exception:
@@ -1777,7 +1791,7 @@ def _find_replacement(repl, keep, codes, rets_map, topn=8):
         return None
     (code, name, y1), cr = best
     return {"code": code, "name": name, "corr": round(cr, 2),
-            "reason": "近1年收益 +%.0f%%，多因子综合分 %d，与保留基金相关系数仅 %.2f，分散效果显著优于原基金。" % (y1, best_score, cr)}
+            "reason": "近1年收益 +%.0f%%，多因子综合分 %d，与保留基金相关系数仅 %.2f，且与组合内其他基金均低相关，替换后不会再次触发高相关预警。" % (y1, best_score, cr)}
 
 
 def _norm_asset(a):
@@ -1876,7 +1890,7 @@ def build_allocate(funds, principal, existing=None):
                                 "oldCorr": round(c, 2), "newCorr": rep["corr"], "reason": rep["reason"]}})
             else:
                 opts.append({"type": "corr", "level": "warn",
-                    "text": "%s 与 %s 相关系数 %.2f，相关性偏高，建议二选一保留（保留评分更高者），或手动调入低相关品种。"
+                    "text": "%s 与 %s 相关系数 %.2f，且同类候选与组合内其他基金也普遍高相关（同赛道/同指数基金天然同涨同跌），继续替换同类没有意义。建议二选一保留评分更高者，将另一只的资金改配债券型 / 货币型等低相关资产。"
                              % (fa["name"], fb["name"], c)})
         else:
             # 一侧新选、一侧已有：保留已持有的，替换新选的
@@ -1896,7 +1910,7 @@ def build_allocate(funds, principal, existing=None):
                                 "oldCorr": round(c, 2), "newCorr": rep["corr"], "reason": rep["reason"]}})
             else:
                 opts.append({"type": "corr", "level": "warn",
-                    "text": "你已持有 %s（%s），与本次选中的 %s（%s）相关系数 %.2f，建议二选一保留（优先保留已持有的），或手动调入低相关品种。"
+                    "text": "你已持有 %s（%s），与本次选中的 %s（%s）相关系数 %.2f，且同类候选与组合内其他基金也普遍高相关，继续换同类易陷入循环。建议二选一保留（优先保留已持有的），将另一只的资金改配债券型 / 货币型等低相关资产。"
                              % (ef["name"], ef["code"], nf["name"], nf["code"], c)})
 
     # 重复提示：本次选的已在组合里持有
