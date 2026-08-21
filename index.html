@@ -85,6 +85,7 @@ body{
 .grid{display:grid;gap:16px}
 .cols-2{grid-template-columns:340px 1fr}
 .cols-3{grid-template-columns:repeat(3,1fr)}
+.cols-4{grid-template-columns:repeat(4,1fr)}
 .kpi-grid{grid-template-columns:repeat(3,1fr)}
 .analysis-grid{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
 input,button,select{font-family:inherit}
@@ -220,14 +221,13 @@ table.plan th{color:var(--muted);font-weight:600}
   background:linear-gradient(180deg, rgba(26,26,32,.99), rgba(15,15,19,.99));
   border:1px solid rgba(232,179,57,.22);border-radius:18px;padding:22px 22px 20px;
   box-shadow:0 30px 80px rgba(0,0,0,.65)}
-.modal-head{position:relative;flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;column-gap:10px;row-gap:2px}
-.modal-head h2{flex:none;min-width:0;margin:0}
-.modal-head .sub{flex-basis:100%;min-width:0}
+.modal-head{position:relative;flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.modal-head h2{flex:1;min-width:0;margin:0}
 .modal-body{overflow:auto;min-height:0;display:flex;flex-direction:column;gap:6px}
 .modal h2{font-size:19px;margin:0;display:flex;align-items:center;gap:8px}
-.modal .sub{font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.55}
-/* 关闭按钮：modal-head 是 flex 行（h2 左、按钮右、align-items:center 垂直居中），sub 独占下一行 —— 标准弹窗头布局，任何浏览器不依赖绝对/网格定位 */
-.modal-close{width:32px;height:32px;flex:none;border-radius:9px;
+.modal .sub{font-size:12.5px;color:var(--muted);margin:2px 0 14px;line-height:1.55}
+/* 关闭按钮：固定 32×32，padding:0 覆盖全局 button 的 padding，防止 × 被撑歪；与标题单行 flex 两端对齐 */
+.modal-close{width:32px;height:32px;flex:none;border-radius:9px;padding:0;
   background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--muted);
   font-size:18px;display:grid;place-items:center;cursor:pointer;transition:.15s}
 .modal-close:hover{background:rgba(232,179,57,.15);color:var(--gold)}
@@ -434,6 +434,7 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
 @media(max-width:1080px){
   .kpi-row{grid-template-columns:repeat(2,1fr)}
   .cols-3{grid-template-columns:repeat(2,1fr)}
+  .cols-4{grid-template-columns:repeat(2,1fr)}
 }
 @media(max-width:900px){
   .nav{display:none}
@@ -447,7 +448,7 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
   .to-top{bottom:86px}
 }
 @media(max-width:640px){
-  .cols-2,.cols-3,.kpi-grid{grid-template-columns:1fr}
+  .cols-2,.cols-3,.cols-4,.kpi-grid{grid-template-columns:1fr}
   .analysis-grid{grid-template-columns:1fr}
   .kpi-row{grid-template-columns:1fr 1fr}
   .fold-inner{padding:13px 11px}
@@ -790,8 +791,8 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     <div class="modal-head">
       <h2><svg class="i"><use href="#i-zap"/></svg> 一键配资</h2>
       <button class="modal-close" onclick="closeAllocate()" aria-label="关闭">×</button>
-      <div class="sub">从推荐选入的基金，结合实时多因子、相关性、估值分位，给出具体买入金额与可执行优化方案。</div>
     </div>
+    <div class="sub">从推荐选入的基金，结合实时多因子、相关性、估值分位，给出具体买入金额与可执行优化方案。</div>
     <div class="modal-body">
       <div class="sel-list" id="selList"></div>
       <div class="principal-card">
@@ -816,9 +817,21 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     <div class="modal-head">
       <h2><svg class="i"><use href="#i-sparkles"/></svg> 智能配置推荐</h2>
       <button class="modal-close" onclick="closeRecoModal()" aria-label="关闭">×</button>
-      <div class="sub">结合当前市场温度，给出大类配置比例与精选基金，弹窗内可直接完成一键配置建仓</div>
     </div>
+    <div class="sub">结合当前市场温度，给出大类配置比例与精选基金，弹窗内可直接完成一键配置建仓</div>
     <div class="modal-body" id="recoModalBody"></div>
+  </div>
+</div>
+
+<!-- 单基金诊断结果弹窗：卡片化核心指标 + 图表 -->
+<div class="overlay" id="adviseOverlay" onclick="if(event.target===this)closeAdvise()">
+  <div class="modal" id="adviseModal" style="width:min(920px,96vw)">
+    <div class="modal-head">
+      <h2><svg class="i"><use href="#i-activity"/></svg> 基金诊断</h2>
+      <button class="modal-close" onclick="closeAdvise()" aria-label="关闭">×</button>
+    </div>
+    <div class="sub" id="adviseSub">输入基金代码后点击「开始诊断」，自动分析收益/波动/回撤/估值分位/盈利概率。</div>
+    <div class="modal-body" id="adviseModalBody"></div>
   </div>
 </div>
 
@@ -2018,6 +2031,8 @@ function openAllocate(){
 function closeAllocate(){ document.getElementById("allocOverlay").classList.remove("show"); }
 function openRecoModal(){ document.getElementById("recoOverlay").classList.add("show"); }
 function closeRecoModal(){ document.getElementById("recoOverlay").classList.remove("show"); }
+function openAdvise(){ document.getElementById("adviseOverlay").classList.add("show"); }
+function closeAdvise(){ document.getElementById("adviseOverlay").classList.remove("show"); }
 // 弹窗内一键配置：读弹窗里的输入（setupN2/P2/D2/Y2=持有月数）并执行建仓
 function quickSetupFromModal(){
   const n=Math.max(1,Math.min(10, +document.getElementById("setupN2").value||3));
@@ -2034,6 +2049,7 @@ function openAllocateFromReco(){
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"){
   const o1=document.getElementById("allocOverlay"); if(o1&&o1.classList.contains("show")) closeAllocate();
   const o2=document.getElementById("recoOverlay"); if(o2&&o2.classList.contains("show")) closeRecoModal();
+  const o4=document.getElementById("adviseOverlay"); if(o4&&o4.classList.contains("show")) closeAdvise();
   const o3=document.getElementById("confirmOverlay"); if(o3&&o3.classList.contains("show")) closeConfirm();
 } });
 
@@ -2349,47 +2365,79 @@ async function runAdvise(){
   const d=await api("/api/advise/"+code+"?capital="+capital).catch(e=>({ok:false,error:String(e)}));
   if(!d.ok){ box.innerHTML='<div class="empty">诊断失败：'+(d.error||"")+'</div>'; return; }
   const vc = d.verdict==="推荐"?"var(--good)":(d.verdict==="谨慎关注"?"var(--warn)":"var(--bad)");
-  box.innerHTML=`
-    <div class="grid cols-2" style="gap:14px">
-      <div class="kpi"><span class="label">综合评分</span><span class="value" style="color:${vc}">${d.score}</span><span class="hint">/100（多因子加权）</span></div>
-      <div class="kpi"><span class="label">买入结论</span><span class="value" style="color:${vc}">${d.verdict}</span><span class="hint">${d.name}（${d.type||"—"}）</span></div>
-      <div class="kpi"><span class="label">建议仓位上限</span><span class="value">${(d.cap*100).toFixed(0)}%</span><span class="hint">按波动与估值风险</span></div>
-      <div class="kpi"><span class="label">建议买入金额</span><span class="value">¥${d.amount.toLocaleString("en-US")}</span><span class="hint">按本金 ¥${d.capital.toLocaleString("en-US")} 计</span></div>
+  const scoreColor = d.score>=75?"var(--good)":d.score>=55?"var(--warn)":"var(--bad)";
+  const upDown = v => v==null||isNaN(v)?"var(--muted)":(v>=0?"var(--up)":"var(--down)");
+  const card=(label,value,color,hint)=>`<div class="kpi"><span class="label">${label}</span><span class="value" style="color:${color||"var(--text)"}">${value}</span>${hint?`<span class="hint">${hint}</span>`:""}</div>`;
+  const mgr=(d.managers&&d.managers.length)?(d.managers[0].name+(d.tenure?`（任职 ${d.tenure} 年）`:"")):"—";
+  const dims=(d.dims&&Object.keys(d.dims).length)?Object.entries(d.dims).map(([k,v])=>k.slice(0,2)+Math.round(v)).join("/"):"—";
+  const vg=volGrade(d.vol);
+  const sharpeColor = d.sharpe>=1?"var(--good)":d.sharpe>=0?"var(--warn)":"var(--bad)";
+  // 智能决策页只保留摘要卡；完整诊断进弹窗，首屏即见核心指标
+  box.innerHTML=`<div class="empty" style="text-align:left;padding:18px 14px">
+    <div style="font-size:14px;font-weight:700;margin-bottom:8px">基金 ${code} · ${d.name||""} 诊断完成</div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.7;margin-bottom:10px">
+      综合评分 <b style="color:${scoreColor}">${d.score}</b> · 买入结论 <b style="color:${vc}">${d.verdict}</b> · 建议仓位 <b>${(d.cap*100).toFixed(0)}%</b> · 买入金额 <b>¥${d.amount.toLocaleString("en-US")}</b>
     </div>
-    <div class="grid cols-3" style="gap:10px;margin-top:10px">
-      <div class="kpi sm"><span class="label">Beta(对沪深300)</span><span class="value">${FMT(d.beta.toFixed(2))}</span><span class="hint">${d.beta>1.1?"高弹性":(d.beta<0.9?"防御":"同步")}</span></div>
-      <div class="kpi sm"><span class="label">年化Alpha</span><span class="value">${signPctPct(d.alpha)}</span><span class="hint">超越市场的主动收益</span></div>
-      <div class="kpi sm"><span class="label">信息比率IR</span><span class="value">${FMT(d.ir.toFixed(2))}</span></div>
-      <div class="kpi sm"><span class="label">卡玛比率</span><span class="value">${FMT(d.calmar.toFixed(2))}</span><span class="hint">年化收益/回撤</span></div>
-      <div class="kpi sm"><span class="label">东财五维</span><span class="value">${d.avr?d.avr.toFixed(0):"—"}</span></div>
-      <div class="kpi sm"><span class="label">估值分位</span><span class="value">${d.valPct==null?"—":d.valPct+"%"}</span><span class="hint">${d.valBasis||""}</span></div>
+    <button class="btn-primary btn-sm" onclick="openAdvise()">查看完整诊断</button>
+  </div>`;
+  document.getElementById("adviseSub").innerHTML = `<b>${d.name||code}</b>（${d.code}）的诊断结果 · 本金 ¥${d.capital.toLocaleString("en-US")}`;
+  document.getElementById("adviseModalBody").innerHTML = `
+    <div class="grid cols-4" style="gap:12px;margin-bottom:6px">
+      ${card("综合评分",d.score,scoreColor,"/100 多因子加权")}
+      ${card("买入结论",d.verdict,vc,d.name||"")}
+      ${card("建议仓位上限",(d.cap*100).toFixed(0)+"%","var(--text)","按波动与估值风险")}
+      ${card("建议买入金额","¥"+d.amount.toLocaleString("en-US"),"var(--text)","按本金 ¥"+d.capital.toLocaleString("en-US")+" 计")}
     </div>
-    <div class="note" style="margin:10px 0">基金经理：${(d.managers&&d.managers.length)?(d.managers[0].name+(d.tenure?("（任职 "+d.tenure+" 年）"):"")):"—"} ｜ 东财五维（选证/收益/抗风险/稳定/择时）：${(d.dims&&Object.keys(d.dims).length)?Object.entries(d.dims).map(([k,v])=>k.slice(0,2)+Math.round(v)).join("/"):"—"}</div>
-    <div class="note" style="margin:12px 0">盈利可能性（蒙特卡洛）：1月 ${(d.p1*100).toFixed(0)}% · 3月 ${(d.p3*100).toFixed(0)}% · 6月 ${(d.p6*100).toFixed(0)}% · 1年 ${(d.p12*100).toFixed(0)}%</div>
-    <div class="note">近一年收益 ${signPctPct(d.r250)} · 年化波动 ${pct(d.vol)} <span style="color:${volGrade(d.vol).color}">(${volGrade(d.vol).label})</span> · 最大回撤 ${pct(d.mdd)} · 夏普 ${FMT(d.sharpe.toFixed(2))} · 估值Z(相对120日均线) ${d.z.toFixed(1)}</div>
+    <div class="grid cols-3" style="gap:10px;margin-bottom:6px">
+      ${card("基金类型",d.type||"—","var(--text)")}
+      ${card("基金经理",mgr,"var(--text)")}
+      ${card("近一年收益",signPctPct(d.r250),upDown(d.r250))}
+      ${card("年化波动",pct(d.vol),vg.color,vg.label)}
+      ${card("最大回撤",pct(d.mdd),"var(--down)")}
+      ${card("夏普比率",FMT(d.sharpe.toFixed(2)),sharpeColor)}
+      ${card("Beta(对沪深300)",FMT(d.beta.toFixed(2)),d.beta>1.1?"var(--warn)":d.beta<0.9?"var(--good)":"var(--text)",d.beta>1.1?"高弹性":d.beta<0.9?"防御":"同步")}
+      ${card("年化Alpha",signPctPct(d.alpha),upDown(d.alpha),"超越市场的主动收益")}
+      ${card("信息比率IR",FMT(d.ir.toFixed(2)),"var(--text)")}
+      ${card("卡玛比率",FMT(d.calmar.toFixed(2)),"var(--text)","年化收益/回撤")}
+      ${card("东财五维",d.avr?d.avr.toFixed(0):"—","var(--text)",dims)}
+      ${card("估值分位",d.valPct==null?"—":d.valPct+"%","var(--text)",d.valBasis||"")}
+      ${card("估值Z(120日)",d.z.toFixed(1),"var(--text)")}
+    </div>
+    <div class="kpi" style="margin-bottom:6px">
+      <span class="label">盈利可能性（蒙特卡洛）</span>
+      <div class="grid cols-4" style="gap:10px;margin-top:8px">
+        <div><div class="value" style="font-size:20px;color:${d.p1>=0.5?'var(--good)':'var(--warn)'}">${(d.p1*100).toFixed(0)}%</div><div class="hint">1个月</div></div>
+        <div><div class="value" style="font-size:20px;color:${d.p3>=0.5?'var(--good)':d.p3>=0.45?'var(--warn)':'var(--bad)'}">${(d.p3*100).toFixed(0)}%</div><div class="hint">3个月</div></div>
+        <div><div class="value" style="font-size:20px;color:${d.p6>=0.5?'var(--good)':d.p6>=0.45?'var(--warn)':'var(--bad)'}">${(d.p6*100).toFixed(0)}%</div><div class="hint">6个月</div></div>
+        <div><div class="value" style="font-size:20px;color:${d.p12>=0.5?'var(--good)':d.p12>=0.45?'var(--warn)':'var(--bad)'}">${(d.p12*100).toFixed(0)}%</div><div class="hint">1年</div></div>
+      </div>
+    </div>
 
-    <div class="plan-sec" style="margin-top:16px">📈 净值累计涨幅走势（本基金 vs 沪深300，起点=100）</div>
-    <div style="position:relative;height:240px"><canvas id="advNavCanvas"></canvas></div>
+    <div class="plan-sec" style="margin-top:12px">📈 净值累计涨幅走势（本基金 vs 沪深300，起点=100）</div>
+    <div style="position:relative;height:220px"><canvas id="advNavCanvas"></canvas></div>
 
-    <div class="plan-sec" style="margin-top:16px">📈 阶段涨幅走势对比（本基金 / 同类平均 / 沪深300 三条线）</div>
-    <div style="position:relative;height:240px"><canvas id="advStageCanvas"></canvas></div>
-    <div style="overflow-x:auto;margin-top:8px">
+    <div class="plan-sec" style="margin-top:12px">📈 阶段涨幅走势对比（本基金 / 同类平均 / 沪深300 三条线）</div>
+    <div style="position:relative;height:220px"><canvas id="advStageCanvas"></canvas></div>
+    <div style="overflow-x:auto;margin-top:6px">
       <table class="holdings" style="width:100%;font-size:12px">
         <thead><tr><th>阶段</th><th>本基金</th><th>同类平均</th><th>沪深300</th></tr></thead>
         <tbody>
-          ${d.stageGrowth.map(s=>`<tr><td>${s.label}</td><td style="color:${s.fund>=0?'var(--good)':'var(--bad)'}">${s.fund==null?'—':signPctPct(s.fund)}</td><td style="color:${s.peer>=0?'var(--good)':'var(--bad)'}">${s.peer==null?'—':signPctPct(s.peer)}</td><td style="color:${s.csi>=0?'var(--good)':'var(--bad)'}">${s.csi==null?'—':signPctPct(s.csi)}</td></tr>`).join("")}
+          ${d.stageGrowth.map(s=>`<tr><td>${s.label}</td><td style="color:${s.fund>=0?'var(--up)':'var(--down)'}">${s.fund==null?'—':signPctPct(s.fund)}</td><td style="color:${s.peer>=0?'var(--up)':'var(--down)'}">${s.peer==null?'—':signPctPct(s.peer)}</td><td style="color:${s.csi>=0?'var(--up)':'var(--down)'}">${s.csi==null?'—':signPctPct(s.csi)}</td></tr>`).join("")}
         </tbody>
       </table>
     </div>
 
-    <div class="plan-sec" style="margin-top:16px">📋 近 4 个季度涨幅（本基金）</div>
-    <div style="position:relative;height:200px"><canvas id="advQuarterCanvas"></canvas></div>
+    <div class="plan-sec" style="margin-top:12px">📋 近 4 个季度涨幅（本基金）</div>
+    <div style="position:relative;height:190px"><canvas id="advQuarterCanvas"></canvas></div>
 
-    <div class="plan-sec" style="margin-top:16px">🗓️ 年度涨幅走势对比（本基金 / 同类平均 / 沪深300 三条线）</div>
-    <div style="position:relative;height:220px"><canvas id="advYearCanvas"></canvas></div>
+    <div class="plan-sec" style="margin-top:12px">🗓️ 年度涨幅走势对比（本基金 / 同类平均 / 沪深300 三条线）</div>
+    <div style="position:relative;height:210px"><canvas id="advYearCanvas"></canvas></div>
 
-    <ul class="suggestions" style="margin-top:16px">${d.reasons.map(r=>`<li class="s-warn">${r}</li>`).join("")}</ul>
+    <ul class="suggestions" style="margin-top:12px">${d.reasons.map(r=>`<li class="s-warn">${r}</li>`).join("")}</ul>
     <div class="note">诊断基于历史统计与量化规则，仅供参考，不构成投资意见。</div>`;
+  // 先关闭其他弹窗，再显示诊断弹窗，最后渲染图表（保证 canvas 尺寸非 0）
+  closeAllocate(); closeRecoModal();
+  openAdvise();
   renderAdvCharts(d);
   window.__advisedCode=code; updateSummaries();
 }
