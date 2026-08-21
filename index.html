@@ -462,6 +462,15 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
 .trend-wrap{position:relative;height:300px}
 .prob-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 @media(max-width:760px){.prob-grid{grid-template-columns:repeat(2,1fr);gap:10px}}
+/* 盈利可能性卡片（renderProb 用）：阈值分色 + 清晰布局（原 .prob/.p/.t 无样式导致错位难读） */
+.prob{background:linear-gradient(180deg,rgba(24,24,30,.9),rgba(16,16,20,.92));border:1px solid var(--line);border-radius:12px;padding:14px 12px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.prob .p{font-size:34px;font-weight:800;font-family:var(--mono);line-height:1.1;letter-spacing:.5px}
+.prob .t{font-size:11.5px;color:var(--muted);line-height:1.5}
+.prob .bar{margin:8px 0 10px}
+.prob .exp{font-size:13px;font-weight:750;padding-top:8px;border-top:1px dashed var(--line);font-family:var(--mono)}
+.prob .exp .lbl{font-size:10.5px;color:var(--muted);font-weight:600;font-family:var(--sans,inherit)}
+.prob-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--muted)}
+.prob-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 .heat .corner{color:var(--muted);font-weight:400;background:transparent}
 .heat td{text-align:center;font-size:12px;color:#0b0b0d;font-weight:700;border-radius:6px}
 .spinner{width:16px;height:16px;border:2px solid rgba(232,179,57,.25);border-top-color:var(--gold);border-radius:50%;display:inline-block;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:6px}
@@ -1415,12 +1424,20 @@ function renderProb(mean,volDaily){
   });
   document.getElementById("probBox").innerHTML=`<div class="prob-grid">`+
     out.map(o=>{
-      const c=o.p>=0.6?"var(--good)":o.p>=0.45?"var(--warn)":"var(--bad)";
+      // 盈利概率阈值分色：≥60% 绿（较稳）/ 45-60% 橙黄（中性）/ <45% 红（谨慎）——与图例一致，一眼可读
+      const c=o.p>=0.6?"#34d399":o.p>=0.45?"#f0a23a":"#fb7185";
+      const ec=o.exp>=0?"#34d399":"#fb7185";
       return `<div class="prob"><div class="p" style="color:${c}">${(o.p*100).toFixed(0)}%</div>
         <div class="t">${o.t}盈利概率</div>
-        <div class="bar" style="margin-top:10px"><i style="width:${o.p*100}%;background:${c}"></i></div>
-        <div class="t" style="margin-top:8px">预期收益 ${signPct(o.exp)}</div></div>`;
-    }).join("")+`</div>`;
+        <div class="bar"><i style="width:${o.p*100}%;background:${c}"></i></div>
+        <div class="exp" style="color:${ec}">${signPct(o.exp)}
+          <span class="lbl" style="display:block">预期收益（${o.t}）</span></div></div>`;
+    }).join("")+
+    `</div><div class="prob-legend">
+      <span><i style="background:#34d399"></i>≥60% 较稳</span>
+      <span><i style="background:#f0a23a"></i>45-60% 中性</span>
+      <span><i style="background:#fb7185"></i>&lt;45% 谨慎</span>
+    </div>`;
 }
 
 function corrColor(v){ // 1 -> 红(警告), 0 -> 绿(好)
@@ -1637,17 +1654,34 @@ async function loadRecommend(){
         <div class="rf-head"><span class="rf-code">${f.code}</span><span class="rf-name">${f.name}</span>${peerTxt}
           <button class="rf-sel" id="sel-${f.code}" onclick="event.stopPropagation();toggleSel('${f.code}')">选入配资</button>
           <span class="badge" style="color:${vc};border-color:${vc}">${f.verdict}</span></div>
-        <div class="rf-meta"><span>综合评分 ${f.score}</span><span>建议配置 ${(f.weight*100).toFixed(0)}%</span><span>估值 ${valTxt}</span></div>
+        <div class="rf-meta"><span>综合评分 ${f.score}</span><span>建议配置 ${(f.weight*100).toFixed(0)}%</span><span>估值 ${valTxt}</span>
+          <span>1年盈利 <b style="color:${f.prob12==null?"var(--muted)":(f.prob12>=0.6?"#34d399":f.prob12>=0.45?"#f0a23a":"#fb7185")}">${f.prob12==null?"—":(f.prob12*100).toFixed(0)+"%"}</b></span></div>
         <ul class="rf-reasons">${rsnList}</ul></div>`;
     }).join("");
     return `<div class="reco-cat"><div class="reco-cat-h">${cat} <span class="muted" style="font-weight:600">${catW}</span></div>${catReason}${rows}</div>`;
   }).join("") || '<span class="muted">基金池校验未通过（数据源海外受限），请手动搜索代码添加。</span>';
   const dynBanner = `<div class="dyn-banner"><svg class="i"><use href="#i-activity"/></svg> <b>动态实时推荐</b>（非内置名单）：本次实时扫描全市场 <b>${d.universe}</b> 只候选基金，按多因子评分精选。数据更新于 <b>${d.generatedAt||"—"}</b>（每 30 分钟自动重扫）。</div>`;
   const warnBanner = (d.note && d.note.indexOf("暂不可用")>=0) ? `<div class="warn-banner">⚠️ 部分品类实时榜单在本节点暂不可用，已留空（可手动添加对应基金）。</div>` : "";
+  // 推荐组合级盈利预期（后端蒙特卡洛对数近似，按推荐权重加权）
+  const rp=d.recoProb||{};
+  let probHtml="";
+  if(rp && rp.p12m!=null){
+    const pc=v=>v==null?"var(--muted)":(v>=0.6?"#34d399":v>=0.45?"#f0a23a":"#fb7185");
+    const ec=v=>v==null?"var(--muted)":(v>=0?"#34d399":"#fb7185");
+    const span=(t,p,e)=>`<span>${t} <b style="color:${pc(p)}">${p==null?"—":(p*100).toFixed(0)+"%"}</b> 预期 <b style="color:${ec(e)}">${e==null?"—":signPct(e)}</b></span>`;
+    probHtml=`<div class="note" style="margin:10px 0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03)">
+      <div style="font-size:13px;font-weight:700;margin-bottom:6px"><svg class="i"><use href="#i-trending-up"/></svg> 推荐组合盈利预期（蒙特卡洛模拟，按推荐权重）</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">
+        ${span("1月",rp.p1m,rp.exp1m)}${span("3月",rp.p3m,rp.exp3m)}${span("6月",rp.p6m,rp.exp6m)}${span("1年",rp.p12m,rp.exp12m)}
+      </div>
+      <div class="muted" style="font-size:10.5px;margin-top:4px">盈利概率：≥60% 绿（较稳）/ 45-60% 橙（中性）/ &lt;45% 红（谨慎）；预期收益：正绿负红。按近 3 年历史波动假设模拟，非收益承诺。</div>
+    </div>`;
+  }
   box.innerHTML=`
     ${dynBanner}
     ${warnBanner}
     <div class="note" style="margin-bottom:10px"><svg class="i"><use href="#i-bar-chart"/></svg> <b>市场环境：</b>${regimeTxt}</div>
+    ${probHtml}
     <div style="font-size:13px;font-weight:600;margin:6px 0">建议资产配置比例</div>
     ${allocHtml}
     ${valHtml}
