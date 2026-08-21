@@ -2391,12 +2391,12 @@ async function runAdvise(){
     <div class="grid cols-3" style="gap:10px;margin-bottom:6px">
       ${card("基金类型",d.type||"—","var(--text)")}
       ${card("基金经理",mgr,"var(--text)")}
-      ${card("近一年收益",signPctPct(d.r250),upDown(d.r250))}
+      ${card("近一年收益",pct(d.r250),upDown(d.r250))}
       ${card("年化波动",pct(d.vol),vg.color,vg.label)}
       ${card("最大回撤",pct(d.mdd),"var(--down)")}
       ${card("夏普比率",FMT(d.sharpe.toFixed(2)),sharpeColor)}
       ${card("Beta(对沪深300)",FMT(d.beta.toFixed(2)),d.beta>1.1?"var(--warn)":d.beta<0.9?"var(--good)":"var(--text)",d.beta>1.1?"高弹性":d.beta<0.9?"防御":"同步")}
-      ${card("年化Alpha",signPctPct(d.alpha),upDown(d.alpha),"超越市场的主动收益")}
+      ${card("年化Alpha",pct(d.alpha),upDown(d.alpha),"超越市场的主动收益")}
       ${card("信息比率IR",FMT(d.ir.toFixed(2)),"var(--text)")}
       ${card("卡玛比率",FMT(d.calmar.toFixed(2)),"var(--text)","年化收益/回撤")}
       ${card("东财五维",d.avr?d.avr.toFixed(0):"—","var(--text)",dims)}
@@ -2422,7 +2422,7 @@ async function runAdvise(){
       <table class="holdings" style="width:100%;font-size:12px">
         <thead><tr><th>阶段</th><th>本基金</th><th>同类平均</th><th>沪深300</th></tr></thead>
         <tbody>
-          ${d.stageGrowth.map(s=>`<tr><td>${s.label}</td><td style="color:${s.fund>=0?'var(--up)':'var(--down)'}">${s.fund==null?'—':signPctPct(s.fund)}</td><td style="color:${s.peer>=0?'var(--up)':'var(--down)'}">${s.peer==null?'—':signPctPct(s.peer)}</td><td style="color:${s.csi>=0?'var(--up)':'var(--down)'}">${s.csi==null?'—':signPctPct(s.csi)}</td></tr>`).join("")}
+          ${d.stageGrowth.map(s=>`<tr><td>${s.label}</td><td style="color:${s.fund>=0?'var(--up)':'var(--down)'}">${s.fund==null?'—':pct(s.fund)}</td><td style="color:${s.peer>=0?'var(--up)':'var(--down)'}">${s.peer==null?'—':pct(s.peer)}</td><td style="color:${s.csi>=0?'var(--up)':'var(--down)'}">${s.csi==null?'—':pct(s.csi)}</td></tr>`).join("")}
         </tbody>
       </table>
     </div>
