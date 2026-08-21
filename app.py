@@ -93,6 +93,12 @@ def cached(category, key, ttl, fn):
     if item and now_ts - item[0] < item[1]:
         return item[2]
     val = fn()
+    # 空结果不缓存：避免网络抖动（如指数行情 host 临时封锁）把空值写入缓存，
+    # 导致共享同一 cache key 的路由整天返回空壳。
+    _empty = (val in (None, "", 0) or (isinstance(val, (list, dict)) and len(val) == 0)
+              or (category == "index" and isinstance(val, dict) and not val.get("values")))
+    if _empty:
+        return val
     _CACHE[ck] = (now_ts, ttl, val)
     return val
 
@@ -629,61 +635,56 @@ def _norm_secid(secid):
     return s
 
 
+def _secid_to_sina(secid):
+    """东财 secid(1.000300 / 0.399006) → 新浪 symbol(sh000300 / sz399006)；海外/其他返回 None。"""
+    if "." not in secid:
+        return None
+    m, code = secid.split(".", 1)
+    if m == "1":
+        return "sh" + code
+    if m == "0":
+        return "sz" + code
+    return None
+
+
 def _get_index_kline(secid, days=300):
-    """指数日线收盘序列（多 host 重试，失败容错返回 [] 而非抛异常）。"""
-    secid = _norm_secid(secid)
-    hosts = ["https://push2his.eastmoney.com", "https://push2.eastmoney.com", "https://quote.eastmoney.com"]
-    for host in hosts:
-        try:
-            url = host + ("/api/qt/stock/kline/get?secid=%s&fields1=f1&fields2=f51,f53&klt=101&fqt=1&beg=0&end=20500101" % secid)
-            txt = fetch(url, headers={"Referer": "https://quote.eastmoney.com/"}, timeout=15)
-            if not txt:
-                continue
-            d = json.loads(txt)
-            klines = (d.get("data") or {}).get("klines") or []
-            rows = []
-            for k in klines:
-                parts = k.split(",")
-                if len(parts) >= 2:
-                    try:
-                        rows.append(float(parts[1]))
-                    except Exception:
-                        pass
-            if rows:
-                return rows[-days:]
-        except Exception:
-            continue
-    return []
+    """指数日线收盘序列（新浪 K 线；东财 push2his 行情 host 已封锁本机 IP，改用新浪）。
+    返回按时间升序的收盘价列表；失败容错返回 []。"""
+    sym = _secid_to_sina(secid)
+    if not sym:
+        return []
+    url = ("https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+           "CN_MarketData.getKLineData?symbol=%s&scale=240&ma=no&datalen=%d" % (sym, max(60, int(days))))
+    try:
+        txt = fetch(url, headers={"Referer": "https://finance.sina.com.cn/",
+                                  "User-Agent": "Mozilla/5.0"}, timeout=15)
+        arr = json.loads(txt)
+        closes = [float(x["close"]) for x in arr if x.get("close")]
+        return closes[-days:] if days and len(closes) > days else closes
+    except Exception:
+        return []
 
 
 def _get_index_series(secid, days=800):
-    """返回指数日期序列与收盘值，用于组合走势基准对比（多 host 重试容错）。"""
-    secid = _norm_secid(secid)
-    hosts = ["https://push2his.eastmoney.com", "https://push2.eastmoney.com", "https://quote.eastmoney.com"]
-    for host in hosts:
-        try:
-            url = host + ("/api/qt/stock/kline/get?secid=%s&fields1=f1&fields2=f51,f53&klt=101&fqt=1&beg=0&end=20500101" % secid)
-            txt = fetch(url, headers={"Referer": "https://quote.eastmoney.com/"}, timeout=15)
-            if not txt:
-                continue
-            d = json.loads(txt)
-            klines = (d.get("data") or {}).get("klines") or []
-            dates, values = [], []
-            for k in klines:
-                parts = k.split(",")
-                if len(parts) >= 2:
-                    try:
-                        dates.append(parts[0])
-                        values.append(float(parts[1]))
-                    except Exception:
-                        pass
-            if values:
-                if days:
-                    dates, values = dates[-days:], values[-days:]
-                return {"dates": dates, "values": values}
-        except Exception:
-            continue
-    return {"dates": [], "values": []}
+    """返回指数日期序列与收盘值，用于组合走势基准对比（新浪 K 线）。"""
+    sym = _secid_to_sina(secid)
+    if not sym:
+        return {"dates": [], "values": []}
+    url = ("https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+           "CN_MarketData.getKLineData?symbol=%s&scale=240&ma=no&datalen=%d" % (sym, max(60, int(days))))
+    try:
+        txt = fetch(url, headers={"Referer": "https://finance.sina.com.cn/",
+                                  "User-Agent": "Mozilla/5.0"}, timeout=15)
+        arr = json.loads(txt)
+        dates, values = [], []
+        for x in arr:
+            if x.get("day") and x.get("close"):
+                dates.append(x["day"]); values.append(float(x["close"]))
+        if days and len(values) > days:
+            dates, values = dates[-days:], values[-days:]
+        return {"dates": dates, "values": values}
+    except Exception:
+        return {"dates": [], "values": []}
 
 
 def _bench_daily_returns(days=730):
@@ -1975,6 +1976,176 @@ def build_allocate(funds, principal, existing=None):
             "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 
+# ---------------- 单基金诊断：图表与对比数据增强 ----------------
+def _get_f10_stage(code):
+    """东方财富 F10 阶段涨幅表：本基金 / 同类平均 / 沪深300 三列。
+    数据源 FundArchivesDatas.aspx?type=jdzf（datatype 路径已 404）。返回 {阶段名:{fund,peer,csi}}。"""
+    url = "https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jdzf&code=%s" % code
+    try:
+        txt = fetch(url, headers={"Referer": "https://fundf10.eastmoney.com/",
+                                  "User-Agent": "Mozilla/5.0"}, timeout=12)
+    except Exception:
+        return {}
+    m = re.search(r"content:\"(.*?)\"", txt, re.S)
+    if not m:
+        return {}
+    content = m.group(1).replace("\\/", "/").replace('\\"', '"')
+    uls = re.findall(r"<ul[^>]*>(.*?)</ul>", content, re.S)
+    out = {}
+    for ul in uls:
+        if "fcol" in ul[:60]:   # 跳过表头 ul
+            continue
+        tm = re.search(r"<li class='title'>([^<]*)</li>", ul)
+        if not tm:
+            continue
+        label = tm.group(1).strip()
+        vals = re.findall(r">(-?\d+\.?\d*)%</li>", ul)
+        if len(vals) < 3:
+            vals = [v for v in re.findall(r">(-?\d+\.?\d*)%", ul)[:3]]
+        if len(vals) < 3:
+            continue
+
+        def _p(x):
+            try:
+                return float(x)
+            except Exception:
+                return None
+        out[label] = {"fund": _p(vals[0]), "peer": _p(vals[1]), "csi": _p(vals[2])}
+    return out
+
+
+def _enrich_diagnosis(code):
+    """返回诊断图表所需数据：净值累计走势、阶段涨幅(本基金/同类/沪深300)、
+    年度涨幅、季度涨幅。同类平均来自 F10（失败则 null，前端降级）。"""
+    hist = get_history(code, 1500)
+    data = hist.get("data") or []
+    dates = [d["date"] for d in data]
+    closes = [float(d["nav"]) for d in data]
+    n = len(closes)
+    csi = cached("index", "1.000300", _daily_ttl(), lambda: _get_index_series("1.000300", 1500))
+    csi_dates = csi.get("dates") or []
+    csi_vals = [float(v) for v in (csi.get("values") or [])]
+
+    # ---- 净值累计涨幅走势（本基金 vs 沪深300，起点=100）----
+    f10 = cached("f10stage", code, _daily_ttl(), lambda: _get_f10_stage(code))
+    nav_trend = {"dates": dates, "fund": [], "csi": []}
+    if n:
+        base = closes[0]
+        nav_trend["fund"] = [round(c / base * 100 - 100, 2) for c in closes]
+    if csi_vals:
+        c0 = csi_vals[0]
+        ji = 0
+        for dt in dates:
+            while ji < len(csi_dates) and csi_dates[ji] < dt:
+                ji += 1
+            k = ji - 1
+            if k < 0:
+                nav_trend["csi"].append(None)   # 指数数据起始前的区间留空，避免折线被钉成 0
+            else:
+                nav_trend["csi"].append(round(csi_vals[k] / c0 * 100 - 100, 2))
+    else:
+        nav_trend["csi"] = [None] * n
+
+    # ---- 区间定位辅助 ----
+    def idx_after(target):
+        for i, d in enumerate(dates):
+            if d >= target:
+                return i
+        return n - 1
+    def idx_before(target):
+        res = 0
+        for i, d in enumerate(dates):
+            if d <= target:
+                res = i
+            else:
+                break
+        return res
+    def csi_idx_after(target):
+        for i, d in enumerate(csi_dates):
+            if d >= target:
+                return i
+        return len(csi_vals) - 1
+    def csi_idx_before(target):
+        res = 0
+        for i, d in enumerate(csi_dates):
+            if d <= target:
+                res = i
+            else:
+                break
+        return res
+
+    # ---- 阶段涨幅（本基金 computed；同类/沪深300 优先 F10，否则 computed）----
+    def stage_fund(k):
+        return round(closes[-1] / closes[-1 - k] - 1, 4) if n > k else None
+    def stage_csi(k):
+        return round(csi_vals[-1] / csi_vals[-1 - k] - 1, 4) if len(csi_vals) > k else None
+    def f10v(label):
+        e = f10.get(label)
+        if not e:
+            return (None, None, None)
+        return (e["fund"], e["peer"], e["csi"])
+
+    stage_growth = []
+    for label, k in [("近1周", 5), ("近1月", 21), ("近3月", 63), ("近6月", 126),
+                     ("近1年", 252), ("近2年", 504), ("近3年", 756)]:
+        fr = stage_fund(k)
+        cr = stage_csi(k)
+        pf, pp, pc = f10v(label)
+        peer = (pp / 100.0) if pp is not None else None
+        csi_v = (pc / 100.0) if pc is not None else cr
+        stage_growth.append({"label": label, "fund": fr, "peer": peer, "csi": csi_v})
+    if n:  # 成立以来
+        fr = round(closes[-1] / closes[0] - 1, 4)
+        cr = round(csi_vals[-1] / csi_vals[0] - 1, 4) if csi_vals else None
+        pf, pp, pc = f10v("成立以来")
+        peer = (pp / 100.0) if pp is not None else None
+        csi_v = (pc / 100.0) if pc is not None else cr
+        stage_growth.append({"label": "成立以来", "fund": fr, "peer": peer, "csi": csi_v})
+
+    # ---- 年度涨幅（近 3 个完整自然年）----
+    years = sorted({int(d[:4]) for d in dates})
+    full_years = [y for y in years if y < max(years)] if years else []
+    full_years = full_years[-3:]
+    year_growth = []
+    for y in full_years:
+        s_i = idx_after("%d-01-01" % y)
+        e_i = idx_before("%d-12-31" % y)
+        fr = round(closes[e_i] / closes[s_i] - 1, 4) if e_i > s_i else None
+        cs = csi_idx_after("%d-01-01" % y)
+        ce = csi_idx_before("%d-12-31" % y)
+        cr = round(csi_vals[ce] / csi_vals[cs] - 1, 4) if (csi_vals and ce > cs) else None
+        pp = f10.get("%d年" % y, {}).get("peer")
+        peer = (pp / 100.0) if pp is not None else None
+        year_growth.append({"year": y, "fund": fr, "peer": peer, "csi": cr})
+
+    # ---- 季度涨幅（近 4 个季度）----
+    def qend(y, m):
+        if m <= 3:
+            return (y - 1, 12, 31)
+        if m <= 6:
+            return (y, 3, 31)
+        if m <= 9:
+            return (y, 6, 30)
+        return (y, 9, 30)
+    q_res = []
+    if dates:
+        y, m = int(dates[-1][:4]), int(dates[-1][5:7])
+        for _ in range(4):
+            ey, em, ed = qend(y, m)
+            py, pm, pd = qend(ey, em)
+            end_i = idx_before("%04d-%02d-%02d" % (ey, em, ed))
+            start_i = idx_before("%04d-%02d-%02d" % (py, pm, pd))
+            fr = round(closes[end_i] / closes[start_i] - 1, 4) if end_i > start_i else None
+            q_res.append({"label": "%dQ%d" % (ey, em // 3), "fund": fr})
+            y, m = ey, em
+        q_res.reverse()
+    quarter_growth = q_res
+
+    return {"navTrend": nav_trend, "stageGrowth": stage_growth,
+            "yearGrowth": year_growth, "quarterGrowth": quarter_growth,
+            "peerAvailable": any((s.get("peer") is not None) for s in stage_growth)}
+
+
 def advise_fund(code, capital=100000):
     fac = _compute_factors(code)
     if fac is None:
@@ -2018,6 +2189,7 @@ def advise_fund(code, capital=100000):
     amount = int(cap * capital)
 
     reasons = _build_reasons(fac, verdict, cap, amount, capital, p1, p3, p6, p12)
+    enr = _enrich_diagnosis(code)
 
     return {"ok": True, "code": code, "name": fac["name"], "type": fac["type"],
             "nav": fac["nav"], "navDate": fac["navDate"], "score": composite, "verdict": verdict,
@@ -2028,7 +2200,10 @@ def advise_fund(code, capital=100000):
             "avr": fac["avr"], "dims": fac["dims"],
             "valPct": fac["valPct"], "valBasis": fac["valBasis"],
             "managers": fac["managers"], "tenure": fac["tenure"],
-            "p1": p1, "p3": p3, "p6": p6, "p12": p12, "reasons": reasons}
+            "p1": p1, "p3": p3, "p6": p6, "p12": p12, "reasons": reasons,
+            "navTrend": enr["navTrend"], "stageGrowth": enr["stageGrowth"],
+            "yearGrowth": enr["yearGrowth"], "quarterGrowth": enr["quarterGrowth"],
+            "peerAvailable": enr["peerAvailable"]}
 
 
 # ---------------- HTTP 服务 ----------------
