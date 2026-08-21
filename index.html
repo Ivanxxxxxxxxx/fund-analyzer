@@ -1130,8 +1130,8 @@ async function renderPlanOverview(){
   // 持有月数：新字段 months；兼容旧数据 years（年）
   const months=Math.max(1,Math.min(360, +plan.months || ((+plan.years||5)*12) || 60));
   const A=Math.max(0, +(JSON.parse(localStorage.getItem("fp_dca")||"{}").amount)||0);
-  if(!P && !holdings.length){
-    box.innerHTML='<div class="empty">用「智能决策 → 一键配置最优基金」输入本金、每月定投、持有时间并建仓后，这里自动生成投资概览与复利曲线。</div>';
+  if(!holdings.length){
+    box.innerHTML='<div class="empty">投资概览基于你的实际持仓计算。用「智能决策 → 一键配置最优基金」输入本金、每月定投、持有时间并建仓后，这里自动生成投资概览与复利曲线。</div>';
     return;
   }
   // 年化收益/波动：优先按【实际持仓】实时计算（一键配置选的 N 只基金，市值加权）
@@ -1239,7 +1239,7 @@ function renderHoldings(){
 function setVal(i,v){ holdings[i].value=Math.max(0,+v||0); saveHoldings(); renderHoldings(); }
 function setCost(i,v){ holdings[i].cost=Math.max(0,+v||0); saveHoldings(); renderHoldings(); }
 function delFund(i){ holdings.splice(i,1); saveHoldings(); renderHoldings(); }
-function clearAll(){ confirmDialog("确定清空所有持仓？", "此操作不可撤销，示例与真实持仓都会清除。", ()=>{ holdings=[]; saveHoldings(); renderHoldings(); setDataStamp(); toast("已清空组合"); }); }
+function clearAll(){ confirmDialog("确定清空所有持仓？", "此操作不可撤销，示例与真实持仓都会清除，投资计划（本金/定投/持有时间）一并清空。", ()=>{ holdings=[]; saveHoldings(); localStorage.removeItem("fp_plan"); localStorage.removeItem("fp_dca"); renderHoldings(); setDataStamp(); toast("已清空组合与投资计划"); }); }
 let __cfCb=null;
 function confirmDialog(title, msg, onYes){
   __cfCb=onYes;
