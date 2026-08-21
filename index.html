@@ -220,7 +220,7 @@ table.plan th{color:var(--muted);font-weight:600}
   background:linear-gradient(180deg, rgba(26,26,32,.99), rgba(15,15,19,.99));
   border:1px solid rgba(232,179,57,.22);border-radius:18px;padding:22px 22px 20px;
   box-shadow:0 30px 80px rgba(0,0,0,.65)}
-.modal-head{position:relative;flex:none;padding-right:48px;display:grid;grid-template-columns:1fr auto;column-gap:8px;align-items:start}
+.modal-head{position:relative;flex:none;padding-right:0;display:grid;grid-template-columns:1fr auto;column-gap:8px;align-items:start}
 .modal-head h2{grid-column:1;grid-row:1;min-width:0}
 .modal-head .sub{grid-column:1/3;grid-row:2;min-width:0}
 .modal-body{overflow:auto;min-height:0;display:flex;flex-direction:column;gap:6px}
@@ -597,7 +597,31 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
           <button class="btn-primary btn-sm" onclick="loadRecommend()">🔄 生成推荐</button>
         </span>
       </h3>
-      <div id="recoBox"><div class="empty">点击「生成推荐」，工具将抓取沪深300等指数判断市场温度，给出股/债/货/QDII 配置比例与精选基金。生成后在弹窗中展示完整结果与一键配置。</div></div>
+      <div id="recoBox"><div class="empty">点击「生成推荐」，工具将抓取沪深300等指数判断市场温度，给出股/债/货/QDII 配置比例与精选基金。生成后在弹窗中展示完整结果，卡片下方可直接一键配置。</div></div>
+      <div class="setup-card">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
+          <svg class="i"><use href="#i-zap"/></svg> 一键配置最优基金
+          <span class="muted" style="font-size:11px;font-weight:600">按综合分择优（同类≤2只防扎堆）分配本金、建立仓位，支持每月定投</span>
+        </div>
+        <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
+          <div>
+            <div class="muted" style="font-size:11px;margin-bottom:4px">基金数量</div>
+            <input id="setupN" type="number" value="3" min="1" max="10" inputmode="numeric"
+              style="width:74px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600">
+          </div>
+          <div>
+            <div class="muted" style="font-size:11px;margin-bottom:4px">本金（¥）</div>
+            <input id="setupP" type="number" value="100000" min="0" step="1000" inputmode="decimal"
+              style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600">
+          </div>
+          <div>
+            <div class="muted" style="font-size:11px;margin-bottom:4px">每月定投（¥，0=不定投）</div>
+            <input id="setupD" type="number" value="1000" min="0" step="100" inputmode="decimal"
+              style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600">
+          </div>
+          <button class="btn-primary" onclick="quickSetup()" style="padding:9px 16px">⚡ 一键配置建仓</button>
+        </div>
+      </div>
     </div>
 
     <!-- 单基金买入诊断 -->
@@ -1685,23 +1709,7 @@ async function loadRecommend(){
     <div class="note" style="margin:12px 0">${d.note||""}</div>
     <div style="font-size:13px;font-weight:600;margin:6px 0">各品类动态精选基金（实时榜单＋多因子，点击直接加入组合）</div>
     <div style="margin-top:8px">${fundHtml}</div>
-    <div class="note">以上为结合市场温度与估值的参考配置，非投资建议；具体基金请以实时净值为准。</div>
-    <div class="setup-card">
-      <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
-        <svg class="i"><use href="#i-zap"/></svg> 一键配置最优基金
-        <span class="muted" style="font-size:11px;font-weight:600">按综合分择优（同类≤2只防扎堆）分配本金、建立仓位，支持每月定投</span>
-      </div>
-      <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
-        <div><div class="muted" style="font-size:11px;margin-bottom:4px">基金数量</div>
-          <input id="setupN" type="number" value="3" min="1" max="10" inputmode="numeric" style="width:74px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
-        <div><div class="muted" style="font-size:11px;margin-bottom:4px">本金（¥）</div>
-          <input id="setupP" type="number" value="100000" min="0" step="1000" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
-        <div><div class="muted" style="font-size:11px;margin-bottom:4px">每月定投（¥，0=不定投）</div>
-          <input id="setupD" type="number" value="1000" min="0" step="100" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
-        <button class="btn-primary" onclick="quickSetup()" style="padding:9px 16px">⚡ 一键配置建仓</button>
-      </div>
-      <div class="muted" style="font-size:11px;margin-top:6px">建仓后自动关闭弹窗并跳转到「我的组合」查看效果。</div>
-    </div>`;
+    <div class="note">以上为结合市场温度与估值的参考配置，非投资建议；具体基金请以实时净值为准。一键配置在卡片下方（本弹窗关闭后即可看到）。</div>`;
   // === 卡片 recoBox 改为简短摘要，完整内容塞进弹窗 ===
   const summaryHtml = `<div class="empty" style="text-align:left;padding:18px 14px">
     <div style="font-size:14px;font-weight:700;margin-bottom:8px"><svg class="i"><use href="#i-sparkles"/></svg> 智能配置推荐已生成</div>
@@ -1801,6 +1809,15 @@ function toggleSel(code){
     if(b){ b.classList.add("on"); b.textContent="已选 ✓"; }
   }
   renderSelBar();
+  renderSelList();   // 弹窗开着时同步刷新已选列表（修复"点✕删不掉"：原来只删数据不刷新UI）
+}
+// 渲染配资弹窗的已选基金列表（openAllocate / toggleSel 共用）
+function renderSelList(){
+  const sl=document.getElementById("selList"); if(!sl) return;
+  sl.innerHTML=[...selFunds.values()].map(v=>
+    `<div class="sel-row"><span class="rf-code">${v.code}</span><span style="flex:1">${v.name}</span><span class="muted">${((v.weight||0)*100).toFixed(0)}%</span><button class="x" onclick="toggleSel('${v.code}')">✕</button></div>`).join("");
+  // 空态提示
+  if(!selFunds.size) sl.innerHTML='<div class="muted" style="font-size:12px;padding:6px 2px">还没有选入基金，点击推荐卡片上的「选入配资」添加。</div>';
 }
 function clearSel(){
   selFunds.forEach((v,k)=>{ const b=document.getElementById("sel-"+k); if(b){ b.classList.remove("on"); b.textContent="选入配资"; } });
@@ -1832,6 +1849,7 @@ function openAllocate(){
   }
   document.getElementById("selList").innerHTML=[...selFunds.values()].map(v=>
     `<div class="sel-row"><span class="rf-code">${v.code}</span><span style="flex:1">${v.name}</span><span class="muted">${(v.weight*100).toFixed(0)}%</span><button class="x" onclick="toggleSel('${v.code}')">✕</button></div>`).join("");
+  if(!selFunds.size) document.getElementById("selList").innerHTML='<div class="muted" style="font-size:12px;padding:6px 2px">还没有选入基金，点击推荐卡片上的「选入配资」添加。</div>';
   document.getElementById("planBox").innerHTML="";
   document.getElementById("allocOverlay").classList.add("show");
 }
