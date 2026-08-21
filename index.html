@@ -1165,15 +1165,23 @@ async function renderPlanOverview(){
     p5.push([mm,Math.round(arr[Math.floor(SIMS*0.05)])]); p50.push([mm,Math.round(arr[Math.floor(SIMS*0.5)])]); p95.push([mm,Math.round(arr[Math.floor(SIMS*0.95)])]);
   }
   const mid=p50[months][1], gain=mid-totalCost;
+  // 三个情景的预期收益：中位 / 理想（无波动复利）/ 悲观（5% 分位）
+  const idealGain=idealY[months][1]-totalCost, p5Gain=p5[months][1]-totalCost;
   const yrTxt = months%12===0 ? (months/12)+" 年" : months+" 个月";
-  const stat=(l,v,s)=>`<div style="background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0"><div style="font-size:11px;color:var(--muted)">${l}</div><div style="font-size:16px;font-weight:750;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v}</div>${s?`<div style="font-size:10.5px;color:var(--muted)">${s}</div>`:""}</div>`;
+  const gainCol=v=>v>=0?"var(--up)":"var(--down)";      // 红涨绿跌（A股习惯）
+  const fmtGain=v=>(v>=0?"+":"-")+yuan(Math.abs(v));
+  const stat=(l,v,s,col)=>`<div style="background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0"><div style="font-size:11px;color:var(--muted)">${l}</div><div style="font-size:16px;font-weight:750;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis${col?`;color:${col}`:""}">${v}</div>${s?`<div style="font-size:10.5px;color:var(--muted)">${s}</div>`:""}</div>`;
   box.innerHTML=`
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px">
       ${stat("初始本金", yuan(P), plan.principal?"一键配置时输入":"手动持仓")}
       ${stat("每月定投", A>0?yuan(A):"—", A>0?("×"+months+" 个月 · 共 "+yuan(A*months)):"未设置定投")}
       ${stat("总成本", yuan(totalCost), P+" + "+A+"×"+months)}
-      ${stat("预期总金额", yuan(mid), yrTxt+"后中位情景")}
-      ${stat("预期收益", (gain>=0?"+":"-")+yuan(Math.abs(gain)), "年化 "+ (r*100).toFixed(1) +"%")}
+      ${stat("预期总金额（中位）", yuan(mid), yrTxt+"后中位情景")}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      ${stat("预期收益（中位）", fmtGain(gain), "年化 "+ (r*100).toFixed(1) +"%", gainCol(gain))}
+      ${stat("理想预期收益", fmtGain(idealGain), "无波动复利", gainCol(idealGain))}
+      ${stat("悲观预期收益", fmtGain(p5Gain), "5% 分位最差情景", gainCol(p5Gain))}
     </div>
     <div style="position:relative;height:240px"><canvas id="planChartCanvas"></canvas></div>
     <div class="note" style="font-size:11px;margin-top:8px">年化收益 ${(r*100).toFixed(1)}% · 波动 ${(vol*100).toFixed(0)}% —— 按你<b>实际持仓 ${holdings.length} 只基金</b>的历史净值（市值加权）实时计算${stats?"，每只基金近 2 年数据":""}；理想=无波动复利、中位=50%分位、悲观/乐观=5%/95% 分位（${SIMS} 条路径）。模拟基于历史假设，非收益承诺。</div>`;
