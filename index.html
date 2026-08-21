@@ -1005,6 +1005,10 @@ function renderConfigHealth(){
     <div class="row" style="gap:4px;margin-bottom:10px">${bars}</div>
     <div style="display:flex;flex-direction:column;gap:5px">
       ${tips.map(t=>`<div style="font-size:12px;line-height:1.65;color:${t.lv==="good"?"var(--good)":t.lv==="warn"?"var(--warn)":"var(--bad)"}">${t.t}</div>`).join("")}
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn-primary btn-sm" onclick="rebalancePortfolio()">⚡ 一键再平衡仓位</button>
+      <span class="muted" style="font-size:11px">按「推荐大类配置 + 基金综合分」重新分配仓位，总市值不变；已生成过推荐时自动对齐推荐比例</span>
     </div>`;
 }
 
@@ -1126,7 +1130,7 @@ let __cfCb=null;
 function confirmDialog(title, msg, onYes){
   __cfCb=onYes;
   document.getElementById("cfTitle").textContent=title;
-  document.getElementById("cfMsg").textContent=msg;
+  document.getElementById("cfMsg").innerHTML=msg;
   document.getElementById("confirmOverlay").classList.add("show");
   document.getElementById("cfYes").onclick=()=>{ const cb=__cfCb; closeConfirm(); if(cb) cb(); };
 }
@@ -1471,7 +1475,8 @@ function renderSugg(ctx){
     else if(corrAvg>0.7) items.push({lv:"warn",t:`平均相关性 ${corrAvg.toFixed(2)} 偏高，可适度补充防御或跨市场品种。`});
     else items.push({lv:"good",t:`平均相关性 ${corrAvg.toFixed(2)}，分散效果较好。`});
     let mi=0,mj=1,mv=-1; for(let i=0;i<holdings.length;i++)for(let j=i+1;j<holdings.length;j++) if(corr[i][j]>mv){mv=corr[i][j];mi=i;mj=j;}
-    if(mv>0.85) items.push({lv:"warn",t:`<b>${holdings[mi].code}</b> 与 <b>${holdings[mj].code}</b> 相关性 ${mv.toFixed(2)}，几乎同涨同跌。下方已给出具体替换方案。`});
+    if(mv>0.85) items.push({lv:"warn",t:`<b>${holdings[mi].name||holdings[mi].code}</b> 与 <b>${holdings[mj].name||holdings[mj].code}</b> 相关性 ${mv.toFixed(2)}，几乎同涨同跌。同赛道/同指数基金天然高相关，换同类易陷入循环；建议二选一保留，把另一只资金改配债券/货币等低相关资产，或先降低其一占比。<br>
+      <button class="btn-ghost btn-sm" style="margin-top:6px" onclick="rebalanceFund('${holdings[mi].code}',0.3)">⚡ 将 ${holdings[mi].code} 降至 30%</button>`});
   }
   if(maxDD<-0.3) items.push({lv:"warn",t:`历史最大回撤 ${pct(maxDD)}，高于舒适区间，可下调高波动仓位或增配防御资产。`});
   if(sharpe<0.5) items.push({lv:"warn",t:`夏普比率 ${sharpe.toFixed(2)} 偏低，单位风险回报不足，建议优化持仓结构。`});
@@ -2045,6 +2050,60 @@ function rebalanceFund(code, targetPct){
   saveHoldings(); renderHoldings(); setDataStamp();
   if(window.analyze) analyze();
   toast("已将 "+h.name+" 降至 "+(targetPct*100).toFixed(0)+"%（市值 "+yuan(target)+"），释放 "+yuan(released)+" 可再配置到其他基金");
+}
+
+// 一键再平衡仓位：综合「推荐大类配置 + 单基金综合分」重新分配全部持仓，总市值不变。
+// 生成推荐后自动对齐推荐的大类比例（权益/海外/债券/货币/黄金），类内按综合分分配；
+// 未生成推荐时保持当前大类占比、类内按综合分优化。执行前展示加减仓计划确认。
+function rebalancePortfolio(){
+  if(!holdings.length){ toast("组合为空，无法再平衡"); return; }
+  const total=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
+  // 大类归类（与配置合理性速览一致；QDII 优先于权益，因名称常含"指数"）
+  const cats={ "海外(QDII)":{kw:["QDII","海外","纳指","标普","恒生","港股"]},
+               "权益":{kw:["股票","混合","指数"]},
+               "债券":{kw:["债券","债"]},
+               "货币":{kw:["货币"]},
+               "黄金":{kw:["黄金"]} };
+  const clsOf=holdings.map(h=>{ const t=(h.asset||"")+" "+(h.type||"")+" "+(h.name||""); let hit=null; for(const k in cats){ if(cats[k].kw.some(w=>t.includes(w))){ hit=k; break; } } return hit||"权益"; });
+  // 目标大类权重：有推荐用推荐配置（归一化），无推荐保持当前大类占比
+  const target={};
+  if(window.__recoAlloc && Object.keys(window.__recoAlloc).length){
+    target["权益"]=window.__recoAlloc["股票型"]||0;
+    target["海外(QDII)"]=window.__recoAlloc["海外(QDII)"]||0;
+    target["债券"]=window.__recoAlloc["债券型"]||0;
+    target["货币"]=window.__recoAlloc["货币型"]||0;
+    target["黄金"]=window.__recoAlloc["黄金"]||0;
+    const s=Object.values(target).reduce((a,b)=>a+b,0);
+    if(s>0) Object.keys(target).forEach(k=>target[k]/=s);
+  } else {
+    const cur={}; holdings.forEach((h,i)=>{ cur[clsOf[i]]=(cur[clsOf[i]]||0)+(+h.value||0); });
+    Object.keys(cur).forEach(k=>target[k]=cur[k]/total);
+  }
+  // 类内按综合分分配（推荐池基金用推荐 score，不在池的给中性 60）
+  const scoreOf=holdings.map(h=>{ const f=window.__recoFunds&&window.__recoFunds[h.code]; return f&&f.score?f.score:60; });
+  const targetAmt=holdings.map((h,i)=>{
+    const cls=clsOf[i], clsW=target[cls]||0;
+    const idxs=clsOf.map((c,j)=>c===cls?j:-1).filter(j=>j>=0);
+    const sum=idxs.reduce((s,j)=>s+Math.max(0,scoreOf[j]),0)||1;
+    return Math.round(total*clsW*Math.max(0,scoreOf[i])/sum);
+  });
+  let diff=total-targetAmt.reduce((a,b)=>a+b,0);
+  if(diff!==0){ let mx=0; targetAmt.forEach((v,i)=>{ if(v>=targetAmt[mx]) mx=i; }); targetAmt[mx]+=diff; }
+  // 只列出差异 ≥1% 或 ≥500 元的调仓项
+  const plan=holdings.map((h,i)=>({h,i,cur:+h.value||0,tgt:targetAmt[i],diff:targetAmt[i]-(+h.value||0)}))
+    .filter(x=>Math.abs(x.diff)>=Math.max(500,total*0.01));
+  if(!plan.length){ toast("当前仓位已接近最优配置，无需调整"); return; }
+  const planHtml=plan.map(p=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 2px;border-bottom:1px dashed var(--line);font-size:12.5px">
+    <div style="min-width:0"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.h.name||p.h.code}</div>
+      <div class="muted" style="font-size:11px">${p.h.code} · 当前 ${yuan(p.cur)} → 目标 ${yuan(p.tgt)}</div></div>
+    <div style="color:${p.diff>=0?"var(--good)":"var(--bad)"};font-weight:700;white-space:nowrap">${p.diff>=0?"+":"-"}${yuan(Math.abs(p.diff))} ${p.diff>=0?"加仓":"减仓"}</div></div>`).join("");
+  const basis=window.__recoAlloc?"已对齐智能推荐的大类配置，类内按综合分分配":"未生成推荐，保持当前大类占比、类内按综合分优化";
+  confirmDialog("⚡ 一键再平衡仓位",
+    `按综合因素重新分配（${basis}），合计市值保持 ${yuan(total)} 不变。<div style="margin-top:8px">${planHtml}</div>
+    <div class="muted" style="font-size:11px;margin-top:6px">确认后将直接调整持仓市值/成本，并重新分析。也可先点「取消」手动微调。</div>`,
+    ()=>{ plan.forEach(p=>{ const h=holdings[p.i]; h.value=p.tgt; h.cost=Math.min(+h.cost||0,p.tgt); });
+      saveHoldings(); renderHoldings(); setDataStamp(); if(window.analyze) analyze();
+      toast("已按综合因素再平衡仓位（"+plan.length+" 项调整）"); });
 }
 
 // 跳转智能推荐区（供"按推荐再平衡"按钮使用）
