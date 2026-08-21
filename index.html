@@ -1730,17 +1730,23 @@ function renderTrend(dates, portCum, benchCum, benchName){
   const wrap=document.getElementById("trendCanvasWrap");
   if(!portCum || !portCum.length){ box.innerHTML='<div class="empty">暂无可绘制数据。</div>'; wrap.style.display="none"; return; }
   box.innerHTML=""; wrap.style.display="block";
-  const ds=[{label:"我的组合",data:portCum.map(v=>+(v*100).toFixed(2)),borderColor:"#e8b339",
-    backgroundColor:"rgba(232,179,57,.12)",fill:true,tension:.25,pointRadius:0}];
+  const ds=[{label:"我的组合",data:portCum.map(v=>+(v*100).toFixed(2)),borderColor:"#f2c14e",
+    backgroundColor:"rgba(242,193,78,.12)",fill:true,tension:.25,pointRadius:0}];
   if(benchCum && benchCum.some(v=>v!=null))
     ds.push({label:benchName,data:benchCum.map(v=>v==null?null:+(v*100).toFixed(2)),
-      borderColor:"#f0a23a",backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0});
+      borderColor:"#4da3ff",backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0});
   if(trendChart) trendChart.destroy();
   trendChart=new Chart(document.getElementById("trendCanvas"),{
     type:"line",
     data:{labels:dates,datasets:ds},
     options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
-      plugins:{legend:{labels:{color:"#f1f0ea"}},
+      plugins:{legend:{labels:{color:"#f1f0ea",
+          generateLabels:chart=>chart.data.datasets.map((d,i)=>{
+            const last=d.data[d.data.length-1];
+            return {text:d.label+(last!=null?"（终值 "+(last>=0?"+":"")+last+"%）":""),
+              fillStyle:d.borderColor,strokeStyle:d.borderColor,lineWidth:2,
+              hidden:!chart.isDatasetVisible(i),index:i};
+          })}},
         tooltip:{callbacks:{label:c=>c.dataset.label+": "+c.parsed.y+"%"}}},
       scales:{x:{ticks:{color:"#9896a6",maxTicksLimit:8},grid:{color:"rgba(255,255,255,.05)"}},
         y:{ticks:{color:"#9896a6",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,.05)"}}}}
@@ -2793,7 +2799,14 @@ function updateSummaries(){
     const kps=document.getElementById("kpiPlSub");
     if(kps) kps.textContent = n ? ((plpct>=0?"+":"")+plpct.toFixed(1)+"%") : "添加基金后显示盈亏";
     const ks=document.getElementById("kpiScore");
-    if(ks) ks.textContent = (window.__score!=null) ? String(window.__score) : "—";
+    if(ks){
+      if(window.__score==null){ ks.textContent="—"; ks.style.color=""; }
+      else{
+        ks.textContent=String(window.__score);
+        // 健康分颜色分级：≥75 绿（健康）/ 55-74 橙（良好）/ <55 红（预警）——与报告 overviewBox 口径一致
+        ks.style.color = window.__score>=75 ? "var(--good)" : window.__score>=55 ? "var(--warn)" : "var(--bad)";
+      }
+    }
     const kc=document.getElementById("kpiCount");
     if(kc) kc.textContent = String(n);
   }
