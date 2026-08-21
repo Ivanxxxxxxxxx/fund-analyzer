@@ -97,11 +97,11 @@ def push_file(repo, f, msg):
 
 print("\n[1/2] 前端 → Pages 仓库 %s" % FRONT_REPO)
 for f in FRONT_FILES:
-    push_file(FRONT_REPO, f, f"feat: 诊断改弹窗+信息卡片化(涨红跌绿)+关闭按钮对齐修复 ({f})")
+    push_file(FRONT_REPO, f, f"fix: 诊断卡片/阶段表收益小数未乘100→误显0.xx%(改用pct) ({f})")
 
 print("\n[2/2] 后端源码 → 仓库 %s" % BACK_REPO)
 for f in BACK_FILES:
-    push_file(BACK_REPO, f, f"feat: 配套诊断弹窗/卡片化前端 ({f})")
+    push_file(BACK_REPO, f, f"fix: 配套前端收益百分比显示修复 ({f})")
 
 print("\n完成。")
 print("· 前端：GitHub Pages 监听 fund-analyzer-web 会自动重建（几十秒~几分钟），刷新 https://ivanxxxxxxxxx.github.io/fund-analyzer-web/ 即可见。")
