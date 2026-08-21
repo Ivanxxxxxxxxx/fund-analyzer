@@ -1086,7 +1086,8 @@ function renderPlanOverview(){
   const box=document.getElementById("planOverview"); if(!box) return;
   const plan=JSON.parse(localStorage.getItem("fp_plan")||"{}");
   const P=Math.max(0, +plan.principal||0);
-  const years=Math.max(1,Math.min(30, +plan.years||5));
+  // 持有月数：新字段 months；兼容旧数据 years（年）
+  const months=Math.max(1,Math.min(360, +plan.months || ((+plan.years||5)*12) || 60));
   const A=Math.max(0, +(JSON.parse(localStorage.getItem("fp_dca")||"{}").amount)||0);
   if(!P && !holdings.length){
     box.innerHTML='<div class="empty">用「智能决策 → 一键配置最优基金」输入本金、每月定投、持有时间并建仓后，这里自动生成投资概览与复利曲线。</div>';
@@ -1097,50 +1098,53 @@ function renderPlanOverview(){
   if((window.__annRet==null || !isFinite(window.__annRet)) && window.__recoProb && window.__recoProb.exp12m!=null && isFinite(window.__recoProb.exp12m)) r = window.__recoProb.exp12m;
   r = Math.max(-0.4, Math.min(0.4, r));
   const vol = Math.max(0.05, Math.min(0.6, (window.__annVol!=null&&isFinite(window.__annVol))?window.__annVol:0.15));
-  const rm=r/12, m=years*12, totalCost=Math.round(P + A*m);
-  // 理想（无波动复利）
+  const rm=r/12, totalCost=Math.round(P + A*months);
+  // 理想（无波动复利），按月
   const idealY=[];
-  for(let y=0;y<=years;y++){
-    const mm=y*12;
-    idealY.push([y, Math.round(P*Math.pow(1+rm,mm) + (A>0?A*((Math.pow(1+rm,mm)-1)/Math.max(rm,1e-9)):0))]);
+  for(let mm=0;mm<=months;mm++){
+    idealY.push([mm, Math.round(P*Math.pow(1+rm,mm) + (A>0?A*((Math.pow(1+rm,mm)-1)/Math.max(rm,1e-9)):0))]);
   }
-  // 蒙特卡洛：月收益 = 年化/12 + 波动/√12 × 标准正态，400 条路径按年取样 5/50/95 分位
-  const SIMS=400, yr={}; for(let y=0;y<=years;y++) yr[y]=[];
+  // 蒙特卡洛：月收益 = 年化/12 + 波动/√12 × 标准正态，400 条路径逐月取样 5/50/95 分位
+  const SIMS=400, pathBy={}; for(let mm=0;mm<=months;mm++) pathBy[mm]=[];
   for(let s=0;s<SIMS;s++){
-    let bal=P; yr[0].push(bal);
-    for(let t=1;t<=m;t++){
+    let bal=P; pathBy[0].push(bal);
+    for(let t=1;t<=months;t++){
       bal = bal*(1+rm + vol/Math.sqrt(12)*norm(0,1)) + A;
-      if(t%12===0) yr[t/12].push(bal);
+      pathBy[t].push(bal);
     }
   }
   const p5=[],p50=[],p95=[];
-  for(let y=0;y<=years;y++){
-    const arr=yr[y].slice().sort((a,b)=>a-b);
-    p5.push([y,Math.round(arr[Math.floor(SIMS*0.05)])]); p50.push([y,Math.round(arr[Math.floor(SIMS*0.5)])]); p95.push([y,Math.round(arr[Math.floor(SIMS*0.95)])]);
+  for(let mm=0;mm<=months;mm++){
+    const arr=pathBy[mm].slice().sort((a,b)=>a-b);
+    p5.push([mm,Math.round(arr[Math.floor(SIMS*0.05)])]); p50.push([mm,Math.round(arr[Math.floor(SIMS*0.5)])]); p95.push([mm,Math.round(arr[Math.floor(SIMS*0.95)])]);
   }
-  const mid=p50[years][1], gain=mid-totalCost;
+  const mid=p50[months][1], gain=mid-totalCost;
+  const yrTxt = months%12===0 ? (months/12)+" 年" : months+" 个月";
   const stat=(l,v,s)=>`<div style="background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0"><div style="font-size:11px;color:var(--muted)">${l}</div><div style="font-size:16px;font-weight:750;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v}</div>${s?`<div style="font-size:10.5px;color:var(--muted)">${s}</div>`:""}</div>`;
   box.innerHTML=`
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px">
       ${stat("初始本金", yuan(P), plan.principal?"一键配置时输入":"手动持仓")}
-      ${stat("每月定投", A>0?yuan(A):"—", A>0?("×"+years+" 年 · 共 "+yuan(A*12*years)):"未设置定投")}
-      ${stat("总成本", yuan(totalCost), P+" + "+A+"×12×"+years)}
-      ${stat("预期总金额", yuan(mid), years+" 年后中位情景")}
+      ${stat("每月定投", A>0?yuan(A):"—", A>0?("×"+months+" 个月 · 共 "+yuan(A*months)):"未设置定投")}
+      ${stat("总成本", yuan(totalCost), P+" + "+A+"×"+months)}
+      ${stat("预期总金额", yuan(mid), yrTxt+"后中位情景")}
       ${stat("预期收益", (gain>=0?"+":"-")+yuan(Math.abs(gain)), "年化 "+ (r*100).toFixed(1) +"%")}
     </div>
     <div style="position:relative;height:240px"><canvas id="planChartCanvas"></canvas></div>
     <div class="note" style="font-size:11px;margin-top:8px">年化收益 ${(r*100).toFixed(1)}%（${(window.__annRet!=null&&isFinite(window.__annRet))?"来自你组合最近一次分析":"默认/推荐预期"}）· 波动 ${(vol*100).toFixed(0)}% · ${SIMS} 条路径模拟；理想=无波动复利、中位=50%分位、悲观/乐观=5%/95% 分位。模拟基于历史假设，非收益承诺。</div>`;
   if(planChart) planChart.destroy();
   const cv=document.getElementById("planChartCanvas"); if(!cv) return;
+  // 标签：按持有月数选间隔（月数≤24 每月一标，否则每 12 月一标）
+  const step = months<=24?1:(months<=60?6:12);
+  const labels = idealY.map(p=>(p[0]%step===0)?(p[0]+"月"):"");
   planChart=new Chart(cv,{type:"line",
-    data:{labels:idealY.map(p=>p[0]+"年"),datasets:[
+    data:{labels,datasets:[
       {label:"理想（无波动）",data:idealY.map(p=>p[1]),borderColor:"#f2c14e",borderWidth:2,pointRadius:0,tension:.3,fill:false},
       {label:"乐观(95%)",data:p95.map(p=>p[1]),borderColor:"#f4536b",borderDash:[4,4],pointRadius:0,tension:.3,fill:false},
       {label:"中位",data:p50.map(p=>p[1]),borderColor:"#38bdf8",borderWidth:1.6,pointRadius:0,tension:.3,fill:false},
       {label:"悲观(5%)",data:p5.map(p=>p[1]),borderColor:"#34d399",borderDash:[4,4],pointRadius:0,tension:.3,fill:false}]},
     options:{plugins:{legend:{position:"bottom",labels:{color:"#f1f0ea",boxWidth:12,padding:8,font:{size:11}}},
       tooltip:{callbacks:{label:c=>c.dataset.label+": "+fmtY(c.parsed.y)}}},
-      scales:{x:{ticks:{color:"#8b97ad",font:{size:11}},grid:{color:"rgba(255,255,255,.05)"}},
+      scales:{x:{ticks:{color:"#8b97ad",font:{size:10},autoSkip:true,maxTicksLimit:12},grid:{color:"rgba(255,255,255,.05)"}},
               y:{ticks:{color:"#8b97ad",font:{size:11},callback:v=>fmtY(v)},grid:{color:"rgba(255,255,255,.05)"}}},
       maintainAspectRatio:false}});
 }
@@ -1776,8 +1780,8 @@ async function loadRecommend(){
         <input id="setupP2" type="number" value="100000" min="0" step="1000" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
       <div><div class="muted" style="font-size:11px;margin-bottom:4px">每月定投（¥，0=不定投）</div>
         <input id="setupD2" type="number" value="1000" min="0" step="100" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
-      <div><div class="muted" style="font-size:11px;margin-bottom:4px">持有时间（年）</div>
-        <input id="setupY2" type="number" value="5" min="1" max="30" step="1" inputmode="numeric" style="width:74px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
+      <div><div class="muted" style="font-size:11px;margin-bottom:4px">持有时间（月）</div>
+        <input id="setupY2" type="number" value="60" min="1" max="360" step="1" inputmode="numeric" style="width:74px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
       <button class="btn-primary" onclick="quickSetupFromModal()" style="padding:9px 16px">⚡ 一键配置建仓</button>
       <button class="btn-ghost btn-sm" onclick="openAllocateFromReco()" style="padding:9px 16px">⚡ 一键配资（自选方案）</button>
     </div>
@@ -1803,14 +1807,14 @@ async function loadRecommend(){
 }
 
 // 一键配置最优基金：从推荐结果按综合分最优选 N 只（同类≤2），分配本金建仓，并记录每月定投计划
-// 支持弹窗（setupN2/P2/D2/Y2）入口：nIn/principalIn/dcaIn/yearsIn 传入
-async function quickSetup(nIn, principalIn, dcaIn, yearsIn){
+// 支持弹窗（setupN2/P2/D2/Y2=持有月数）入口：nIn/principalIn/dcaIn/monthsIn 传入
+async function quickSetup(nIn, principalIn, dcaIn, monthsIn){
   const list=Object.values(window.__recoFunds||{});
   if(!list.length){ toast("请先点「生成推荐」，再一键配置"); return; }
   const n=Math.max(1,Math.min(10, +(nIn!==undefined?nIn:3)||3));
   const principal=Math.max(0, +(principalIn!==undefined?principalIn:0)||0);
   const dca=Math.max(0, +(dcaIn!==undefined?dcaIn:0)||0);
-  const years=Math.max(1,Math.min(30, +(yearsIn!==undefined?yearsIn:5)||5));
+  const months=Math.max(1,Math.min(360, +(monthsIn!==undefined?monthsIn:60)||60));
   if(principal<=0){ toast("请输入本金金额"); return; }
   // 最优选基：全局按综合分从高到低择优，同类最多 2 只防扎堆。
   // 无论选 3/5/8 只，拿到的都是当前推荐池里综合分最优的组合（旧版按类别轮转会漏掉高分基金）
@@ -1861,8 +1865,8 @@ async function quickSetup(nIn, principalIn, dcaIn, yearsIn){
     added++; sum+=amt;
   }
   if(dca>0) localStorage.setItem("fp_dca", JSON.stringify({amount:dca, at:Date.now()}));
-  // 保存投资计划（本金/持有年数）→ 组合工作台「投资概览」实时关联
-  localStorage.setItem("fp_plan", JSON.stringify({principal, years, at:Date.now()}));
+  // 保存投资计划（本金/持有月数）→ 组合工作台「投资概览」实时关联
+  localStorage.setItem("fp_plan", JSON.stringify({principal, months, at:Date.now()}));
   if(window.renderPlanOverview) renderPlanOverview();
   saveHoldings(); renderHoldings(); setDataStamp();
   toast("已按推荐配置 "+added+" 只、建仓 "+yuan(sum)+(dca>0?"，每月定投 "+yuan(dca):""));
@@ -1933,13 +1937,13 @@ function openAllocate(){
 function closeAllocate(){ document.getElementById("allocOverlay").classList.remove("show"); }
 function openRecoModal(){ document.getElementById("recoOverlay").classList.add("show"); }
 function closeRecoModal(){ document.getElementById("recoOverlay").classList.remove("show"); }
-// 弹窗内一键配置：读弹窗里的输入（setupN2/P2/D2/Y2）并执行建仓
+// 弹窗内一键配置：读弹窗里的输入（setupN2/P2/D2/Y2=持有月数）并执行建仓
 function quickSetupFromModal(){
   const n=Math.max(1,Math.min(10, +document.getElementById("setupN2").value||3));
   const p=Math.max(0, +document.getElementById("setupP2").value||0);
   const d=Math.max(0, +document.getElementById("setupD2").value||0);
-  const y=Math.max(1,Math.min(30, +document.getElementById("setupY2").value||5));
-  quickSetup(n,p,d,y);
+  const months=Math.max(1,Math.min(360, +document.getElementById("setupY2").value||60));
+  quickSetup(n,p,d,months);
 }
 // 弹窗内"一键配资"：关闭推荐弹窗 → 打开配资弹窗（已在弹窗内"选入配资"的基金带过去）
 function openAllocateFromReco(){
