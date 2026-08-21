@@ -1699,8 +1699,9 @@ async function loadRecommend(){
       <div><div class="muted" style="font-size:11px;margin-bottom:4px">每月定投（¥，0=不定投）</div>
         <input id="setupD2" type="number" value="1000" min="0" step="100" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
       <button class="btn-primary" onclick="quickSetupFromModal()" style="padding:9px 16px">⚡ 一键配置建仓</button>
+      <button class="btn-ghost btn-sm" onclick="openAllocateFromReco()" style="padding:9px 16px">⚡ 一键配资（自选方案）</button>
     </div>
-    <div class="muted" style="font-size:11px;margin-top:6px">填好数量/本金/定投后点「一键配置建仓」，自动选基、分配本金、建仓，完成后关闭弹窗跳转「我的组合」。</div>
+    <div class="muted" style="font-size:11px;margin-top:6px">选基金：点下方基金卡片「选入配资」加入自选，然后点「一键配资」生成方案；或直接「一键配置建仓」自动按推荐选基。完成后关闭弹窗跳转「我的组合」。</div>
   </div>`;
   // === 卡片 recoBox 改为简短摘要，完整内容塞进弹窗 ===
   const summaryHtml = `<div class="empty" style="text-align:left;padding:18px 14px">
@@ -1854,6 +1855,11 @@ function quickSetupFromModal(){
   const p=Math.max(0, +document.getElementById("setupP2").value||0);
   const d=Math.max(0, +document.getElementById("setupD2").value||0);
   quickSetup(n,p,d);
+}
+// 弹窗内"一键配资"：关闭推荐弹窗 → 打开配资弹窗（已在弹窗内"选入配资"的基金带过去）
+function openAllocateFromReco(){
+  closeRecoModal();
+  openAllocate();
 }
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"){
   const o1=document.getElementById("allocOverlay"); if(o1&&o1.classList.contains("show")) closeAllocate();
