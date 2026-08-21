@@ -203,6 +203,14 @@ table.plan th{color:var(--muted);font-weight:600}
 /* 资产配置进度条 */
 .bar{height:8px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden}
 .bar i{display:block;height:100%;border-radius:999px}
+/* 风险体检 KPI（renderRisk 用）：卡片化 + 纵向排列，修复文本错位（.kpi/.label/.value/.hint 原无样式定义） */
+.kpi{background:linear-gradient(180deg,rgba(24,24,30,.9),rgba(16,16,20,.92));border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.kpi .label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.kpi .value{font-size:23px;font-weight:750;font-family:var(--mono);line-height:1.15}
+.kpi .hint{font-size:11px;color:var(--muted);line-height:1.55}
+.kpi .bar{margin-top:6px}
+.risk-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(max-width:760px){.risk-grid{grid-template-columns:1fr}}
 /* ---------- 弹窗 ---------- */
 .overlay{position:fixed;inset:0;background:rgba(5,5,7,.62);z-index:80;display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:28px 12px;backdrop-filter:blur(6px)}
 .overlay.show{display:flex}
@@ -1375,7 +1383,7 @@ function renderIndustry(holdings,w){
 function renderRisk(m){
   const lvlColor=v=>v<0.08?"var(--good)":v<0.15?"var(--good)":v<0.25?"var(--warn)":"var(--bad)";
   document.getElementById("riskBox").innerHTML=`
-  <div class="grid cols-2">
+  <div class="risk-grid">
     <div class="kpi"><span class="label">年化波动率</span><span class="value" style="color:${lvlColor(m.annVol)}">${pct(m.annVol)}</span>
       <span class="hint" style="color:${volGrade(m.annVol).color}">${volGrade(m.annVol).label}（统一口径：低&lt;10% / 中10-20% / 高&gt;20%）</span>
       <div class="bar"><i style="width:${Math.min(100,m.annVol*200)}%;background:${lvlColor(m.annVol)}"></i></div></div>
