@@ -1182,13 +1182,16 @@ async function renderPlanOverview(){
   // 标签：按持有月数选间隔（月数≤24 每月一标，否则每 12 月一标）
   const step = months<=24?1:(months<=60?6:12);
   const labels = idealY.map(p=>(p[0]%step===0)?(p[0]+"月"):"");
+  // 绘制顺序：悲观→乐观→中位→理想（理想最后画在最上层，金色实线不被中位盖住）
+  // 理想与中位终值接近易重叠：理想加粗金色实线、中位蓝色虚线；图例附终值一眼可辨
   planChart=new Chart(cv,{type:"line",
     data:{labels,datasets:[
-      {label:"理想（无波动）",data:idealY.map(p=>p[1]),borderColor:"#f2c14e",borderWidth:2,pointRadius:0,tension:.3,fill:false},
-      {label:"乐观(95%)",data:p95.map(p=>p[1]),borderColor:"#f4536b",borderDash:[4,4],pointRadius:0,tension:.3,fill:false},
-      {label:"中位",data:p50.map(p=>p[1]),borderColor:"#38bdf8",borderWidth:1.6,pointRadius:0,tension:.3,fill:false},
-      {label:"悲观(5%)",data:p5.map(p=>p[1]),borderColor:"#34d399",borderDash:[4,4],pointRadius:0,tension:.3,fill:false}]},
-    options:{plugins:{legend:{position:"bottom",labels:{color:"#f1f0ea",boxWidth:12,padding:8,font:{size:11}}},
+      {label:"悲观(5%)",data:p5.map(p=>p[1]),borderColor:"#34d399",borderWidth:1.8,pointRadius:0,tension:.3,fill:false},
+      {label:"乐观(95%)",data:p95.map(p=>p[1]),borderColor:"#f4536b",borderWidth:1.8,pointRadius:0,tension:.3,fill:false},
+      {label:"中位",data:p50.map(p=>p[1]),borderColor:"#38bdf8",borderDash:[6,4],borderWidth:1.8,pointRadius:0,tension:.3,fill:false},
+      {label:"理想（无波动）",data:idealY.map(p=>p[1]),borderColor:"#f2c14e",borderWidth:2.5,pointRadius:0,tension:.3,fill:false}]},
+    options:{plugins:{legend:{position:"bottom",labels:{color:"#f1f0ea",boxWidth:14,boxHeight:3,padding:10,font:{size:11},
+        generateLabels:chart=>chart.data.datasets.map((ds,i)=>({text:ds.label+" "+fmtY(ds.data[ds.data.length-1]),fillStyle:ds.borderColor,strokeStyle:ds.borderColor,lineWidth:2,hidden:!chart.isDatasetVisible(i),index:i}))}},
       tooltip:{callbacks:{label:c=>c.dataset.label+": "+fmtY(c.parsed.y)}}},
       scales:{x:{ticks:{color:"#8b97ad",font:{size:10},autoSkip:true,maxTicksLimit:12},grid:{color:"rgba(255,255,255,.05)"}},
               y:{ticks:{color:"#8b97ad",font:{size:11},callback:v=>fmtY(v)},grid:{color:"rgba(255,255,255,.05)"}}},
