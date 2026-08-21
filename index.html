@@ -1709,7 +1709,23 @@ async function loadRecommend(){
     <div class="note" style="margin:12px 0">${d.note||""}</div>
     <div style="font-size:13px;font-weight:600;margin:6px 0">各品类动态精选基金（实时榜单＋多因子，点击直接加入组合）</div>
     <div style="margin-top:8px">${fundHtml}</div>
-    <div class="note">以上为结合市场温度与估值的参考配置，非投资建议；具体基金请以实时净值为准。一键配置在卡片下方（本弹窗关闭后即可看到）。</div>`;
+    <div class="note">以上为结合市场温度与估值的参考配置，非投资建议；具体基金请以实时净值为准。</div>
+    <div class="setup-card">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
+        <svg class="i"><use href="#i-zap"/></svg> 一键配置最优基金
+        <span class="muted" style="font-size:11px;font-weight:600">按综合分择优（同类≤2只防扎堆）分配本金、建立仓位，支持每月定投</span>
+      </div>
+      <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
+        <div><div class="muted" style="font-size:11px;margin-bottom:4px">基金数量</div>
+          <input id="setupN2" type="number" value="3" min="1" max="10" inputmode="numeric" style="width:74px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
+        <div><div class="muted" style="font-size:11px;margin-bottom:4px">本金（¥）</div>
+          <input id="setupP2" type="number" value="100000" min="0" step="1000" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
+        <div><div class="muted" style="font-size:11px;margin-bottom:4px">每月定投（¥，0=不定投）</div>
+          <input id="setupD2" type="number" value="1000" min="0" step="100" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
+        <button class="btn-primary" onclick="quickSetupFromModal()" style="padding:9px 16px">⚡ 一键配置建仓</button>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:6px">建仓后自动关闭弹窗并跳转到「我的组合」查看效果（卡片下方也保留同一功能）。</div>
+    </div>`;
   // === 卡片 recoBox 改为简短摘要，完整内容塞进弹窗 ===
   const summaryHtml = `<div class="empty" style="text-align:left;padding:18px 14px">
     <div style="font-size:14px;font-weight:700;margin-bottom:8px"><svg class="i"><use href="#i-sparkles"/></svg> 智能配置推荐已生成</div>
@@ -1731,12 +1747,13 @@ async function loadRecommend(){
 }
 
 // 一键配置最优基金：从推荐结果按综合分最优选 N 只（同类≤2），分配本金建仓，并记录每月定投计划
-async function quickSetup(){
+// 支持卡片（setupN/P/D）与弹窗（setupN2/P2/D2）两处入口：nIn/principalIn/dcaIn 传入时用弹窗值
+async function quickSetup(nIn, principalIn, dcaIn){
   const list=Object.values(window.__recoFunds||{});
   if(!list.length){ toast("请先点「生成推荐」，再一键配置"); return; }
-  const n=Math.max(1,Math.min(10, +document.getElementById("setupN").value||3));
-  const principal=Math.max(0, +document.getElementById("setupP").value||0);
-  const dca=Math.max(0, +document.getElementById("setupD").value||0);
+  const n=Math.max(1,Math.min(10, +(nIn!==undefined?nIn:document.getElementById("setupN").value)||3));
+  const principal=Math.max(0, +(principalIn!==undefined?principalIn:document.getElementById("setupP").value)||0);
+  const dca=Math.max(0, +(dcaIn!==undefined?dcaIn:document.getElementById("setupD").value)||0);
   if(principal<=0){ toast("请输入本金金额"); return; }
   // 最优选基：全局按综合分从高到低择优，同类最多 2 只防扎堆。
   // 无论选 3/5/8 只，拿到的都是当前推荐池里综合分最优的组合（旧版按类别轮转会漏掉高分基金）
@@ -1856,6 +1873,13 @@ function openAllocate(){
 function closeAllocate(){ document.getElementById("allocOverlay").classList.remove("show"); }
 function openRecoModal(){ document.getElementById("recoOverlay").classList.add("show"); }
 function closeRecoModal(){ document.getElementById("recoOverlay").classList.remove("show"); }
+// 弹窗内一键配置：读弹窗里的输入（setupN2/P2/D2）并执行建仓（卡片入口 setupN/P/D 仍保留，两处并存）
+function quickSetupFromModal(){
+  const n=Math.max(1,Math.min(10, +document.getElementById("setupN2").value||3));
+  const p=Math.max(0, +document.getElementById("setupP2").value||0);
+  const d=Math.max(0, +document.getElementById("setupD2").value||0);
+  quickSetup(n,p,d);
+}
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"){
   const o1=document.getElementById("allocOverlay"); if(o1&&o1.classList.contains("show")) closeAllocate();
   const o2=document.getElementById("recoOverlay"); if(o2&&o2.classList.contains("show")) closeRecoModal();
