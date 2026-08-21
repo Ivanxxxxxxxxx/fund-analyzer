@@ -1147,8 +1147,15 @@ function setLive(ok){
 
 // ---------------- 分析计算 ----------------
 function dailyReturns(navArr){
+  // 清洗：过滤 0/极小净值导致的异常跳变（公募基金单日收益不可能超过 ±50%，
+  // 出现多为除权或脏数据），避免污染均值/波动/蒙特卡洛（防止"预期收益 +1e12%"式爆炸）
   const r=[];
-  for(let i=1;i<navArr.length;i++){ const a=navArr[i-1],b=navArr[i]; if(a>0) r.push((b-a)/a); }
+  for(let i=1;i<navArr.length;i++){
+    const a=navArr[i-1],b=navArr[i];
+    if(!(a>0)||!isFinite(b)) continue;
+    const x=(b-a)/a;
+    if(Math.abs(x)<0.5) r.push(x);
+  }
   return r;
 }
 function pearson(x,y){
@@ -1385,12 +1392,18 @@ function renderProb(mean,volDaily){
   const horizons=[{d:21,t:"1 个月"},{d:63,t:"3 个月"},{d:126,t:"6 个月"},{d:252,t:"1 年"}];
   const sims=2000;
   const out=horizons.map(h=>{
-    let win=0,sum=0;
+    let win=0, lgSum=0;
     for(let s=0;s<sims;s++){
-      let g=1; for(let t=0;t<h.d;t++) g*=1+norm(mean,volDaily);
-      if(g>1) win++; sum+=g;
+      let lg=0;
+      for(let t=0;t<h.d;t++){ const x=norm(mean,volDaily); lg+= (1+x)>0?Math.log(1+x):-5; }
+      if(lg>0) win++;
+      lgSum+=lg;
     }
-    return {t:h.t, p:win/sims, exp:(sum/sims-1)};
+    // 对数收益累加（与后端口径一致）：预期收益 = e^(路径对数收益均值) - 1，
+    // 几何平均路径永不因连乘爆炸（根治"预期收益 +1e12%"式天文数字）
+    let exp=Math.exp(lgSum/sims)-1;
+    exp=Math.max(-0.999, Math.min(9.99, exp));   // 展示保护：-99.9% ~ +999%
+    return {t:h.t, p:win/sims, exp};
   });
   document.getElementById("probBox").innerHTML=`<div class="prob-grid">`+
     out.map(o=>{
