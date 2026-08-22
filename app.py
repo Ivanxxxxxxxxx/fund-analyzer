@@ -688,11 +688,15 @@ def _get_index_series(secid, days=800):
 
 
 def _bench_daily_returns(days=730):
-    """沪深300 日收益率序列（用于 Alpha/Beta/信息比率计算），日频缓存。"""
-    rows = _get_index_kline("1.000300", days)
-    if len(rows) < 2:
-        return []
-    return [rows[i] / rows[i - 1] - 1 for i in range(1, len(rows))]
+    """沪深300 日收益率（带日期，用于 Alpha/Beta/信息比率按交易日对齐），日频缓存。
+    返回 {"dates": [...], "rets": [...]}，与基金历史净值的 date 字段同为 YYYY-MM-DD，
+    供贝塔计算做日期交集配对，避免按下标硬配对导致基准错位、贝塔被压扁。"""
+    s = _get_index_series("1.000300", days)
+    dates, values = s.get("dates") or [], s.get("values") or []
+    if len(values) < 2:
+        return {"dates": [], "rets": []}
+    rets = [values[i] / values[i - 1] - 1 for i in range(1, len(values))]
+    return {"dates": dates[1:], "rets": rets}
 
 
 def _index_valuation_percentile(secid, years=5):
@@ -1123,12 +1127,14 @@ def recommend_portfolio():
         note = ("当前市场：%s（温度 %d）。%s%s%s" % (env["regime"], env["score"], vtxt, tilt or "据此给出如下配置建议。", src_hint))
 
     # === 动态候选：实时拉取全市场榜单（不再使用内置名单） ===
-    # 基准日线同样只复用缓存；冷启动无缓存时用空基准（评分侧已容错），避免联网拖慢推荐
-    _bc = _CACHE.get("bench:hs300")
+    # 基准日线复用带日期的缓存（bench:hs300d，供贝塔按交易日对齐）；
+    # 冷启动无缓存时传 None，由 _compute_factors 内部按需获取（cached，跨请求复用），
+    # 保证推荐评分里的 Beta/Alpha 不被错位基准污染。
+    _bc = _CACHE.get("bench:hs300d")
     if _bc and time.time() - _bc[0] < _bc[1]:
         bench = _bc[2]
     else:
-        bench = []
+        bench = None
     now = datetime.date.today()
     candidates = []
     empty_cats = []
@@ -1528,22 +1534,48 @@ def _compute_factors(code, bench_rets=None):
     z = (closes[-1] - zmu) / zsd
 
     # 与沪深300回归：Beta / 年化Alpha / 信息比率
-    if bench_rets is None:
-        bench_rets = cached("bench", "hs300", _daily_ttl(), lambda: _bench_daily_returns(730))
-    L = min(len(rets), len(bench_rets))
-    if L >= 30:
-        fr = rets[-L:]
-        br = bench_rets[-L:]
-        mb = _mean(br)
-        vb = _std(br) or 1e-9
-        cov = _mean([(fr[i] - m) * (br[i] - mb) for i in range(L)])
-        beta = cov / (vb * vb) if vb > 0 else 1.0
-        rf_d = 0.02 / 252.0
-        alpha = (m - (rf_d + beta * (mb - rf_d))) * 252.0
-        te = _std([fr[i] - br[i] for i in range(L)]) or 1e-9
-        ir = (m - mb) / te * _sqrt(252)
+    # 修复：基金历史与基准都带日期，按「交易日交集」配对（不再按下标尾部硬配对，
+    # 否则基准窗口与基金窗口错位时协方差被稀释，贝塔被压成 0.1 量级）。
+    if bench_rets is None or not bench_rets:
+        bench_rets = cached("bench", "hs300d", _daily_ttl(), lambda: _bench_daily_returns(730))
+    # 基金侧：日期 → 日收益（data 自带 date，YYYY-MM-DD）
+    fund_map = {}
+    for i in range(1, n):
+        fund_map[str(data[i].get("date"))[:10]] = closes[i] / closes[i - 1] - 1
+    if isinstance(bench_rets, dict) and bench_rets.get("dates") and bench_rets.get("rets"):
+        bmap = {str(d)[:10]: r for d, r in zip(bench_rets["dates"], bench_rets["rets"])}
+        common = sorted(set(fund_map) & set(bmap))
+        if len(common) >= 30:
+            fr = [fund_map[d] for d in common]
+            br = [bmap[d] for d in common]
+            L = len(fr)
+            mf, mb = _mean(fr), _mean(br)
+            vb = _std(br) or 1e-9
+            cov = _mean([(fr[i] - mf) * (br[i] - mb) for i in range(L)])
+            beta = cov / (vb * vb) if vb > 0 else 1.0
+            rf_d = 0.02 / 252.0
+            alpha = (mf - (rf_d + beta * (mb - rf_d))) * 252.0
+            te = _std([fr[i] - br[i] for i in range(L)]) or 1e-9
+            ir = (mf - mb) / te * _sqrt(252)
+        else:
+            beta, alpha, ir = 1.0, 0.0, 0.0
     else:
-        beta, alpha, ir = 1.0, 0.0, 0.0
+        # 兜底：基准无日期（旧缓存/异常结构）时退回下标尾部配对，避免整体不可用
+        _br = bench_rets if isinstance(bench_rets, list) else []
+        L = min(len(rets), len(_br))
+        if L >= 30:
+            fr = rets[-L:]
+            br = _br[-L:]
+            mb = _mean(br)
+            vb = _std(br) or 1e-9
+            cov = _mean([(fr[i] - m) * (br[i] - mb) for i in range(L)])
+            beta = cov / (vb * vb) if vb > 0 else 1.0
+            rf_d = 0.02 / 252.0
+            alpha = (m - (rf_d + beta * (mb - rf_d))) * 252.0
+            te = _std([fr[i] - br[i] for i in range(L)]) or 1e-9
+            ir = (m - mb) / te * _sqrt(252)
+        else:
+            beta, alpha, ir = 1.0, 0.0, 0.0
 
     calmar = ann / abs(mdd) if mdd < 0 else (ann / 0.01 if ann > 0 else 0.0)
 
