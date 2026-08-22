@@ -97,11 +97,11 @@ def push_file(repo, f, msg):
 
 print("\n[1/2] 前端 → Pages 仓库 %s" % FRONT_REPO)
 for f in FRONT_FILES:
-    push_file(FRONT_REPO, f, f"fix: 诊断卡片/阶段表收益小数未乘100→误显0.xx%(改用pct) ({f})")
+    push_file(FRONT_REPO, f, f"feat: 诊断卡片加'?'徽标悬停看名词释义(Beta/Alpha/IR/夏普/卡玛/估值等16项) ({f})")
 
 print("\n[2/2] 后端源码 → 仓库 %s" % BACK_REPO)
 for f in BACK_FILES:
-    push_file(BACK_REPO, f, f"fix: 配套前端收益百分比显示修复 ({f})")
+    push_file(BACK_REPO, f, f"fix: 贝塔/Alpha/IR按交易日对齐(原按下标配对导致沪深300基金β被压扁0.1→0.95) ({f})")
 
 print("\n完成。")
 print("· 前端：GitHub Pages 监听 fund-analyzer-web 会自动重建（几十秒~几分钟），刷新 https://ivanxxxxxxxxx.github.io/fund-analyzer-web/ 即可见。")
