@@ -430,6 +430,35 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
 .adv-card.warn .adv-v{color:#f0a23a}
 .adv-card.bad{border-color:rgba(244,83,107,.5);background:rgba(244,83,107,.08)}
 .adv-card.bad .adv-v{color:#fb7185}
+/* ---------- 租买决策 / 合理买价 / 房价稳定信号 ---------- */
+.rb-sec{margin-top:14px;padding:13px;background:rgba(255,255,255,.025);border:1px solid var(--line2);border-radius:12px}
+.rb-title{font-size:14px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:7px}
+.rb-title .i{width:15px;height:15px;color:var(--gold)}
+.rb-fin{margin:10px 0 4px;border:1px solid var(--line2);border-radius:10px;padding:6px 10px;background:rgba(255,255,255,.02)}
+.rb-fin summary{cursor:pointer;font-size:12.5px;color:var(--muted);user-select:none}
+.rb-fin summary:hover{color:var(--text)}
+.rb-fin[open]{padding-bottom:10px}
+.rb-verdict{display:flex;align-items:center;gap:10px;margin:4px 0 10px;padding:11px 13px;border-radius:12px;border:1px solid}
+.rb-verdict .rb-badge{font-size:15px;font-weight:800;padding:4px 12px;border-radius:999px;white-space:nowrap}
+.rb-verdict .rb-sub{font-size:12.5px;color:var(--muted);line-height:1.5}
+.rb-verdict.buy{border-color:rgba(34,197,139,.5);background:rgba(34,197,139,.08)}
+.rb-verdict.buy .rb-badge{background:rgba(34,197,139,.2);color:#34d399}
+.rb-verdict.rent{border-color:rgba(56,189,248,.5);background:rgba(56,189,248,.08)}
+.rb-verdict.rent .rb-badge{background:rgba(56,189,248,.18);color:#38bdf8}
+.rb-verdict b{color:var(--text)}
+.sig-list{margin:10px 0 2px;display:flex;flex-direction:column;gap:6px}
+.sig-item{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;line-height:1.5;padding:7px 10px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+.sig-ic{flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;margin-top:1px}
+.sig-ok .sig-ic{background:rgba(34,197,139,.2);color:#34d399}
+.sig-no .sig-ic{background:rgba(244,83,107,.18);color:#f4536b}
+.sig-na .sig-ic{background:rgba(255,255,255,.08);color:var(--muted)}
+.sig-ok{border-color:rgba(34,197,139,.3)}
+.sig-no{border-color:rgba(244,83,107,.28)}
+.sig-na{border-color:var(--line2);opacity:.85}
+.sig-name{font-weight:600;color:var(--text)}
+.sig-note{color:var(--muted);display:block;margin-top:1px}
+.rb-pm{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.7}
+.rb-pm b{color:var(--text);font-family:var(--mono)}
 /* ---------- 月度走势明细表 ---------- */
 .zh-table{margin-top:10px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px}
 .zh-table table{width:100%;border-collapse:collapse;font-size:12px}
@@ -771,6 +800,34 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
         </div>
         <button class="btn-primary" onclick="calcRentYield()" style="width:100%;margin-top:6px">测算租售比 & 合理价位</button>
         <div class="t-out" id="ypo"><div class="muted">输入房源总价和月租金，测算回本年数、年租金回报率、合理购房总价区间，并结合珠海行情给出建议。</div></div>
+        <div class="rb-sec">
+          <div class="rb-title"><svg class="i"><use href="#i-home"/></svg> 租还是买？合理买价测算</div>
+          <div class="t-note" style="margin:0 0 8px">输入心仪<b>区域</b>+<b>户型</b>+该户型的<b>月租金</b>，系统联动上方珠海楼价信息估算房源总价，并测算：租划算还是买划算、多少钱买才划算，以及当前房价是否出现企稳信号。</div>
+          <div class="t-2col">
+            <div class="t-row"><label>区域 / 小区</label><select class="t-in" id="rbDist" style="width:150px;text-align:left"></select></div>
+            <div class="t-row"><label>户型</label><select class="t-in" id="rbType" style="width:150px;text-align:left" onchange="document.getElementById('rbArea').value=this.value">
+              <option value="50">1室（≈50㎡）</option>
+              <option value="75" selected>2室（≈75㎡）</option>
+              <option value="100">3室（≈100㎡）</option>
+              <option value="130">4室+（≈130㎡）</option>
+            </select></div>
+          </div>
+          <div class="t-2col">
+            <div class="t-row"><label>面积（㎡）</label><input class="num t-in" id="rbArea" type="number" value="75" min="1" inputmode="decimal"></div>
+            <div class="t-row"><label>该户型月租金（¥）</label><input class="num t-in" id="rbRent" type="number" value="3000" min="0" inputmode="decimal"></div>
+          </div>
+          <details class="rb-fin">
+            <summary>财务参数（默认：首付 30% · 30 年 · 利率 3.0% · 首付理财机会成本 3.0%，可按需调整）</summary>
+            <div class="t-2col">
+              <div class="t-row"><label>首付比例（%）</label><input class="num t-in" id="rbDown" type="number" value="30" min="0" max="100" inputmode="decimal"></div>
+              <div class="t-row"><label>贷款年限（年）</label><input class="num t-in" id="rbYears" type="number" value="30" min="1" max="40" inputmode="decimal"></div>
+              <div class="t-row"><label>房贷利率（%）</label><input class="num t-in" id="rbRate" type="number" value="3.0" min="0" step="0.05" inputmode="decimal"></div>
+              <div class="t-row"><label>首付理财机会成本（%）</label><input class="num t-in" id="rbRinv" type="number" value="3.0" min="0" step="0.05" inputmode="decimal"></div>
+            </div>
+          </details>
+          <button class="btn-primary" onclick="calcRentBuy()" style="width:100%;margin-top:6px">测算租买决策 & 合理买价</button>
+          <div class="t-out" id="rbo"><div class="muted">输入区域、户型与月租金，测算租买决策与合理买价。</div></div>
+        </div>
         <div class="zh-market" id="zhMarket"><div class="muted">正在获取珠海实时挂牌行情…</div></div>
       </div>
     </div>
@@ -2707,18 +2764,20 @@ function calcRentYield(){
   const years=total/(rent*12);
   const yld=rent*12/total*100;
   const low=rent*12*25, high=rent*12*35;
-  let grade,col;
-  if(years<25){ grade="划算（低于市场常见水平）"; col="var(--good)"; }
-  else if(years<=35){ grade="合理区间"; col="var(--good)"; }
-  else if(years<=50){ grade="偏高（依赖房价上涨预期）"; col="var(--warn)"; }
-  else { grade="高估（纯收租极不划算）"; col="var(--bad)"; }
   const gap=total-high;
+  let grade,col;
+  // 评级基于「年租金回报率」本身：回报率越低=房价越贵。2.23% 属于偏低（合理区间 2.9%~4%），
+  // 旧版把「回本年数」的「偏高」挂在回报率旁，读着像「回报率偏高」，实为「房价偏高」，语义相反，已纠正。
+  if(yld>=4.0){ grade="划算（回报优厚）"; col="var(--good)"; }
+  else if(yld>=2.86){ grade="合理区间（2.9%~4%）"; col="var(--good)"; }
+  else if(yld>=2.0){ grade="偏低·房价偏高"; col="var(--warn)"; }
+  else { grade="很低·房价高估"; col="var(--bad)"; }
   // 珠海实时行情（优先用接口实时值，失败回退内置参考）
   const mk=__zhMarket&&__zhMarket.ok?__zhMarket:null;
   let refHtml="", advHtml="";
   if(mk){
     const dstr=(mk.districts||[]).map(x=>x.name+" "+Math.round(x.secondAvg).toLocaleString("en-US")+"元/㎡").join("、");
-    refHtml='<div class="t-note">珠海实时参考（'+mk.updatedAt+' · '+(mk.source||"吉屋网")+'）：二手挂牌均价约 '+fmtY(mk.secondAvg)+'/㎡；主流租售比约 1:45~52（回本 45-52 年、租金回报率约 2%），整体偏高。分区二手挂牌：'+dstr+'。自住优先看通勤/学区/配套与月供承受力；纯投资需精选核心区优质盘并留足流动性。</div>';
+    refHtml='<div class="t-note">珠海实时参考（'+mk.updatedAt+' · '+(mk.source||"吉屋网")+'）：二手挂牌均价约 '+fmtY(mk.secondAvg)+'/㎡；主流租售比约 1:45~52（回本 45-52 年、年租金回报率约 2%，即回报率偏低、房价相对偏高）。分区二手挂牌：'+dstr+'。自住优先看通勤/学区/配套与月供承受力；纯投资需精选核心区优质盘并留足流动性。</div>';
     // 综合建议：全市挂牌趋势 + 所选地区环比 + 租售比 → 明确的买/等结论
     const trend=mk.trend||[];
     const curD=window.__zhDist||"all";
@@ -2746,7 +2805,7 @@ function calcRentYield(){
     }
     advHtml='<div class="adv-card '+vcls+'"><div class="adv-v">'+verdict+'</div><ul>'+pts.map(p=>'<li>'+p+'</li>').join("")+'</ul></div>';
   } else {
-    refHtml='<div class="t-note">珠海参考（2026 年 8 月公开数据）：全市二手均价约 1.6 万/㎡、主流租售比约 1:45~52（租金回报率约 2%），整体偏高；分区：横琴 ~3.5万/㎡、高新区 ~2.0万/㎡、香洲 ~2.0万/㎡、金湾 ~0.97万/㎡、斗门 ~0.78万/㎡。自住优先看通勤/学区/配套；纯投资需精选核心区优质盘。</div>';
+    refHtml='<div class="t-note">珠海参考（2026 年 8 月公开数据）：全市二手均价约 1.6 万/㎡、主流租售比约 1:45~52（年租金回报率约 2%，即回报率偏低、房价相对偏高）；分区：横琴 ~3.5万/㎡、高新区 ~2.0万/㎡、香洲 ~2.0万/㎡、金湾 ~0.97万/㎡、斗门 ~0.78万/㎡。自住优先看通勤/学区/配套；纯投资需精选核心区优质盘。</div>';
     // 行情未加载时，按租售比给基础建议（保证建议卡始终可见）
     let verdict, vcls, pts=[];
     if(years>50){
@@ -2774,6 +2833,131 @@ function calcRentYield(){
     ${advHtml}${refHtml}`;
 }
 
+// ---------- 租买决策 / 合理买价 / 房价稳定信号 ----------
+function fillRbDist(){
+  const sel=document.getElementById("rbDist"); if(!sel) return;
+  const prev=sel.value; // 保留用户当前选择，重建后恢复
+  const mk=__zhMarket&&__zhMarket.ok?__zhMarket:null;
+  const dists=mk?(mk.districts||[]):[];
+  const cityAvg=mk?mk.secondAvg:14958;
+  const cur=window.__zhDist||"all";
+  let html='<option value="all">全市（均价 '+fmtY(cityAvg)+'/㎡）</option>';
+  const FB=[["横琴",35300],["高新区",19960],["香洲",19808],["金湾",9678],["斗门",7782],["高栏港",7441]];
+  const seen=new Set();
+  dists.forEach(x=>{ if(!seen.has(x.name)){ seen.add(x.name); html+='<option value="'+x.name+'">'+x.name+'（'+Math.round(x.secondAvg).toLocaleString("en-US")+'元/㎡'+(x.ref?"·参考":"")+'）</option>'; }});
+  if(!dists.length){ FB.forEach(([n,a])=>{ html+='<option value="'+n+'">'+n+'（'+a.toLocaleString("en-US")+'元/㎡）</option>'; }); }
+  sel.innerHTML=html;
+  // 恢复优先级：用户已选手动值 > 行情当前区
+  if(prev && [...sel.options].some(o=>o.value===prev)){ try{ sel.value=prev; }catch(e){} }
+  else if(cur!=="all"){ try{ sel.value=cur; }catch(e){} }
+}
+// 从楼价序列派生「房价稳定信号」清单（数据面 3 条 + 需外部数据 3 条）
+function zhStableSignals(distName){
+  const mk=__zhMarket&&__zhMarket.ok?__zhMarket:null;
+  let prices=null, srcName="全市";
+  if(mk){
+    if(distName!=="all"){ const dd=(mk.districts||[]).find(x=>x.name===distName); if(dd&&dd.trend&&dd.trend.length){ prices=dd.trend.map(x=>x.price); srcName=dd.name; } }
+    if(!prices && mk.trend && mk.trend.length){ prices=mk.trend.map(x=>x.price); }
+  }
+  if(!prices){ prices=ZH_TREND_BASE.map(m=>m[1]); srcName="全市（参考）"; }
+  const N=prices.length;
+  const chg=i=> i>0 ? (prices[i]-prices[i-1])/prices[i-1]*100 : null;
+  const lastChg=chg(N-1);
+  const sum3=a=>{ let s=0; for(let i=a;i<a+3 && i<N;i++){ const c=chg(i); if(c!=null) s+=c; } return s; };
+  const last3 = N>=4 ? sum3(N-3) : (lastChg!=null?lastChg:0);
+  const prev3 = N>=7 ? sum3(N-6) : null;
+  const signals=[
+    {name:"环比止跌 / 转涨", ok:(lastChg!=null && lastChg>=0), note:"最近 1 月环比 "+(lastChg>=0?"+":"")+lastChg.toFixed(1)+"%"},
+    {name:"下跌斜率放缓（跌幅收窄）", ok:(prev3!=null && last3>prev3), note:"近 3 月累计 "+last3.toFixed(1)+"%  vs  前 3 月 "+(prev3!=null?prev3.toFixed(1):"—")+"%"},
+    {name:"近 3 个月价格走平", ok:(Math.abs(last3)<=0.5), note:"近 3 月累计 "+last3.toFixed(1)+"%"},
+    {name:"租售比触底回升", ok:null, note:"需租金成交数据，本工具未接入，暂无法判定"},
+    {name:"政策端维稳（降息 / 降首付 / 松限购）", ok:null, note:"关注最新信贷与限购政策，属外部信号"},
+    {name:"成交量回升", ok:null, note:"后端暂无成交量序列，需补充成交数据"}
+  ];
+  const score=signals.slice(0,3).filter(s=>s.ok===true).length;
+  return {signals:signals, score:score, total:3, srcName:srcName};
+}
+function calcRentBuy(){
+  fillRbDist();
+  const sel=document.getElementById("rbDist");
+  const distName = sel? sel.value : "all";
+  const area=Math.max(1,+document.getElementById("rbArea").value||0);
+  const rent=Math.max(0,+document.getElementById("rbRent").value||0);
+  const box=document.getElementById("rbo");
+  if(area<=0||rent<=0){ box.innerHTML='<div class="muted">请输入面积与月租金。</div>'; return; }
+  const mk=__zhMarket&&__zhMarket.ok?__zhMarket:null;
+  let avg, avgSrc="";
+  if(mk){
+    if(distName==="all"){ avg=mk.secondAvg; avgSrc=mk.source||"吉屋网"; }
+    else { const dd=(mk.districts||[]).find(x=>x.name===distName); avg=dd?dd.secondAvg:mk.secondAvg; avgSrc=(dd&&dd.ref?"参考":(mk.source||"吉屋网")); }
+  } else {
+    const FB={"横琴":35300,"高新区":19960,"香洲":19808,"金湾":9678,"斗门":7782,"高栏港":7441};
+    avg=distName==="all"?14958:(FB[distName]||14958); avgSrc="内置参考";
+  }
+  const Pm=avg*area; // 市场估算总价 = 区域均价 × 面积
+  const downRatio=Math.min(100,Math.max(0,+document.getElementById("rbDown").value||30))/100;
+  const years=Math.max(1,+document.getElementById("rbYears").value||30);
+  const rate=Math.max(0,+document.getElementById("rbRate").value||3.0)/100;
+  const rInv=Math.max(0,+document.getElementById("rbRinv").value||3.0)/100;
+  const holdPerM=2.5*area; // 物业费 2.5 元/㎡/月
+  // 月持有净成本：等额本息月供 + 物业费/维修 + 首付理财机会成本（不扣本金偿还，因属强制储蓄，与租房差额投资对等）
+  function netMonthly(P){
+    const down=P*downRatio, loan=Math.max(0,P-down);
+    const mr=rate/12, n=years*12;
+    let pmt=0;
+    if(loan>0){ pmt = mr>0 ? loan*mr*Math.pow(1+mr,n)/(Math.pow(1+mr,n)-1) : loan/n; }
+    const maint=P*0.0012;      // 维修预备 1.2%/年 = 0.1%/月
+    const opp=down*rInv/12;     // 首付被占用的理财机会成本
+    return pmt+holdPerM+maint+opp;
+  }
+  const marketNet=netMonthly(Pm);
+  // 二分求保本买价 P*：netMonthly(P*) = 月租金
+  let lo=0, hi=Math.max(Pm*3, 200000000), Pstar=Pm;
+  for(let i=0;i<60;i++){ const mid=(lo+hi)/2; if(netMonthly(mid)<=rent) lo=mid; else hi=mid; }
+  Pstar=(lo+hi)/2;
+  const yldStar=rent*12/Pstar*100;
+  const mr2=rate/12, n2=years*12;
+  const loanM=Pm*(1-downRatio);
+  const pmtMkt= loanM>0 ? (mr2>0?loanM*mr2*Math.pow(1+mr2,n2)/(Math.pow(1+mr2,n2)-1):loanM/n2) : 0;
+  const maintMkt=Pm*0.0012, oppMkt=Pm*downRatio*rInv/12;
+  const premium = Pm>Pstar ? (Pm-Pstar)/Pstar*100 : 0;
+  const dlabel = distName==="all"?"全市":distName;
+  let verdictCls, badge, sub;
+  if(marketNet<=rent){
+    verdictCls="buy"; badge="买划算";
+    sub="当前市场价下，买房月持有成本约 <b>"+fmtY(marketNet)+"</b> 已 ≤ 月租金 <b>"+fmtY(rent)+"</b>：自住或长期持有比租更省；即便如此，房价增值预期仍是关键变量。";
+  } else {
+    verdictCls="rent"; badge="租划算";
+    sub="当前市场价月持有成本约 <b>"+fmtY(marketNet)+"</b> ＞ 月租金 <b>"+fmtY(rent)+"</b>：纯现金流看，先租更划算；想买须等到合理买价附近。";
+  }
+  const sig=zhStableSignals(distName);
+  const sigHtml=sig.signals.map(s=>{
+    const cls = s.ok===true?"sig-ok":(s.ok===false?"sig-no":"sig-na");
+    const ic = s.ok===true?"✓":(s.ok===false?"✕":"—");
+    return '<div class="sig-item '+cls+'"><span class="sig-ic">'+ic+'</span><span><span class="sig-name">'+s.name+'</span><span class="sig-note">'+s.note+'</span></span></div>';
+  }).join("");
+  const sc=sig.score;
+  let sigVerdict;
+  if(sc>=3) sigVerdict="数据面已出现较明确的企稳信号（"+sc+"/"+sig.total+"），但底部仍要成交量回升确认。";
+  else if(sc===2) sigVerdict="数据面出现部分企稳信号（"+sc+"/"+sig.total+"），仍建议观察 1-2 个月。";
+  else sigVerdict="数据面尚未出现明显企稳信号（"+sc+"/"+sig.total+"），建议继续观望，等环比连续转正。";
+  box.innerHTML=`
+    <div class="rb-verdict ${verdictCls}">
+      <span class="rb-badge">${badge}</span>
+      <span class="rb-sub">${sub}</span>
+    </div>
+    <div class="t-out-grid">
+      <div><div class="t-ov" style="font-size:15px">${fmtY(Pm)}</div><div class="t-ol">市场估算总价（${dlabel} ${Math.round(avg).toLocaleString("en-US")}元/㎡ × ${area}㎡）</div></div>
+      <div><div class="t-ov" style="font-size:15px;color:var(--gold)">${fmtY(Pstar)}</div><div class="t-ol">合理买价（月成本≤租金临界总价）</div></div>
+      <div><div class="t-ov" style="font-size:15px">${Math.round(Pstar/area).toLocaleString("en-US")} 元/㎡</div><div class="t-ol">合理买价单价</div></div>
+    </div>
+    ${premium>0?'<div class="t-note">当前市场估算总价较合理买价高约 <b style="color:var(--down)">'+premium.toFixed(0)+'%</b>（合理买价对应回报率 '+yldStar.toFixed(2)+'%/年）；跌回合理买价附近再入手更稳。</div>':'<div class="t-note">当前市场估算总价已低于或等于合理买价，入手性价比尚可。</div>'}
+    <div class="rb-pm">月持有成本拆解（市场价）：月供 <b>'+fmtY(pmtMkt)+'</b> ＋ 物业费/维修 <b>'+fmtY(holdPerM+maintMkt)+'</b> ＋ 首付机会成本 <b>'+fmtY(oppMkt)+'</b> ＝ <b>'+fmtY(marketNet)+'</b>/月；你的月租金 <b>'+fmtY(rent)+'</b>。楼价来源：'+(avgSrc||"珠海行情")+'。</div>
+    <div class="rb-title" style="margin-top:14px"><svg class="i"><use href="#i-activity"/></svg> 房价稳定信号（${dlabel} · 近 12 月挂牌序列）</div>
+    <div class="sig-list">${sigHtml}</div>
+    <div class="t-note">${sigVerdict} 信号含义：① 环比止跌/转涨＝最近一月挂牌价不再下跌；② 跌幅收窄＝近三月跌幅小于前三月，下行减速；③ 近三月走平＝波动在 ±0.5% 内；④ 租售比触底＝回报率不再创新低（需租金数据）；⑤ 政策维稳＝降息/降首付/松限购；⑥ 成交量回升＝真实需求回暖（最关键的确认信号，需成交数据）。综合看，<b>成交量回升 + 环比连续 2-3 月转正</b> 才是最可靠的见底信号。</div>`;
+}
+
 // ---------- 珠海实时行情 ----------
 let __zhMarket=null, __zhLoaded=false;
 async function loadZhMarket(force){
@@ -2792,6 +2976,7 @@ async function loadZhMarket(force){
   }
   __zhMarket=d; __zhLoaded=true;
   renderZhMarket(d);
+  fillRbDist();
 }
 // 近12个月二手挂牌均价内置基线（58同城公开月度数据；后端有 trend 时以后端为准）
 const ZH_TREND_BASE=[["2025-09",17641],["2025-10",17513],["2025-11",17162],["2025-12",16989],
@@ -3052,6 +3237,7 @@ function scheduleRefresh(){
   }, delay);
 }
 scheduleRefresh();
+fillRbDist();
 </script>
 <div id="tipBox" class="tip-box" role="tooltip"></div>
 </body>
