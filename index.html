@@ -209,6 +209,15 @@ table.plan th{color:var(--muted);font-weight:600}
 .kpi .label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
 .kpi .value{font-size:23px;font-weight:750;font-family:var(--mono);line-height:1.15}
 .kpi .hint{font-size:11px;color:var(--muted);line-height:1.55}
+/* 名词解析徽标（?）与共享 tooltip：悬停/点按看释义 */
+.tip{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;
+  border:1px solid var(--line);color:var(--muted);font-size:10px;line-height:1;cursor:help;flex:none;
+  font-family:var(--mono);transition:.15s;user-select:none;vertical-align:1px}
+.tip:hover,.tip:focus-visible{color:var(--gold);border-color:var(--gold);background:rgba(232,179,57,.14);outline:none}
+.tip-box{position:fixed;z-index:9999;max-width:min(330px,82vw);padding:10px 13px;border-radius:10px;
+  background:rgba(22,22,28,.98);border:1px solid var(--line);box-shadow:0 14px 40px rgba(0,0,0,.55);
+  font-size:12px;line-height:1.65;color:var(--text);pointer-events:none;opacity:0;display:none;transition:opacity .12s}
+.tip-box.show{opacity:1}
 .kpi .bar{margin-top:6px}
 .risk-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 @media(max-width:760px){.risk-grid{grid-template-columns:1fr}}
@@ -2367,6 +2376,41 @@ async function runAdvise(){
   const vc = d.verdict==="推荐"?"var(--good)":(d.verdict==="谨慎关注"?"var(--warn)":"var(--bad)");
   const scoreColor = d.score>=75?"var(--good)":d.score>=55?"var(--warn)":"var(--bad)";
   const upDown = v => v==null||isNaN(v)?"var(--muted)":(v>=0?"var(--up)":"var(--down)");
+  // 专业名词释义（诊断卡片 ? 徽标悬停/点按查看）
+  const TERM_TIPS={
+    score:"综合评分：多因子（收益、风险、估值、经理任职等）加权后的 0-100 分，越高越值得关注。",
+    type:"基金类型：股票/混合/债券/货币/黄金/QDII 等，决定基金主要投资范围和风险等级。",
+    mgr:"基金经理：实际管理这只基金的经理及其任职年限，任职越久经验通常越丰富。",
+    r250:"近一年收益：最近 250 个交易日（约 1 个自然年）的累计涨跌幅。",
+    vol:"年化波动率：过去一年每日收益的标准差折算成年化口径，越大说明净值涨跌越剧烈、风险越高。",
+    mdd:"最大回撤：从历史最高净值回落到最低点的最大跌幅，衡量最坏情况下的亏损幅度。",
+    sharpe:"夏普比率：每承担 1 单位风险能换来多少超额收益（相对无风险利率）。一般 >1 算不错，越高性价比越高。",
+    beta:"Beta（贝塔）：基金相对沪深300的弹性。1=与大盘同步；>1 涨跌比大盘更猛；<1 更抗跌。黄金、债券类基金 Beta 天然接近 0，属正常现象。",
+    alpha:"年化Alpha（阿尔法）：剔除大盘贝塔影响后，基金经理创造的超额年化收益。>0 表示跑赢大盘，<0 表示跑输。",
+    ir:"信息比率IR：衡量超额收益的稳定性。IR 越高说明不仅跑赢、而且赢得稳，一般 >0.5 算不错。",
+    calmar:"卡玛比率：年化收益 ÷ 最大回撤，衡量「赚的钱 vs 最惨时亏的钱」的性价比，越高越好。",
+    avr:"东财五维：东方财富对基金选证、收益、抗风险、稳定性、择时五个维度的评分（0-100）。",
+    valPct:"估值分位：当前估值水平在近 5 年中所处的位置（0-100）。越低越便宜、越高越贵，>80 需警惕回调。",
+    z:"估值Z：当前净值相对近 120 日均值的标准差倍数。Z>0 高于均线，Z<0 低于均线。",
+    p:"盈利可能性：基于历史波动用蒙特卡洛模拟 2000 条路径，估算持有 1个月/3个月/6个月/1年 后盈利的概率。",
+    cap:"建议仓位上限：考虑单只基金波动与估值风险后，建议最多投入组合本金的百分比。"
+  };
+  const TLAB=(label,tip)=>tip&&TERM_TIPS[tip]?`${label}<span class="tip" data-tip="${tip}" tabindex="0" aria-label="${label}释义">?</span>`:label;
+  function showTip(el,txt){
+    const box=document.getElementById("tipBox"); if(!box||!txt) return;
+    box.textContent=txt; box.style.display="block"; box.classList.add("show");
+    const r=el.getBoundingClientRect(), br=box.getBoundingClientRect();
+    let x=r.left+r.width/2-br.width/2, y=r.bottom+8;
+    x=Math.max(8,Math.min(x,window.innerWidth-br.width-8));
+    if(y+br.height>window.innerHeight-8) y=r.top-br.height-8;
+    box.style.left=x+"px"; box.style.top=y+"px";
+  }
+  function hideTip(){ const b=document.getElementById("tipBox"); if(b){ b.classList.remove("show"); b.style.display="none"; } }
+  document.addEventListener("mouseover",e=>{ const t=e.target.closest(".tip"); if(!t) return; showTip(t,TERM_TIPS[t.dataset.tip]); });
+  document.addEventListener("mouseout",e=>{ if(e.target.closest(".tip")) hideTip(); });
+  document.addEventListener("click",e=>{ const t=e.target.closest(".tip"); if(t){ e.preventDefault(); showTip(t,TERM_TIPS[t.dataset.tip]); } else hideTip(); });
+  document.addEventListener("scroll",hideTip,true);
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape") hideTip(); });
   const card=(label,value,color,hint)=>`<div class="kpi"><span class="label">${label}</span><span class="value" style="color:${color||"var(--text)"}">${value}</span>${hint?`<span class="hint">${hint}</span>`:""}</div>`;
   const mgr=(d.managers&&d.managers.length)?(d.managers[0].name+(d.tenure?`（任职 ${d.tenure} 年）`:"")):"—";
   const dims=(d.dims&&Object.keys(d.dims).length)?Object.entries(d.dims).map(([k,v])=>k.slice(0,2)+Math.round(v)).join("/"):"—";
@@ -2383,28 +2427,28 @@ async function runAdvise(){
   document.getElementById("adviseSub").innerHTML = `<b>${d.name||code}</b>（${d.code}）的诊断结果 · 本金 ¥${d.capital.toLocaleString("en-US")}`;
   document.getElementById("adviseModalBody").innerHTML = `
     <div class="grid cols-4" style="gap:12px;margin-bottom:6px">
-      ${card("综合评分",d.score,scoreColor,"/100 多因子加权")}
+      ${card(TLAB("综合评分","score"),d.score,scoreColor,"/100 多因子加权")}
       ${card("买入结论",d.verdict,vc,d.name||"")}
-      ${card("建议仓位上限",(d.cap*100).toFixed(0)+"%","var(--text)","按波动与估值风险")}
+      ${card(TLAB("建议仓位上限","cap"),(d.cap*100).toFixed(0)+"%","var(--text)","按波动与估值风险")}
       ${card("建议买入金额","¥"+d.amount.toLocaleString("en-US"),"var(--text)","按本金 ¥"+d.capital.toLocaleString("en-US")+" 计")}
     </div>
     <div class="grid cols-3" style="gap:10px;margin-bottom:6px">
-      ${card("基金类型",d.type||"—","var(--text)")}
-      ${card("基金经理",mgr,"var(--text)")}
-      ${card("近一年收益",pct(d.r250),upDown(d.r250))}
-      ${card("年化波动",pct(d.vol),vg.color,vg.label)}
-      ${card("最大回撤",pct(d.mdd),"var(--down)")}
-      ${card("夏普比率",FMT(d.sharpe.toFixed(2)),sharpeColor)}
-      ${card("Beta(对沪深300)",FMT(d.beta.toFixed(2)),d.beta>1.1?"var(--warn)":d.beta<0.9?"var(--good)":"var(--text)",d.beta>1.1?"高弹性":d.beta<0.9?"防御":"同步")}
-      ${card("年化Alpha",pct(d.alpha),upDown(d.alpha),"超越市场的主动收益")}
-      ${card("信息比率IR",FMT(d.ir.toFixed(2)),"var(--text)")}
-      ${card("卡玛比率",FMT(d.calmar.toFixed(2)),"var(--text)","年化收益/回撤")}
-      ${card("东财五维",d.avr?d.avr.toFixed(0):"—","var(--text)",dims)}
-      ${card("估值分位",d.valPct==null?"—":d.valPct+"%","var(--text)",d.valBasis||"")}
-      ${card("估值Z(120日)",d.z.toFixed(1),"var(--text)")}
+      ${card(TLAB("基金类型","type"),d.type||"—","var(--text)")}
+      ${card(TLAB("基金经理","mgr"),mgr,"var(--text)")}
+      ${card(TLAB("近一年收益","r250"),pct(d.r250),upDown(d.r250))}
+      ${card(TLAB("年化波动","vol"),pct(d.vol),vg.color,vg.label)}
+      ${card(TLAB("最大回撤","mdd"),pct(d.mdd),"var(--down)")}
+      ${card(TLAB("夏普比率","sharpe"),FMT(d.sharpe.toFixed(2)),sharpeColor)}
+      ${card(TLAB("Beta(对沪深300)","beta"),FMT(d.beta.toFixed(2)),d.beta>1.1?"var(--warn)":d.beta<0.9?"var(--good)":"var(--text)",d.beta>1.1?"高弹性":d.beta<0.9?"防御":"同步")}
+      ${card(TLAB("年化Alpha","alpha"),pct(d.alpha),upDown(d.alpha),"超越市场的主动收益")}
+      ${card(TLAB("信息比率IR","ir"),FMT(d.ir.toFixed(2)),"var(--text)")}
+      ${card(TLAB("卡玛比率","calmar"),FMT(d.calmar.toFixed(2)),"var(--text)","年化收益/回撤")}
+      ${card(TLAB("东财五维","avr"),d.avr?d.avr.toFixed(0):"—","var(--text)",dims)}
+      ${card(TLAB("估值分位","valPct"),d.valPct==null?"—":d.valPct+"%","var(--text)",d.valBasis||"")}
+      ${card(TLAB("估值Z(120日)","z"),d.z.toFixed(1),"var(--text)")}
     </div>
     <div class="kpi" style="margin-bottom:6px">
-      <span class="label">盈利可能性（蒙特卡洛）</span>
+      <span class="label">${TLAB("盈利可能性（蒙特卡洛）","p")}</span>
       <div class="grid cols-4" style="gap:10px;margin-top:8px">
         <div><div class="value" style="font-size:20px;color:${d.p1>=0.5?'var(--good)':'var(--warn)'}">${(d.p1*100).toFixed(0)}%</div><div class="hint">1个月</div></div>
         <div><div class="value" style="font-size:20px;color:${d.p3>=0.5?'var(--good)':d.p3>=0.45?'var(--warn)':'var(--bad)'}">${(d.p3*100).toFixed(0)}%</div><div class="hint">3个月</div></div>
@@ -3009,5 +3053,6 @@ function scheduleRefresh(){
 }
 scheduleRefresh();
 </script>
+<div id="tipBox" class="tip-box" role="tooltip"></div>
 </body>
 </html>
