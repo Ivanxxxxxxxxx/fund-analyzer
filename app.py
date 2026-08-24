@@ -929,6 +929,13 @@ def fetch_zhuhai_market():
         # 高新区：吉屋网无分区页、58同城数据可靠性不足，不纳入自动行情，避免展示不可靠数值
         if dists:
             out["districts"] = dists
+        # 珠海住宅租金（中国房价行情网）：用于「租售比触底回升」信号；失败不影响主行情
+        try:
+            rz = fetch_zhuhai_rent()
+            if rz.get("ok"):
+                out["rent"] = rz
+        except Exception:
+            pass
         out["districtNote"] = "高新区：吉屋网未覆盖、58同城数据可靠性不足，暂未纳入自动行情；如需请参考贝壳/安居客挂牌价。"
         _ZH_CACHE["data"] = out; _ZH_CACHE["t"] = now
     except Exception:
@@ -963,6 +970,37 @@ def fetch_zhuhai_market():
         new_dists.append(nd)
     out["districts"] = new_dists
     return out
+
+
+def fetch_zhuhai_rent():
+    """抓取珠海住宅租金（中国房价行情网 creprice.cn），用于「租售比触底回升」信号。"""
+    try:
+        hdrs = {"User-Agent": _ZH_UA, "Accept-Language": "zh-CN,zh;q=0.9",
+                "Referer": "https://www.creprice.cn/"}
+        html = fetch("https://www.creprice.cn/urban/zh.html?type=lease", headers=hdrs, timeout=20)
+
+        def gnum(pat):
+            m = re.search(pat, html, re.S)
+            if m:
+                try:
+                    return float(m.group(1).replace(",", "").strip())
+                except Exception:
+                    return None
+            return None
+
+        today = gnum(r'今日房租<br><br>\s*<span class="fs22 cl1">\s*([\d.]+)')
+        monthly = gnum(r'月度房租</div>.*?<div class="data">\s*<span[^>]*>\s*([\d.]+)')
+        near1m = gnum(r'近一月房租.*?<span class="fs22 cl1[^"]*">\s*([\d.]+)')
+        quarter = gnum(r'季度房租</span>.*?<span class="fs28">\s*([\d.]+)')
+        year = gnum(r'年度房租</span>.*?<span class="fs28">\s*([\d.]+)')
+        if monthly or near1m or year:
+            return {"ok": True, "today": today, "monthly": monthly, "near1m": near1m,
+                    "quarter": quarter, "year": year,
+                    "updatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "source": "中国房价行情网(creprice.cn)"}
+    except Exception:
+        pass
+    return {"ok": False}
 
 
 def get_rank_list(ft, pn=100, name_filter=None):
