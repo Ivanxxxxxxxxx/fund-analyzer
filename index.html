@@ -2756,7 +2756,8 @@ function zhStableSignals(yld){
     {name:"环比止跌 / 转涨", ok:(lastChg!=null && lastChg>=0), note:"最近 1 月环比 "+(lastChg>=0?"+":"")+(lastChg!=null?lastChg.toFixed(1):"—")+"%"},
     {name:"跌幅收窄（下行减速）", ok:(prev3!=null && last3>prev3), note:"近 3 月累计 "+last3.toFixed(1)+"% vs 前 3 月 "+(prev3!=null?prev3.toFixed(1):"—")+"%"},
     {name:"近 3 个月价格走平", ok:(Math.abs(last3)<=0.5), note:"近 3 月累计 "+last3.toFixed(1)+"%"},
-    {name:"租售比触底回升", ok:null, note:"你这套房源回报率 "+(yld!=null?yld.toFixed(2)+"%，":"—")+"珠海整体挂牌租售比约 1:45~52（年回报约 2%）；观察同小区成交租金是否止跌回升"},
+    {name:"租金企稳 / 租售比触底", ok:(mk&&mk.rent&&mk.rent.ok && mk.rent.near1m!=null && mk.rent.monthly!=null)?(mk.rent.near1m>=mk.rent.monthly):null,
+     note:(function(){ if(mk&&mk.rent&&mk.rent.ok){ const r=mk.rent; const yldR=(r.monthly||r.near1m||0)*12/(mk.secondAvg||1)*100; const up=(r.near1m!=null&&r.monthly!=null)?(r.near1m>=r.monthly):false; return "珠海住宅租金（"+r.source+"）：近一月 "+ (r.near1m!=null?r.near1m.toFixed(2):"—") +" / 最新月 "+ (r.monthly!=null?r.monthly.toFixed(2):"—") +" / 年度 "+ (r.year!=null?r.year.toFixed(2):"—") +" 元/月/㎡，年回报率约 "+yldR.toFixed(2)+"%。"+(up?"近一月≥最新月，租金短期已企稳":"近一月<最新月，租金仍小幅下行")+"（"+r.updatedAt+"）"; } return "你这套房源回报率 "+(yld!=null?yld.toFixed(2)+"%，":"—")+"；珠海租金数据暂未接入，无法判定全市租售比是否触底。"; })()},
     {name:"政策端维稳", ok:null, note:"关注最新信贷/限购政策（如 LPR 下调、首付比例下调、限购松绑）；属外部信号，需自行核实"},
     {name:"成交量回升", ok:null, note:"关注珠海月度二手房成交量是否连续回升，最关键见底确认；需成交数据，本工具未接入"}
   ];
