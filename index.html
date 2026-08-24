@@ -459,6 +459,8 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
 .sig-note{color:var(--muted);display:block;margin-top:1px}
 .rb-pm{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.7}
 .rb-pm b{color:var(--text);font-family:var(--mono)}
+.rb-xcheck{margin-top:10px;padding:11px 13px;border-radius:12px;border:1px solid var(--gold,#f2c14e);border-left-width:4px;background:rgba(242,193,78,.07);color:var(--text)}
+.rb-xcheck b{color:var(--gold,#f2c14e)}
 /* ---------- 月度走势明细表 ---------- */
 .zh-table{margin-top:10px;max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:10px}
 .zh-table table{width:100%;border-collapse:collapse;font-size:12px}
@@ -2803,6 +2805,15 @@ function calcRent(){
   const pmtMkt= loanM>0 ? (mr2>0?loanM*mr2*Math.pow(1+mr2,n2)/(Math.pow(1+mr2,n2)-1):loanM/n2) : 0;
   const oppMkt=P*downRatio*rInv/12;
   const premium = P>Pstar ? (P-Pstar)/Pstar*100 : 0;
+  // 交叉验证综合结论：把「租金回报视角（未计房贷）」与「现金流视角（计入房贷）」两口径统一成一句可执行的结论
+  let combinedVerdict;
+  if(P <= Pstar){
+    combinedVerdict = "当前总价已 ≤ 现金流临界点（"+fmtY(Pstar)+"），且落在租金回报合理区间：资产估值与现金流两口径一致，买入性价比高。";
+  } else if(P <= high){
+    combinedVerdict = "总价落在租金回报合理区间，但高于现金流临界点（"+fmtY(Pstar)+"）：资产估值不贵，靠租金养月供仍为负，需房价升值补足。自住可买，纯收租投资谨慎。";
+  } else {
+    combinedVerdict = "总价已超租金回报合理区间上限（"+fmtY(high)+"），且远高于现金流临界点（"+fmtY(Pstar)+"）：估值偏贵 + 现金流为负，纯投资不建议；自住视通勤/学区再定。";
+  }
   let verdictCls, badge, sub;
   if(marketNet<=rent){
     verdictCls="buy"; badge="买划算";
@@ -2832,7 +2843,7 @@ function calcRent(){
     <div class="t-out-grid">
       <div><div class="t-ov">${years.toFixed(1)} 年</div><div class="t-ol">回本年数（租售比）</div></div>
       <div><div class="t-ov" style="color:${col}">${yld.toFixed(2)}%</div><div class="t-ol">年租金回报率 · ${grade}</div></div>
-      <div><div class="t-ov" style="font-size:14px">${fmtY(low)} ~ ${fmtY(high)}</div><div class="t-ol">合理总价区间（纯收租·回报 2.9%~4%）</div></div>
+      <div><div class="t-ov" style="font-size:14px">${fmtY(low)} ~ ${fmtY(high)}</div><div class="t-ol">合理总价区间（租金回报视角·未计房贷）</div></div>
     </div>
     <div class="t-note">该房源总价 ${fmtY(P)}${P>high?"，按纯租金回报率（2.9%~4%）已超出合理总价区间上限约 "+fmtY(gap)+"（"+(gap/high*100).toFixed(0)+"%）：纯收租视角偏贵，主要靠房价增值预期支撑；若租金未来大涨或自住通勤便利，另当别论。":"，落在纯租金回报率 2.9%~4% 的合理区间内（纯收租视角）；但这未算房贷月供与首付机会成本——真实现金流转正与否看下方「月持有成本 vs 月租金」。"}</div>
     <div class="rb-verdict ${verdictCls}">
@@ -2845,6 +2856,13 @@ function calcRent(){
       <div><div class="t-ov" style="font-size:15px">${yldStar.toFixed(2)}%</div><div class="t-ol">合理买价对应年回报率</div></div>
     </div>
     <div class="t-note">「合理买价」算法：让<b>月供 + 物业费 + 首付理财机会成本</b>恰好等于你的月租金时对应的房价。低于它 → 买房月成本＜租金（买划算）；高于它 → 租房更省（租划算）。这与上方「租买决策」用的是同一套现金流口径，结论一致。</div>
+    <div class="t-note rb-xcheck">
+      <b>交叉验证（两口径为何不同）：</b>上面两个"合理价"是<b>不同视角</b>、并非矛盾，差距恰好是<i>杠杆/融资成本</i>：
+      <br>· <b>合理总价区间 ${fmtY(low)}~${fmtY(high)}</b> ＝ 按「纯租金回报率 2.9%~4%」估的<b>资产内在价值</b>，<b>不计你怎么贷款</b>；
+      <br>· <b>合理买价 ${fmtY(Pstar)}</b> ＝ 按「你的月供 + 物业费 + 首付机会成本 ≤ 月租」反推的<b>现金流临界点</b>，<b>计入了 ${rate*100}% 房贷利率与首付理财机会成本</b>。
+      <br>当前现金流临界点 ${Pstar<low?'<b>低于</b>':'<b>高于</b>'} 合理总价下限（${fmtY(low)}）：${Pstar<low?'说明在现行利率下靠租金覆盖月供不可行，买房即现金流为负，房价须靠升值预期支撑':'说明靠租金已能基本覆盖持有成本，现金流角度可接受'}。
+      <br><b>综合结论：</b>${combinedVerdict}
+    </div>
     ${premium>0?'<div class="t-note">当前总价较合理买价高约 <b style="color:var(--down)">'+premium.toFixed(0)+'%</b>；跌回合理买价附近再入手更稳。</div>':'<div class="t-note">当前总价已低于或等于合理买价，入手性价比尚可。</div>'}
     <div class="rb-pm">月持有成本拆解（按当前总价）：月供 <b>${fmtY(pmtMkt)}</b> + 物业费 <b>${fmtY(holdPerM)}</b> + 首付机会成本 <b>${fmtY(oppMkt)}</b> = <b>${fmtY(marketNet)}</b>/月；你的月租金 <b>${fmtY(rent)}</b>。（不含房屋维修保养预备金，如需计入可自行在物业费里加计）</div>
     <div class="rb-title" style="margin-top:14px"><svg class="i"><use href="#i-activity"/></svg> 珠海房价稳定信号（${sig.srcName} · 近 12 月真实挂牌走势）</div>
