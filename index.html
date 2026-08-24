@@ -807,6 +807,7 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
             <div class="t-row"><label>贷款年限（年）</label><input class="num t-in" id="rbYears" type="number" value="30" min="1" max="40" inputmode="decimal"></div>
             <div class="t-row"><label>房贷利率（%）</label><input class="num t-in" id="rbRate" type="number" value="3.0" min="0" step="0.05" inputmode="decimal"></div>
             <div class="t-row"><label>首付理财机会成本（%）</label><input class="num t-in" id="rbRinv" type="number" value="3.0" min="0" step="0.05" inputmode="decimal"></div>
+            <div class="t-row"><label>物业费（元/㎡/月）</label><input class="num t-in" id="rbpf" type="number" value="3" min="0" step="0.5" inputmode="decimal"></div>
           </div>
         </details>
         <button class="btn-primary" onclick="calcRent()" style="width:100%;margin-top:6px">测算租售比 / 租买决策 / 合理买价</button>
@@ -2781,15 +2782,15 @@ function calcRent(){
   const yrs=Math.max(1,+document.getElementById("rbYears").value||30);
   const rate=Math.max(0,+document.getElementById("rbRate").value||3.0)/100;
   const rInv=Math.max(0,+document.getElementById("rbRinv").value||3.0)/100;
-  const holdPerM=3*area; // 物业费 3 元/㎡/月（按当前珠海普遍水平）
+  const rbpf=Math.max(0,+document.getElementById("rbpf").value||3);
+  const holdPerM=rbpf*area; // 物业费（元/㎡/月）× 面积，默认 3
   function netMonthly(Pp){
     const down=Pp*downRatio, loan=Math.max(0,Pp-down);
     const mr=rate/12, n=yrs*12;
     let pmt=0;
     if(loan>0){ pmt = mr>0 ? loan*mr*Math.pow(1+mr,n)/(Math.pow(1+mr,n)-1) : loan/n; }
-    const maint=Pp*0.0012;
     const opp=down*rInv/12;
-    return pmt+holdPerM+maint+opp;
+    return pmt+holdPerM+opp;
   }
   const marketNet=netMonthly(P);
   let lo=0, hi=Math.max(P*3, 200000000), Pstar=P;
@@ -2799,7 +2800,7 @@ function calcRent(){
   const mr2=rate/12, n2=yrs*12;
   const loanM=P*(1-downRatio);
   const pmtMkt= loanM>0 ? (mr2>0?loanM*mr2*Math.pow(1+mr2,n2)/(Math.pow(1+mr2,n2)-1):loanM/n2) : 0;
-  const maintMkt=P*0.0012, oppMkt=P*downRatio*rInv/12;
+  const oppMkt=P*downRatio*rInv/12;
   const premium = P>Pstar ? (P-Pstar)/Pstar*100 : 0;
   let verdictCls, badge, sub;
   if(marketNet<=rent){
@@ -2842,9 +2843,9 @@ function calcRent(){
       <div><div class="t-ov" style="font-size:15px">${Math.round(Pstar/area).toLocaleString("en-US")} 元/㎡</div><div class="t-ol">合理买价单价</div></div>
       <div><div class="t-ov" style="font-size:15px">${yldStar.toFixed(2)}%</div><div class="t-ol">合理买价对应年回报率</div></div>
     </div>
-    <div class="t-note">「合理买价」算法：让<b>月供 + 物业费/维修 + 首付理财机会成本</b>恰好等于你的月租金时对应的房价。低于它 → 买房月成本＜租金（买划算）；高于它 → 租房更省（租划算）。这与上方「租买决策」用的是同一套现金流口径，结论一致。</div>
+    <div class="t-note">「合理买价」算法：让<b>月供 + 物业费 + 首付理财机会成本</b>恰好等于你的月租金时对应的房价。低于它 → 买房月成本＜租金（买划算）；高于它 → 租房更省（租划算）。这与上方「租买决策」用的是同一套现金流口径，结论一致。</div>
     ${premium>0?'<div class="t-note">当前总价较合理买价高约 <b style="color:var(--down)">'+premium.toFixed(0)+'%</b>；跌回合理买价附近再入手更稳。</div>':'<div class="t-note">当前总价已低于或等于合理买价，入手性价比尚可。</div>'}
-    <div class="rb-pm">月持有成本拆解（按当前总价）：月供 <b>${fmtY(pmtMkt)}</b> + 物业费/维修 <b>${fmtY(holdPerM+maintMkt)}</b> + 首付机会成本 <b>${fmtY(oppMkt)}</b> = <b>${fmtY(marketNet)}</b>/月；你的月租金 <b>${fmtY(rent)}</b>。</div>
+    <div class="rb-pm">月持有成本拆解（按当前总价）：月供 <b>${fmtY(pmtMkt)}</b> + 物业费 <b>${fmtY(holdPerM)}</b> + 首付机会成本 <b>${fmtY(oppMkt)}</b> = <b>${fmtY(marketNet)}</b>/月；你的月租金 <b>${fmtY(rent)}</b>。（不含房屋维修保养预备金，如需计入可自行在物业费里加计）</div>
     <div class="rb-title" style="margin-top:14px"><svg class="i"><use href="#i-activity"/></svg> 珠海房价稳定信号（${sig.srcName} · 近 12 月真实挂牌走势）</div>
     <div class="sig-list">${sigHtml}</div>
     <div class="t-note">${sigVerdict} 信号含义：① 环比止跌/转涨=最近一月挂牌价不再下跌；② 跌幅收窄=近三月跌幅小于前三月，下行减速；③ 近三月走平=波动在 ±0.5% 内；④ 租售比触底=回报率不再创新低（需租金成交数据）；⑤ 政策维稳=降息/降首付/松限购；⑥ 成交量回升=真实需求回暖（最关键确认信号，需成交数据）。综合看，<b>成交量回升 + 环比连续 2-3 月转正</b> 才是最可靠的见底信号。</div>
