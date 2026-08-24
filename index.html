@@ -2908,7 +2908,7 @@ function renderZhMarket(d){
     ${dists.map(x=>`<button class="zd-btn${cur===x.name?" on":""}" data-d="${x.name}">${x.name}${x.ref?'<i class="zd-r">参考</i>':""}</button>`).join("")}
   </div>`;
   const rows=dists.map(x=>
-    `<div class="zhd-row${cur===x.name?" on":""}" data-d="${x.name}"><span>${x.name}${x.ref?' <i class="zd-r">参考</i>':""}</span><b>${Math.round(x.secondAvg).toLocaleString("en-US")}<i>元/㎡</i></b><i class="zhd-c ${chgCls(x.chg||"0")}">${x.ref?"参考":chgTxt(x.chg||"0")}</i></div>`).join("");
+    `<div class="zhd-row${cur===x.name?" on":""}" data-d="${x.name}"><span>${x.name}${x.ref?' <i class="zd-r">参考</i>':""}</span><b>${Math.round(x.secondAvg).toLocaleString("en-US")}<i>元/㎡</i></b><i class="zhd-c ${chgCls(x.chg||"0")}">${x.ref?(chgTxt(x.chg||"0")+"·参考"):chgTxt(x.chg||"0")}</i></div>`).join("");
   const headHtml=`
     <div class="zhm-h"><span><svg class="i"><use href="#i-activity"/></svg> 珠海实时行情</span><span class="zhm-src">${d.source||""}</span><button class="btn-ghost btn-sm" onclick="loadZhMarket(true)"><svg class="i"><use href="#i-refresh"/></svg> 刷新</button></div>
     ${bar}
