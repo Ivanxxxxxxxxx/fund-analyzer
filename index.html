@@ -2830,18 +2830,19 @@ function calcRent(){
     <div class="t-out-grid">
       <div><div class="t-ov">${years.toFixed(1)} 年</div><div class="t-ol">回本年数（租售比）</div></div>
       <div><div class="t-ov" style="color:${col}">${yld.toFixed(2)}%</div><div class="t-ol">年租金回报率 · ${grade}</div></div>
-      <div><div class="t-ov" style="font-size:14px">${fmtY(low)} ~ ${fmtY(high)}</div><div class="t-ol">按回报率 2.9%~4% 的合理总价区间</div></div>
+      <div><div class="t-ov" style="font-size:14px">${fmtY(low)} ~ ${fmtY(high)}</div><div class="t-ol">合理总价区间（纯收租·回报 2.9%~4%）</div></div>
     </div>
-    <div class="t-note">该房源总价 ${fmtY(P)}${P>high?"，比合理区间上限高 "+fmtY(gap)+"（约 "+(gap/high*100).toFixed(0)+"%）：纯收租看偏贵，主要靠房价增值预期支撑；若租金未来大涨或自住通勤便利，另当别论。":"，在合理区间内：租金回报能覆盖持有成本，性价比尚可。"}</div>
+    <div class="t-note">该房源总价 ${fmtY(P)}${P>high?"，按纯租金回报率（2.9%~4%）已超出合理总价区间上限约 "+fmtY(gap)+"（"+(gap/high*100).toFixed(0)+"%）：纯收租视角偏贵，主要靠房价增值预期支撑；若租金未来大涨或自住通勤便利，另当别论。":"，落在纯租金回报率 2.9%~4% 的合理区间内（纯收租视角）；但这未算房贷月供与首付机会成本——真实现金流转正与否看下方「月持有成本 vs 月租金」。"}</div>
     <div class="rb-verdict ${verdictCls}">
       <span class="rb-badge">${badge}</span>
       <span class="rb-sub">${sub}</span>
     </div>
     <div class="t-out-grid">
-      <div><div class="t-ov" style="font-size:15px;color:var(--gold)">${fmtY(Pstar)}</div><div class="t-ol">合理买价（月持有成本≤租金的临界总价）</div></div>
+      <div><div class="t-ov" style="font-size:15px;color:var(--gold)">${fmtY(Pstar)}</div><div class="t-ol">合理买价（含房贷+首付机会成本，月成本=租金的临界价）</div></div>
       <div><div class="t-ov" style="font-size:15px">${Math.round(Pstar/area).toLocaleString("en-US")} 元/㎡</div><div class="t-ol">合理买价单价</div></div>
       <div><div class="t-ov" style="font-size:15px">${yldStar.toFixed(2)}%</div><div class="t-ol">合理买价对应年回报率</div></div>
     </div>
+    <div class="t-note">「合理买价」算法：让<b>月供 + 物业费/维修 + 首付理财机会成本</b>恰好等于你的月租金时对应的房价。低于它 → 买房月成本＜租金（买划算）；高于它 → 租房更省（租划算）。这与上方「租买决策」用的是同一套现金流口径，结论一致。</div>
     ${premium>0?'<div class="t-note">当前总价较合理买价高约 <b style="color:var(--down)">'+premium.toFixed(0)+'%</b>；跌回合理买价附近再入手更稳。</div>':'<div class="t-note">当前总价已低于或等于合理买价，入手性价比尚可。</div>'}
     <div class="rb-pm">月持有成本拆解（按当前总价）：月供 <b>${fmtY(pmtMkt)}</b> + 物业费/维修 <b>${fmtY(holdPerM+maintMkt)}</b> + 首付机会成本 <b>${fmtY(oppMkt)}</b> = <b>${fmtY(marketNet)}</b>/月；你的月租金 <b>${fmtY(rent)}</b>。</div>
     <div class="rb-title" style="margin-top:14px"><svg class="i"><use href="#i-activity"/></svg> 珠海房价稳定信号（${sig.srcName} · 近 12 月真实挂牌走势）</div>
@@ -2897,6 +2898,7 @@ function renderZhMarket(d){
       <div class="zhm-cell"><span class="zh-l">数据口径</span><b class="zh-v" style="font-size:15px">挂牌价</b><span class="zh-c up">≠ 成交价</span></div>
     </div>
     ${rows?`<div class="zhd-title">各区二手挂牌均价（点击切换地区）</div><div class="zhd">${rows}</div>`:""}
+    ${d.districtNote?`<div class="t-note" style="margin-top:8px;color:var(--warn)">${d.districtNote}</div>`:""}
     <div class="t-note" style="margin-top:8px">挂牌价≠成交价，实际成交以议价为准；数据仅供决策参考。</div>`;
   // 头部与走势图容器分离：切换地区只更新头部，走势图实例复用不重建
   let top=document.getElementById("zhMarketTop");
