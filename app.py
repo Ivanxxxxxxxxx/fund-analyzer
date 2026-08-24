@@ -874,7 +874,7 @@ _ZH_FALLBACK = {
     "newChg": "-0.41", "secondChg": "-0.89", "stale": True,
     "updatedAt": "2026-08 参考值", "source": "吉屋网（实时获取失败，展示最近参考值）",
     "districts": [
-        {"name": "横琴", "secondAvg": 35300}, {"name": "高新区", "secondAvg": 19960},
+        {"name": "横琴", "secondAvg": 35300},
         {"name": "香洲", "secondAvg": 19808}, {"name": "金湾", "secondAvg": 9678},
         {"name": "斗门", "secondAvg": 7782}, {"name": "高栏港", "secondAvg": 7441},
     ],
@@ -926,21 +926,10 @@ def fetch_zhuhai_market():
                     dists.append({"name": name, "secondAvg": num(ms.group(1)), "chg": chg})
             except Exception:
                 pass
-        # 高新区：吉屋无分区页，用 58 同城 8 月实测参考值 19,916 元/㎡；尝试实时抓取失败则回退参考值
-        gx = {"name": "高新区", "secondAvg": 19916.0, "chg": "0", "ref": True}
-        try:
-            h58 = fetch("https://zh.58.com/fangjia/18394/",
-                        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
-                                 "Referer": "https://zh.58.com/fangjia/", "Accept-Language": "zh-CN,zh;q=0.9"},
-                        timeout=12)
-            m58 = re.search(r'([\d,]{4,7})元/㎡', h58)
-            if m58 and m58.group(1) not in ("19916",):
-                gx["secondAvg"] = num(m58.group(1)); gx["ref"] = False
-        except Exception:
-            pass
-        dists.append(gx)
+        # 高新区：吉屋网无分区页、58同城数据可靠性不足，不纳入自动行情，避免展示不可靠数值
         if dists:
             out["districts"] = dists
+        out["districtNote"] = "高新区：吉屋网未覆盖、58同城数据可靠性不足，暂未纳入自动行情；如需请参考贝壳/安居客挂牌价。"
         _ZH_CACHE["data"] = out; _ZH_CACHE["t"] = now
     except Exception:
         pass
