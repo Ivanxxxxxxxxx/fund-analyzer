@@ -927,7 +927,17 @@ def fetch_zhuhai_market():
                     dists.append({"name": name, "secondAvg": num(ms.group(1)), "chg": chg})
             except Exception:
                 pass
-        # 高新区：吉屋网无分区页、58同城数据可靠性不足，不纳入自动行情，避免展示不可靠数值
+        # 高新区：吉屋网无分区页，改用房天下房价地图实时补充（参考口径）
+        try:
+            fg = fetch_fang_district()
+            if fg.get("ok"):
+                have = {d["name"] for d in dists}
+                for d in fg.get("districts", []):
+                    if d["name"] not in have:
+                        d["ref"] = True
+                        dists.append(d)
+        except Exception:
+            pass
         if dists:
             out["districts"] = dists
         # 珠海住宅租金（中国房价行情网）：用于「租售比触底回升」信号；失败不影响主行情
@@ -937,7 +947,7 @@ def fetch_zhuhai_market():
                 out["rent"] = rz
         except Exception:
             pass
-        out["districtNote"] = "高新区：吉屋网未覆盖、58同城数据可靠性不足，暂未纳入自动行情；如需请参考贝壳/安居客挂牌价。"
+        out["districtNote"] = "高新区二手房挂牌均价由房天下(fang.com)房价地图实时提供（参考口径，与吉屋其他区来源不同）；挂牌价≠成交价，实际成交以议价为准。"
         _ZH_CACHE["data"] = out; _ZH_CACHE["t"] = now
     except Exception:
         pass
@@ -999,6 +1009,34 @@ def fetch_zhuhai_rent():
                     "quarter": quarter, "year": year,
                     "updatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                     "source": "中国房价行情网(creprice.cn)"}
+    except Exception:
+        pass
+    return {"ok": False}
+
+
+def fetch_fang_district():
+    """抓取房天下房价地图·珠海热门区县二手房挂牌均价（补充吉屋未覆盖的高新区）。"""
+    try:
+        hdrs = {"User-Agent": _ZH_UA, "Accept-Language": "zh-CN,zh;q=0.9",
+                "Referer": "https://m.fang.com/fangjia/zh/"}
+        html = fetch("https://m.fang.com/fangjia/zh/esfDealList.html", headers=hdrs, timeout=20)
+        # 热门区县：<h3>高新区</h3>...<span>19333</span>元/m²...class="jt-dn-n">0.27%</span>
+        blocks = re.findall(
+            r'<h3>([^<]+?)</h3>.*?<span>([\d.]+)</span>元/m².*?class="jt-(dn|up)-n">([\d.]+)%',
+            html, re.S)
+        targets = {"高新区"}  # 吉屋网无高新区分区页，用房天下补充
+        out = []
+        for name, price, direction, pct in blocks:
+            if name not in targets:
+                continue
+            sign = "-" if direction == "dn" else "+"
+            out.append({"name": name, "secondAvg": float(price),
+                        "chg": sign + pct + "%", "ref": True,
+                        "source": "房天下(fang.com)"})
+        if out:
+            return {"ok": True, "districts": out,
+                    "updatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "source": "房天下(fang.com)房价地图"}
     except Exception:
         pass
     return {"ok": False}
