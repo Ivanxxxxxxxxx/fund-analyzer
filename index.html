@@ -2781,7 +2781,7 @@ function calcRent(){
   const yrs=Math.max(1,+document.getElementById("rbYears").value||30);
   const rate=Math.max(0,+document.getElementById("rbRate").value||3.0)/100;
   const rInv=Math.max(0,+document.getElementById("rbRinv").value||3.0)/100;
-  const holdPerM=2.5*area;
+  const holdPerM=3*area; // 物业费 3 元/㎡/月（按当前珠海普遍水平）
   function netMonthly(Pp){
     const down=Pp*downRatio, loan=Math.max(0,Pp-down);
     const mr=rate/12, n=yrs*12;
