@@ -97,7 +97,7 @@ def push_file(repo, f, msg):
 
 print("\n[1/2] 前端 → Pages 仓库 %s" % FRONT_REPO)
 for f in FRONT_FILES:
-    push_file(FRONT_REPO, f, f"feat: 租售比文案语义修正+新增'租还是买/合理买价/房价稳定信号' ({f})")
+    push_file(FRONT_REPO, f, f"feat: 合并租售比与租买决策卡片·改用真实房价输入(移除区域均价估算)·修复持有成本乱码·稳定信号按真实走势 ({f})")
 
 print("\n[2/2] 后端源码 → 仓库 %s" % BACK_REPO)
 for f in BACK_FILES:
