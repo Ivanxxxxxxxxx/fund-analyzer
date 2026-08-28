@@ -195,6 +195,7 @@ table.plan th{color:var(--muted);font-weight:600}
 .bt-f{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:5px 9px;border-radius:8px;background:rgba(255,255,255,.04);min-width:0}
 .bt-fn{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-rand{margin-top:8px;font-size:12px;color:var(--muted);background:rgba(120,180,255,.06);border:1px dashed rgba(120,180,255,.3);border-radius:8px;padding:7px 10px;line-height:1.6}
+.bt-win{margin-top:8px;font-size:12px;background:rgba(52,211,153,.06);border:1px dashed rgba(52,211,153,.3);border-radius:8px;padding:7px 10px}
 /* ---------- 推荐卡 ---------- */
 .reco-cat{margin:10px 0 4px}
 .reco-cat-h{font-size:13px;font-weight:700;color:var(--text);margin:16px 0 4px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
@@ -209,6 +210,8 @@ table.plan th{color:var(--muted);font-weight:600}
 .rf-sel.on{background:linear-gradient(135deg,#f2c558,#d9a02a);color:#1a1203;border-color:transparent}
 .badge{display:inline-block;font-size:11px;font-weight:650;border:1px solid;border-radius:999px;padding:2px 10px;flex:none}
 .rf-meta{display:flex;gap:14px;margin-top:8px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.rf-factors{margin-top:6px;font-size:11px;color:var(--muted);display:flex;flex-wrap:wrap;gap:3px 12px;line-height:1.7}
+.rf-factors b{font-weight:650}
 .rf-reason{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.65}
 /* 新：大类配置理由 + 同类排名徽章 + 理由列表 */
 .reco-cat-reason{font-size:12.5px;color:#cdbf8e;background:rgba(232,179,57,.07);border:1px dashed rgba(232,179,57,.3);border-radius:10px;padding:9px 12px;margin:4px 0 10px;line-height:1.6}
@@ -2062,6 +2065,9 @@ async function loadBacktest(mode){
         if(p.fwdRet==null) return `<div class="bt-f"><span class="bt-fn">${nm}</span><span class="muted" style="white-space:nowrap">${p.note||"无数据"}</span></div>`;
         return `<div class="bt-f"><span class="bt-fn">${nm}</span><b style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"};white-space:nowrap">${p.fwdRet>=0?"+":""}${(+p.fwdRet).toFixed(1)}%</b></div>`;
       }).join("");
+      const wins=(r.picks||[]).filter(p=>p.fwdRet!=null&&p.fwdRet>0).length;
+      const totv=(r.picks||[]).filter(p=>p.fwdRet!=null).length;
+      const winTxt=totv?`<div class="bt-win">💵 组合胜率：<b style="color:${wins/totv>=0.6?"var(--good)":(wins/totv>=0.4?"var(--warn)":"var(--bad)")}">${wins}/${totv} 只盈利（${Math.round(wins/totv*100)}%）</b></div>`:"";
       return `<div class="bt-block">
         <div class="bt-h">${r.label} <span class="muted" style="font-size:11px;font-weight:600">买入日 ${r.asof||"—"}</span></div>
         <div class="bt-kpis">
@@ -2070,6 +2076,7 @@ async function loadBacktest(mode){
           <div class="bt-kpi"><div class="l">超额</div><div class="v" style="color:${eCls}">${excess==null?"—":(excess>=0?"+":"")+excess+"pp"}</div></div>
           <div class="bt-kpi"><div class="l">等权全宇宙</div><div class="v" style="color:${cls(ur)}">${pv(ur)}</div></div>
         </div>
+        ${winTxt}
         <div class="bt-fs">${chips||'<span class="muted">—</span>'}</div>
         ${r.randRet!=null?`<div class="bt-rand">🎲 随机选基对照（同一候选池随机选20次）：均值 <b>${r.randRet}%</b> · 90分位 <b>${r.randP90!=null?r.randP90+"%":"—"}</b> · 我们的组合 ${(pr!=null&&r.randP90!=null)?(pr>r.randP90?"<b style=\"color:var(--good)\">跑赢 90% 的随机组合</b>":"<b style=\"color:var(--warn)\">未跑赢随机 90 分位</b>"):"—"}</div>`:""}
       </div>`;
@@ -2126,6 +2133,13 @@ async function loadRecommend(){
       const selBtn=f.verdict==="推荐"
         ? `<button class="rf-sel" id="sel-${f.code}" onclick="event.stopPropagation();toggleSel('${f.code}')">选入配资</button>`
         : `<span class="rf-sel" style="cursor:default;color:var(--muted);border-color:var(--line)">观望</span>`;
+      // 因子明细：展示关键因子得分（为什么推荐/不推荐这只，绿≥70 / 橙50-70 / 红<50）
+      const sc=f.sc||{};
+      const fTxt=(label,val)=>val==null?"":`<span title="${label} 因子得分"><b style="color:${val>=70?"#34d399":(val>=50?"#f0a23a":"#fb7185")}">${label} ${Math.round(val)}</b></span>`;
+      const facTxt=(sc.sharpe!=null||sc.win!=null)?`<div class="rf-factors">因子：${[
+        fTxt("夏普",sc.sharpe),fTxt("索提诺",sc.sortino),fTxt("卡玛",sc.calmar),fTxt("Alpha",sc.alpha),
+        fTxt("月胜率",sc.win),fTxt("估值",sc.val),fTxt("动量",sc.mom),fTxt("长期",sc.long)
+      ].filter(Boolean).join(" · ")}</div>`:"";
       return `<div class="reco-fund" ${f.verdict==="推荐"?`onclick="addByCode('${f.code}')" title="点击加入组合"`:""}>
         <div class="rf-head"><span class="rf-code">${f.code}</span><span class="rf-name">${f.name}</span>${peerTxt}
           ${selBtn}
@@ -2133,6 +2147,7 @@ async function loadRecommend(){
           ${f.buySignal?`<span class="badge" style="color:${f.buySignal==="低估布局"||f.buySignal==="回撤布局"?"var(--good)":(f.buySignal==="偏高谨慎"?"var(--warn)":"var(--muted)")};border-color:${f.buySignal==="低估布局"||f.buySignal==="回撤布局"?"var(--good)":(f.buySignal==="偏高谨慎"?"var(--warn)":"var(--muted)")}">${f.buySignal}</span>`:""}</div>
         <div class="rf-meta"><span>综合评分 ${f.score}</span><span>建议配置 ${(f.weight*100).toFixed(0)}%</span><span>估值 ${valTxt}</span>
           <span>1年盈利 <b style="color:${f.prob12==null?"var(--muted)":(f.prob12>=0.6?"#34d399":f.prob12>=0.45?"#f0a23a":"#fb7185")}">${f.prob12==null?"—":(f.prob12*100).toFixed(0)+"%"}</b></span></div>
+        ${facTxt}
         <ul class="rf-reasons">${rsnList}</ul></div>`;
     };
     const recRows=fs.filter(f=>f.verdict==="推荐").map(card).join("");
