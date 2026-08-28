@@ -1416,9 +1416,10 @@ def recommend_portfolio():
             return None
         return 0.5 * (1 + _erf(_sqrt(252.0) * mu / sigma / _sqrt(2.0)))
 
-    # 权益类（股票/混合/指数/海外）：1 年盈利概率 <50% 或近 3 年收益为负 → 不推荐。
+    # 盈利概率/长期收益硬门槛（所有可判定的类别，含黄金/债券）：
+    # 1 年盈利概率 <50%（均值回归视角）或近 3 年收益为负 → 不推荐。
     # 推荐必须与盈利预期一致：宁可少推，也不推"预期大概率不赚"的基金。
-    _EQ_ASSETS = {"股票型", "混合型", "指数型", "海外(QDII)"}
+    # （此前只对权益类生效，导致高估值黄金"综合分高被推荐、1年盈利概率却≈0%"的自相矛盾）
     for cat_label, lst in by_cat.items():
         lst.sort(key=lambda x: x[1]["composite"], reverse=True)
         top = lst[:3]
@@ -1426,7 +1427,7 @@ def recommend_portfolio():
         for asset, fac in top:
             p12 = _prob12(fac)
             r3y = fac.get("r3y")
-            if asset in _EQ_ASSETS and ((p12 is not None and p12 < 0.50) or (r3y is not None and r3y < 0)):
+            if (p12 is not None and p12 < 0.50) or (asset != "货币型" and r3y is not None and r3y < 0):
                 skipped.append((fac, p12, r3y))
                 continue
             keep.append((asset, fac))
@@ -1446,6 +1447,12 @@ def recommend_portfolio():
         for idx, (asset, fac) in enumerate(top):
             per = w * (fac["composite"] / s)  # 权重按综合分归一化，评分高的拿更多，而非机械均分
             verdict = "推荐" if fac["composite"] >= TH_RECO else ("谨慎关注" if fac["composite"] >= TH_WATCH else "暂不推荐")
+            # 盈利概率硬校验：综合分高但 1 年盈利概率过低（均值回归视角，如高估值黄金）→ 强制降级，
+            # 消除"推荐里说买、盈利概率却≈0%"的自相矛盾（推荐必须=值得买，而非过去涨得好）
+            _p12x = _prob12(fac)
+            _p12_low = (_p12x is not None and _p12x < 0.35 and verdict == "推荐")
+            if _p12_low:
+                verdict = "谨慎关注"
             rank = idx + 1
             reasons = []
             # 1) 为什么是这一只：同类排名 + 风险调整后表现
@@ -1500,6 +1507,9 @@ def recommend_portfolio():
                 else:
                     buySignal = "中性持有"; buy_txt = "价位中性，可正常定投。"
             reasons.append("【买点】" + buy_txt)
+            if _p12_low:
+                reasons.append("【重要】当前价位偏高：1年盈利概率仅 %.0f%%（均值回归视角，高估值通常伴随未来收益下修），"
+                               "故不标「推荐」。不建议追高一次性买入；如需配置请分批/定投摊薄，或等回调后再看。" % (_p12x * 100))
             funds.append({"category": cat_label, "asset": asset, "code": fac["code"], "name": fac["name"],
                           "type": fac["type"], "score": fac["composite"], "verdict": verdict,
                           "weight": round(per, 4), "valPct": fac["valPct"], "reasons": reasons,
@@ -1543,11 +1553,13 @@ def recommend_portfolio():
                 return None
             return 0.5 * (1 + _erf(_sqrt(float(days)) * mu_p / sigma_p / _sqrt(2.0)))
 
+        _p12m = _pd(252)
         recoProb = {
-            "p1m": _pd(21), "p3m": _pd(63), "p6m": _pd(126), "p12m": _pd(252),
+            "p1m": _pd(21), "p3m": _pd(63), "p6m": _pd(126), "p12m": _p12m,
             "exp1m": _e(mu_p * 21) - 1, "exp3m": _e(mu_p * 63) - 1,
             "exp6m": _e(mu_p * 126) - 1, "exp12m": _e(mu_p * 252) - 1,
             "mu": mu_p, "sigma": sigma_p,
+            "low": (_p12m is not None and _p12m < 0.45),   # 组合整体盈利概率偏低 → 前端提示
         }
     dyn_note = ""
     if empty_cats:
