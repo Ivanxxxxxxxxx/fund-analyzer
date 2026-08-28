@@ -584,6 +584,37 @@ def get_history(code, days=365):
     return cached("history", "%s_%d" % (code, days), _daily_ttl(), lambda: _get_history_raw(code, days))
 
 
+def _get_adj_series_raw(code):
+    """累计净值（复权、含分红）序列：单位净值在除息日会跳空（实测分红日"跌"4%~66%），
+    直接按单位净值算收益会污染波动/回撤/动量/夏普，分红越多的基金被误伤越狠。
+    收益/风险指标一律改用累计净值口径（= 含分红再投资的总收益）。"""
+    out = []
+    try:
+        txt = fetch("https://fund.eastmoney.com/pingzhongdata/%s.js" % code,
+                    headers={"Referer": "http://fund.eastmoney.com/"})
+        raw = _extract_var(txt, "Data_ACWorthTrend")
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        for it in raw:
+            x = it[0] if isinstance(it, list) else it.get("x")
+            y = it[1] if isinstance(it, list) else it.get("y")
+            if y is None:
+                continue
+            try:
+                dt = datetime.datetime.fromtimestamp(int(x) / 1000).strftime("%Y-%m-%d")
+            except Exception:
+                continue
+            out.append({"date": dt, "nav": float(y)})
+    except Exception:
+        pass
+    return _dedupe(out)
+
+
+def get_adj_series(code):
+    """累计净值全量序列（缓存），调用方按需截断。"""
+    return cached("adj", code, _daily_ttl(), lambda: _get_adj_series_raw(code))
+
+
 def get_holdings(code):
     return cached("holdings", code, _daily_ttl(), lambda: _get_holdings_raw(code))
 
@@ -611,6 +642,7 @@ _cos = __import__("math").cos
 _sqrt = __import__("math").sqrt
 _log = __import__("math").log
 _erf = __import__("math").erf
+_exp = __import__("math").exp
 
 
 # 用于判断市场环境的宽基/海外/避险指数（东方财富 secid）
@@ -1438,10 +1470,21 @@ def recommend_portfolio():
         top = keep
         asset = top[0][0]
         w = alloc.get(asset, 0.0)
+        # 黄金估值历史高位（>90分位）时自动降配：防追高（配置层与买点纪律联动）
+        if asset == "黄金" and top:
+            _gvp = top[0][1].get("valPct")
+            if _gvp is not None and _gvp > 90:
+                _gold_w0 = w
+                w = round(w * 0.6, 4)
+                _gold_note = "（黄金估值分位 %.0f%% 处历史高位，已从 %.0f%% 下调至 %.0f%%，防追高）" % (_gvp, _gold_w0 * 100, w * 100)
+            else:
+                _gold_note = ""
+        else:
+            _gold_note = ""
         s = sum(fac["composite"] for _, fac in top) or 1.0
         peer_n = len(lst)
         peer_mdd = _median([f["mdd"] for _, f in lst])
-        cat_reasons[cat_label] = _cat_reason(asset, w)
+        cat_reasons[cat_label] = _cat_reason(asset, w) + _gold_note
         if skipped:
             cat_reasons[cat_label] += "（已剔除 %d 只近 3 年收益为负/盈利概率低的候选）" % len(skipped)
         for idx, (asset, fac) in enumerate(top):
@@ -1515,7 +1558,8 @@ def recommend_portfolio():
                           "weight": round(per, 4), "valPct": fac["valPct"], "reasons": reasons,
                           "peerRank": rank, "peerN": peer_n, "prob12": _prob12(fac),
                           "benchSecid": fac.get("benchSecid"), "buySignal": buySignal,
-                          "mu": fac.get("mu"), "muE": fac.get("muE"), "sigma": fac.get("sigma")})
+                          "mu": fac.get("mu"), "muE": fac.get("muE"), "sigma": fac.get("sigma"),
+                          "vol": fac.get("vol"), "maxMdd": fac.get("maxMdd")})
     funds.sort(key=lambda x: (x["asset"], -x["score"]))
 
     # === 跨类相关性去重（P1-F）：避免推荐两只同涨同跌的基金（如两只纳斯达克/QDII、两只沪深300）===
@@ -1558,12 +1602,15 @@ def recommend_portfolio():
             return 0.5 * (1 + _erf(_sqrt(float(days)) * mu_p / sigma_p / _sqrt(2.0)))
 
         _p12m = _pd(252)
+        # 组合历史最大回撤预估（按推荐权重加权平均，累计净值口径）
+        _maxmdd_p = sum(x["weight"] * (abs(x.get("maxMdd") or 0.0)) for x in _src) / wsum
         recoProb = {
             "p1m": _pd(21), "p3m": _pd(63), "p6m": _pd(126), "p12m": _p12m,
             "exp1m": _e(mu_p * 21) - 1, "exp3m": _e(mu_p * 63) - 1,
             "exp6m": _e(mu_p * 126) - 1, "exp12m": _e(mu_p * 252) - 1,
             "mu": mu_p, "sigma": sigma_p,
             "low": (_p12m is not None and _p12m < 0.45),   # 组合整体盈利概率偏低 → 前端提示
+            "maxMdd": round(_maxmdd_p, 3),                 # 组合历史最大回撤预估（风险提示）
         }
     dyn_note = ""
     if empty_cats:
@@ -1619,20 +1666,10 @@ def recommend_backtest():
     import concurrent.futures as _cf
 
     def _nav_at(code, asof_s):
-        try:
-            hist = get_history(code, 1400)
-            ds = [d for d in (hist.get("data") or []) if str(d.get("date"))[:10] <= asof_s]
-            return ds[-1]["nav"] if ds else None
-        except Exception:
-            return None
+        return _fund_nav_at(code, asof_s)
 
     def _nav_now(code):
-        try:
-            hist = get_history(code, 60)
-            ds = hist.get("data") or []
-            return ds[-1]["nav"] if ds else None
-        except Exception:
-            return None
+        return _fund_nav_now(code)
 
     for label, months in anchors:
         if _left() <= 5:
@@ -1726,20 +1763,18 @@ def recommend_backtest():
 
 
 def _fund_nav_at(code, asof_s):
-    """基金在 asof（含）之前最近一个交易日的净值（真实历史净值，用于回测买入价）。"""
+    """基金在 asof（含）之前最近一个交易日的累计净值（复权含分红，回测买入价=总收益口径）。"""
     try:
-        hist = get_history(code, 1400)
-        ds = [d for d in (hist.get("data") or []) if str(d.get("date"))[:10] <= asof_s]
+        ds = [d for d in get_adj_series(code) if str(d.get("date"))[:10] <= asof_s]
         return ds[-1]["nav"] if ds else None
     except Exception:
         return None
 
 
 def _fund_nav_now(code):
-    """基金最新净值（回测卖出价）。"""
+    """基金最新累计净值（复权含分红，回测卖出价=总收益口径）。"""
     try:
-        hist = get_history(code, 60)
-        ds = hist.get("data") or []
+        ds = get_adj_series(code)
         return ds[-1]["nav"] if ds else None
     except Exception:
         return None
@@ -1909,76 +1944,93 @@ def _compute_factors(code, bench_rets=None, asof=None):
                 "m": 0.00025, "s": 0.0006, "mu": 0.00025, "sigma": 0.0006,
                 "sc": {"fee": 90.0, "scale": 60.0, "inst": 50.0, "age": 80.0,
                        "tenure": 60.0, "sortino": 60.0, "mdd": 95.0, "long": 60.0}}
-    hist = get_history(code, 1200 if asof else 730)
+    hist = get_history(code, 1200 if asof else 730)          # 单位净值（仅用于展示/自身分位）
     data = hist.get("data") or []
     if asof:
         data = [d for d in data if str(d.get("date"))[:10] <= asof]   # 回测：只看到 asof 及之前的数据
     if len(data) < 60:
         return None
     closes = [d["nav"] for d in data]
-    n = len(closes)
-    rets = [closes[i] / closes[i - 1] - 1 for i in range(1, n)]
+    # 收益/风险一律用累计净值（复权、含分红）：单位净值在除息日会跳空（实测分红日"跌"4%~66%），
+    # 直接算收益会污染波动/回撤/动量/夏普，分红越多的基金被误伤越狠（2026-08-28 全盘审视修复）
+    ahist = get_adj_series(code)
+    if asof:
+        ahist = [d for d in ahist if str(d.get("date"))[:10] <= asof]
+    adates = [d.get("date") for d in ahist]
+    aclos = [d["nav"] for d in ahist]
+    if len(aclos) < 60:
+        aclos = closes                      # 累计净值不可得（罕见）时退回单位净值并接受其局限
+        adates = [d.get("date") for d in data]
+    n = len(aclos)
+    rets = [aclos[i] / aclos[i - 1] - 1 for i in range(1, n)]
     m, s = _mean(rets), _std(rets)
     # 对数日收益（蒙特卡洛盈利概率用）：几何漂移天然正确、数值稳定（不会出现 1+r<0）
     log_rets = [_log(1.0 + r) for r in rets if 1.0 + r > 0]
     mu, sigma = _mean(log_rets), _std(log_rets)
 
     def ret(k):
-        return closes[-1] / closes[-1 - k] - 1 if n > k else 0.0
+        return aclos[-1] / aclos[-1 - k] - 1 if n > k else 0.0
 
     r20, r60, r120, r250 = ret(20), ret(60), ret(120), ret(250)
     vol = s * _sqrt(252)
-    ann = (closes[-1] / closes[0]) ** (252.0 / len(rets)) - 1
-    peak = max(closes)
-    mdd = closes[-1] / peak - 1
+    # 年化收益用几何平均（复利真实年化），替代"区间首尾"端点敏感算法
+    _gm = _exp(_mean(log_rets)) if log_rets else 1.0
+    ann = (_gm ** 252) - 1 if _gm > 0 else 0.0
+    peak = max(aclos)
+    mdd = aclos[-1] / peak - 1
     sharpe = (ann - 0.02) / vol if vol > 0 else 0.0
-    win = closes[-120:]
+    win = aclos[-120:]
     zmu, zsd = _mean(win), _std(win) or 1e-9
-    z = (closes[-1] - zmu) / zsd
+    z = (aclos[-1] - zmu) / zsd
 
-    # 与沪深300回归：Beta / 年化Alpha / 信息比率
-    # 修复：基金历史与基准都带日期，按「交易日交集」配对（不再按下标尾部硬配对，
-    # 否则基准窗口与基金窗口错位时协方差被稀释，贝塔被压成 0.1 量级）。
-    if bench_rets is None or not bench_rets:
-        bench_rets = cached("bench", "hs300d", _daily_ttl(), lambda: _bench_daily_returns(730))
-    # 基金侧：日期 → 日收益（data 自带 date，YYYY-MM-DD）
-    fund_map = {}
-    for i in range(1, n):
-        fund_map[str(data[i].get("date"))[:10]] = closes[i] / closes[i - 1] - 1
-    if isinstance(bench_rets, dict) and bench_rets.get("dates") and bench_rets.get("rets"):
-        bmap = {str(d)[:10]: r for d, r in zip(bench_rets["dates"], bench_rets["rets"])}
-        common = sorted(set(fund_map) & set(bmap))
-        if len(common) >= 30:
-            fr = [fund_map[d] for d in common]
-            br = [bmap[d] for d in common]
-            L = len(fr)
-            mf, mb = _mean(fr), _mean(br)
-            vb = _std(br) or 1e-9
-            cov = _mean([(fr[i] - mf) * (br[i] - mb) for i in range(L)])
-            beta = cov / (vb * vb) if vb > 0 else 1.0
-            rf_d = 0.02 / 252.0
-            alpha = (mf - (rf_d + beta * (mb - rf_d))) * 252.0
-            te = _std([fr[i] - br[i] for i in range(L)]) or 1e-9
-            ir = (mf - mb) / te * _sqrt(252)
+    # 基准适配：Beta/Alpha/信息比率 只在"以 A 股沪深300 为可比基准"的权益类（股/混/指）上计算；
+    # 债券/货币/黄金/海外(QDII) 与沪深300 不可比（黄金相对沪深300 的 Alpha 无意义却被算成高分），
+    # 置 None（打分时按中性）并在展示处注明"基准不适用"。
+    ftype = f.get("type", "") or ""
+    _eq_bench = ("股票" in ftype) or ("混合" in ftype) or ("指数" in ftype)
+    beta, alpha, ir = (None, None, None)
+    if _eq_bench:
+        # 与沪深300回归：Beta / 年化Alpha / 信息比率（按「交易日交集」配对）
+        if bench_rets is None or not bench_rets:
+            bench_rets = cached("bench", "hs300d", _daily_ttl(), lambda: _bench_daily_returns(730))
+        # 基金侧：日期 → 日收益（累计净值口径）
+        fund_map = {}
+        for i in range(1, n):
+            fund_map[str(adates[i])[:10]] = aclos[i] / aclos[i - 1] - 1
+        if isinstance(bench_rets, dict) and bench_rets.get("dates") and bench_rets.get("rets"):
+            bmap = {str(d)[:10]: r for d, r in zip(bench_rets["dates"], bench_rets["rets"])}
+            common = sorted(set(fund_map) & set(bmap))
+            if len(common) >= 30:
+                fr = [fund_map[d] for d in common]
+                br = [bmap[d] for d in common]
+                L = len(fr)
+                mf, mb = _mean(fr), _mean(br)
+                vb = _std(br) or 1e-9
+                cov = _mean([(fr[i] - mf) * (br[i] - mb) for i in range(L)])
+                beta = cov / (vb * vb) if vb > 0 else 1.0
+                rf_d = 0.02 / 252.0
+                alpha = (mf - (rf_d + beta * (mb - rf_d))) * 252.0
+                te = _std([fr[i] - br[i] for i in range(L)]) or 1e-9
+                ir = (mf - mb) / te * _sqrt(252)
+            else:
+                beta, alpha, ir = 1.0, 0.0, 0.0
         else:
-            beta, alpha, ir = 1.0, 0.0, 0.0
-    else:
-        # 兜底：基准无日期（旧缓存/异常结构）时退回下标尾部配对，避免整体不可用
-        _br = bench_rets if isinstance(bench_rets, list) else []
-        L = min(len(rets), len(_br))
-        if L >= 30:
-            fr = rets[-L:]
-            br = _br[-L:]
-            mb = _mean(br)
-            vb = _std(br) or 1e-9
-            cov = _mean([(fr[i] - m) * (br[i] - mb) for i in range(L)])
-            beta = cov / (vb * vb) if vb > 0 else 1.0
-            rf_d = 0.02 / 252.0
-            alpha = (m - (rf_d + beta * (mb - rf_d))) * 252.0
-            te = _std([fr[i] - br[i] for i in range(L)]) or 1e-9
-            ir = (m - mb) / te * _sqrt(252)
-        else:
-            beta, alpha, ir = 1.0, 0.0, 0.0
+            # 兜底：基准无日期（旧缓存/异常结构）时退回下标尾部配对，避免整体不可用
+            _br = bench_rets if isinstance(bench_rets, list) else []
+            L = min(len(rets), len(_br))
+            if L >= 30:
+                fr = rets[-L:]
+                br = _br[-L:]
+                mb = _mean(br)
+                vb = _std(br) or 1e-9
+                cov = _mean([(fr[i] - m) * (br[i] - mb) for i in range(L)])
+                beta = cov / (vb * vb) if vb > 0 else 1.0
+                rf_d = 0.02 / 252.0
+                alpha = (m - (rf_d + beta * (mb - rf_d))) * 252.0
+                te = _std([fr[i] - br[i] for i in range(L)]) or 1e-9
+                ir = (m - mb) / te * _sqrt(252)
+            else:
+                beta, alpha, ir = 1.0, 0.0, 0.0
 
     calmar = ann / abs(mdd) if mdd < 0 else (ann / 0.01 if ann > 0 else 0.0)
 
@@ -1987,8 +2039,8 @@ def _compute_factors(code, bench_rets=None, asof=None):
     neg = [x for x in rets if x < 0]                         # 下行收益样本
     down_dev = _std(neg) if len(neg) > 2 else None           # 下行标准差
     sortino = ((ann - 0.02) / (down_dev * _sqrt(252))) if (down_dev and down_dev > 0) else 0.0
-    peak2, maxMdd = closes[0], 0.0                           # 历史最大回撤（区别于当前回撤 mdd）
-    for c in closes:
+    peak2, maxMdd = aclos[0], 0.0                           # 历史最大回撤（累计净值口径，避开分红假回撤）
+    for c in aclos:
         if c > peak2:
             peak2 = c
         dd2 = c / peak2 - 1
@@ -2034,8 +2086,8 @@ def _compute_factors(code, bench_rets=None, asof=None):
                 vp = None
                 val_basis = "海外基准指数日线不可达·估值暂不可得（QDII 以风险调整+分散价值评估）"
             else:
-                # 国内基准指数日线不可达：退化为价位分位代理并明确标注
-                vp = round(sum(1 for x in closes if x <= closes[-1]) / len(closes) * 100, 1)
+                # 国内基准指数日线不可达：退化为价位分位代理并明确标注（用累计净值，避开分红跳空）
+                vp = round(sum(1 for x in aclos if x <= aclos[-1]) / len(aclos) * 100, 1)
                 val_basis = "价位分位代理（基准指数日线不可达·相对自身近3年）"
     else:
         # 真正无统一估值口径的主动基金：不伪装估值，避免系统性假性偏贵
@@ -2082,10 +2134,10 @@ def _compute_factors(code, bench_rets=None, asof=None):
     sc_sharpe = clamp(40 + sharpe * 35)
     sc_sortino = clamp(40 + sortino * 35)
     sc_calmar = clamp(40 + calmar * 25)
-    sc_alpha = clamp(50 + alpha * 150)
+    sc_alpha = clamp(50 + (alpha if alpha is not None else 0.0) * 150)   # 基准不适用（债/货/金/海外）→中性
     sc_dd = clamp(55 + mdd * 100)          # 当前回撤越浅越好
     sc_mdd = clamp(55 + maxMdd * 100)      # 历史最大回撤越浅越好
-    sc_ir = clamp(55 + ir * 40)
+    sc_ir = clamp(55 + (ir if ir is not None else 0.0) * 40)             # 基准不适用 →中性
     sc_avr = clamp(avr)
     # 费率（申购费率%）：越低越好（长期成本关键）
     fee = f.get("feeRate")
@@ -2148,9 +2200,12 @@ def _build_reasons(fac, verdict, cap, amount, capital, p1, p3, p6, p12):
     r.append("类型：%s；近一年收益 %s，年化波动 %.1f%%，最大回撤 %s，夏普 %.2f，卡玛 %.2f。"
              % (fac["type"] or "—", _s(fac["r250"]), fac["vol"] * 100,
                 _s(fac["mdd"]), fac["sharpe"], fac["calmar"]))
-    r.append("相对沪深300：Beta %.2f（%s），年化Alpha %s，信息比率 %.2f。"
-             % (fac["beta"], "高弹性" if fac["beta"] > 1.1 else ("防御" if fac["beta"] < 0.9 else "同步"),
-                _s(fac["alpha"]), fac["ir"]))
+    if fac.get("beta") is None:
+        r.append("基准适配：非 A 股权益类，Beta/Alpha/信息比率不适用（不与沪深300比较）。")
+    else:
+        r.append("相对沪深300：Beta %.2f（%s），年化Alpha %s，信息比率 %.2f。"
+                 % (fac["beta"], "高弹性" if fac["beta"] > 1.1 else ("防御" if fac["beta"] < 0.9 else "同步"),
+                    _s(fac["alpha"]), fac["ir"]))
     val = fac["valPct"]
     if val is not None:
         r.append("估值分位 %s%%（%s）：%s" % (val, fac["valBasis"],
@@ -2180,11 +2235,10 @@ def _build_reasons(fac, verdict, cap, amount, capital, p1, p3, p6, p12):
 
 # ---------------- 一键配资 / 可执行优化方案 ----------------
 def _fund_returns(code, days=730):
-    """返回基金最近 250 个交易日的日收益率（与 _compute_factors 共用 history 缓存）。"""
+    """返回基金最近 250 个交易日的日收益率（累计净值口径，与 _compute_factors 一致，避开分红跳空）。"""
     try:
-        hist = get_history(code, days)
-        data = hist.get("data") or []
-        closes = [d["nav"] for d in data if d.get("nav") is not None]
+        ds = get_adj_series(code)
+        closes = [d["nav"] for d in ds if d.get("nav") is not None]
         rets = [closes[i] / closes[i - 1] - 1 for i in range(1, len(closes))]
         return rets[-250:]
     except Exception:
