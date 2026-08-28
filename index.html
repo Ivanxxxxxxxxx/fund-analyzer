@@ -1641,6 +1641,114 @@ async function resetPlanWeights(){
   const info=manual.map((f,i)=>`${f.name||f.code} ${(w[i]*100).toFixed(0)}%`).join("、");
   toast("已按风险平价智能配置（波动越低配越多）："+info);
 }
+// 把目标波动持久化到 fp_sim
+function saveTargetVol(v){
+  const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
+  sim.targetVol=Math.max(5,Math.min(30,+(v||15)));
+  localStorage.setItem("fp_sim",JSON.stringify(sim));
+}
+// 均值-方差求解：在「组合波动 ≤ 目标波动」且「只做多、权重和=1、单只[lo,hi]」约束下，最大化组合年化收益。
+// 做法：对风险厌恶系数 λ 做二分；每个 λ 用「暴力枚举所有边界激活组合 + 精确矩阵求逆」求该 λ 下 QP 的精确最优解
+// （凸 QP 的全局最优必是某个 KKT 点，对应一组边界激活组合），组合波动随 λ 单调下降；命中目标波动即停。
+// λ→∞→全局最小方差组合(GMV)，λ→0→最高收益角点。
+function invMat(A){ // 高斯-约当求逆，奇异返回 null
+  const m=A.length; const M=A.map((r,i)=> r.concat(Array.from({length:m},(_,j)=> i===j?1:0)));
+  for(let col=0; col<m; col++){
+    let piv=col; for(let r=col+1;r<m;r++) if(Math.abs(M[r][col])>Math.abs(M[piv][col])) piv=r;
+    if(Math.abs(M[piv][col])<1e-12) return null;
+    [M[col],M[piv]]=[M[piv],M[col]]; const d=M[col][col];
+    for(let j=0;j<2*m;j++) M[col][j]/=d;
+    for(let r=0;r<m;r++){ if(r===col) continue; const f=M[r][col]; if(f!==0){ for(let j=0;j<2*m;j++) M[r][j]-=f*M[col][j]; } }
+  }
+  return M.map(r=> r.slice(m));
+}
+function solveQP(mu, S, lo, hi, lambda){
+  const n=mu.length; const Q=S.map(r=>r.map(c=>2*lambda*c)); const eps=1e-7;
+  let best=null; const total=Math.pow(3,n);
+  for(let code=0; code<total; code++){          // 枚举每种边界激活组合（每只：下界/自由/上界）
+    const fixed=new Array(n).fill(null); let c=code;
+    for(let i=0;i<n;i++){ const d=c%3; c=Math.floor(c/3); fixed[i]= d===0?lo : (d===1?null : hi); }
+    const F=[]; for(let i=0;i<n;i++) if(fixed[i]===null) F.push(i);
+    let w;
+    if(F.length===0){ const s=fixed.reduce((a,v)=>a+v,0); if(Math.abs(s-1)>1e-6) continue; w=fixed.slice(); }
+    else {
+      const m=F.length; const QFF=[]; for(let a=0;a<m;a++){QFF[a]=[];for(let b=0;b<m;b++)QFF[a][b]=Q[F[a]][F[b]];}
+      const muF=F.map(i=>mu[i]);
+      const cross=F.map(i=>{let s=0;for(let j=0;j<n;j++)if(fixed[j]!==null)s+=Q[i][j]*fixed[j];return s;});
+      let rhs=1; for(let j=0;j<n;j++) if(fixed[j]!==null) rhs-=fixed[j];
+      const inv=invMat(QFF); if(!inv) continue;
+      const y=muF.map((_,a)=>{let s=0;for(let b=0;b<m;b++)s+=inv[a][b]*(muF[b]-cross[b]);return s;});
+      const qinv1=inv.map(row=>row.reduce((a,b)=>a+b,0));
+      let oneInv=0;for(let a=0;a<m;a++)oneInv+=qinv1[a]; let oneY=0;for(let a=0;a<m;a++)oneY+=y[a];
+      const nu=(oneY-rhs)/oneInv; const wF=y.map((v,a)=>v-nu*qinv1[a]);
+      let ok=true; for(let a=0;a<m;a++){ if(wF[a]<lo+eps||wF[a]>hi-eps){ok=false;break;} }
+      if(!ok) continue;
+      w=new Array(n).fill(0); for(let i=0;i<n;i++) w[i]= fixed[i]!==null?fixed[i]:wF[F.indexOf(i)];
+    }
+    let sv=0; for(let i=0;i<n;i++){let s=0;for(let j=0;j<n;j++)s+=S[i][j]*w[j];sv+=w[i]*s;}
+    const obj=mu.reduce((a,m,i)=>a+m*w[i],0) - lambda*sv;   // 完整目标函数：最大化 收益 − λ·波动²
+    if(best===null || obj>best.obj) best={w,obj};
+  }
+  return best? best.w : new Array(n).fill(1/n);
+}
+function solveMaxRetAtVol(mu, Sigma, lo, hi, targetVol){
+  const n=mu.length; if(n===1) return [1];
+  const S=Sigma.map((row,i)=> row.map((c,j)=> i===j? c+1e-8 : c));   // 加极小岭项保证数值稳定
+  const volOf=w=>{ let v=0; for(let i=0;i<n;i++){ let s=0; for(let j=0;j<n;j++) s+=S[i][j]*w[j]; v+=w[i]*s; } return Math.sqrt(Math.max(0,v)); };
+  const LMIN=1e-4, LMAX=1e7;
+  const v0=volOf(solveQP(mu,S,lo,hi,LMIN));      // 最高收益角点的波动（最大）
+  const vInf=volOf(solveQP(mu,S,lo,hi,LMAX));    // 最小方差组合的波动（最小）
+  if(vInf>targetVol+1e-6) return solveQP(mu,S,lo,hi,LMAX);   // 目标波动低于可达下限 → GMV（最低波动组合）
+  if(v0<targetVol-1e-6) return solveQP(mu,S,lo,hi,LMIN);      // 目标波动高于可达上限 → 最高收益角点
+  let a=LMIN,b=LMAX;
+  for(let k=0;k<60;k++){ const m=Math.sqrt(a*b); const v=volOf(solveQP(mu,S,lo,hi,m)); if(v>targetVol) a=m; else b=m; }
+  return solveQP(mu,S,lo,hi,Math.sqrt(a*b));
+}
+// 📈 收益最大化（按目标波动）：在你设定的目标年化波动下，把组合年化收益最大化（均值-方差有效前沿）
+async function optimizePlanMaxReturn(){
+  let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
+  if(!manual.length) manual=getPlanFunds();
+  if(!manual.length){ toast("计划里还没有基金"); return; }
+  const tvEl=document.getElementById("targetVol");
+  const tvPct=Math.max(5,Math.min(30, tvEl?(+tvEl.value||15):15));
+  const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}"); sim.targetVol=tvPct; localStorage.setItem("fp_sim",JSON.stringify(sim));
+  const targetVol=tvPct/100;
+  toast("正在按目标波动 "+tvPct+"% 优化分配（拉取历史、计算协方差）…");
+  if(!window.__histCache) window.__histCache={};
+  for(const f of manual){
+    if(!window.__histCache[f.code]){
+      const r=await api("/api/history/"+f.code+"?days=730").catch(()=>({data:[]}));
+      window.__histCache[f.code]=r.data||[];
+    }
+  }
+  const n=manual.length;
+  const navs=manual.map(f=>(window.__histCache[f.code]||[]).map(d=>d.nav).filter(v=>v>0));
+  const rets=navs.map(dailyReturns);
+  const L=Math.min(...rets.map(r=>r.length));
+  if(L<10){ toast("部分基金历史不足（需≥10个交易日），无法按收益最大化分配"); return; }
+  const aligned=rets.map(r=> r.slice(r.length-L));               // 尾部对齐，与 analyze 一致
+  const mu=aligned.map(r=>{ const g=r.reduce((a,x)=>a*(1+x),1); return Math.pow(g,252/L)-1; });   // 年化收益（几何）
+  const mean=aligned.map(r=> r.reduce((a,x)=>a+x,0)/L);
+  const Sigma=[]; for(let i=0;i<n;i++){ Sigma[i]=[]; for(let j=0;j<n;j++){
+    let s=0; for(let k=0;k<L;k++) s+=(aligned[i][k]-mean[i])*(aligned[j][k]-mean[j]);
+    Sigma[i][j]=s/(L-1)*252;                                    // 年化协方差
+  }}
+  // 缺历史基金的兜底：μ 取均值、方差取最大、协方差 0（中性参与，不主导分配）
+  const validMu=mu.filter(v=>isFinite(v));
+  const avgMu=validMu.length? validMu.reduce((a,b)=>a+b,0)/validMu.length : 0;
+  const maxVar=Math.max(...Sigma.map((row,i)=>Math.max(row[i],1e-6)));
+  for(let i=0;i<n;i++){ if(!isFinite(mu[i])){ mu[i]=avgMu; for(let j=0;j<n;j++) Sigma[i][j]=Sigma[j][i]=(i===j?maxVar:0); } }
+  const w=solveMaxRetAtVol(mu, Sigma, 0.05, 0.55, targetVol);
+  manual=manual.map((f,i)=>({...f, weight:+w[i].toFixed(4)}));
+  localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
+  // 实际波动（用于诚实提示：目标过低时被钳到最低波动组合）
+  let sv=0; for(let i=0;i<n;i++){ let s=0; for(let j=0;j<n;j++) s+=Sigma[i][j]*w[j]; sv+=w[i]*s; }
+  const finalVol=Math.sqrt(Math.max(0,sv));
+  renderPlanSim();
+  const info=manual.map((f,i)=>`${f.name||f.code} ${(w[i]*100).toFixed(0)}%`).join("、");
+  const note=finalVol>targetVol+0.005?"（目标波动低于可达下限，已取最低波动组合）":"";
+  toast("已按目标波动 "+tvPct+"% 最大化年化收益："+info+note);
+}
 // 计划 → 执行：按计划金额把基金买入，写入实时持仓（之前一键配置直接建仓，现改为先计划后执行）
 async function planToHoldings(){
   const pf=getPlanFunds();
@@ -1675,6 +1783,7 @@ async function renderPlanSim(){
   const months=Math.max(1,Math.min(360,+sim.months||60));
   const dca=Math.max(0,+sim.dca||0);
   const freq=(JSON.parse(localStorage.getItem("fp_dca")||"{}")).freq||"month";
+  const tv=Math.max(5,Math.min(30,+(sim.targetVol||15)));
   const pf=getPlanFunds();
   // 若计划基金组合与实时持仓完全一致（同一批基金），计划概览/诊断统一用持仓的实际金额占比作为权重，
   // 与「持仓分析」口径一致，消除“同基金不同数”。计划≠持仓时仍用计划自身仓位权重。
@@ -1718,6 +1827,8 @@ async function renderPlanSim(){
       <label>计划基金</label>
       <input id="planFundInput" class="num" type="text" placeholder="输入基金代码加入计划" style="max-width:180px" onkeydown="if(event.key==='Enter')addPlanFund()">
       <button class="btn-ghost btn-sm" onclick="addPlanFund()">+ 加入</button>
+      <label style="margin-left:10px">目标波动</label><input id="targetVol" class="num" type="number" min="5" max="30" step="1" value="${tv}" style="width:54px" onchange="saveTargetVol(this.value)" title="收益最大化分配时的目标年化波动，5%~30%">%
+      <button class="btn-ghost btn-sm" onclick="optimizePlanMaxReturn()" title="在你设定的目标波动下，把组合年化收益最大化（均值-方差有效前沿，只做多+单只5%~55%）">📈 收益最大化（按目标波动）</button>
       <button class="btn-ghost btn-sm" onclick="resetPlanWeights()" title="实时分析每只基金历史波动，波动越低配越多（风险平价），比均分更科学">📊 智能配置（风险平价）</button>
       <button class="btn-ghost btn-sm" onclick="normalizePlanWeights()" title="保持各基金相对比例不变，把总仓位缩放回 100%（金额合计=本金）">⚖️ 归一化</button>
       <button class="btn-ghost btn-sm" onclick="clearPlanFunds()">清空</button>
