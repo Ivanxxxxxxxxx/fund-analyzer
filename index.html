@@ -2401,7 +2401,7 @@ function openAdvise(){ document.getElementById("adviseOverlay").classList.add("s
 function closeAdvise(){ document.getElementById("adviseOverlay").classList.remove("show"); }
 // 弹窗内一键配置：读弹窗里的输入（setupN2/P2/D2/Y2=持有月数）并执行建仓
 function quickSetupFromModal(){
-  const n=Math.max(1,Math.min(10, +document.getElementById("setupN2").value||3));
+  const n=Math.max(1,Math.min(20, +document.getElementById("setupN2").value||5));
   const p=Math.max(0, +document.getElementById("setupP2").value||0);
   const d=Math.max(0, +document.getElementById("setupD2").value||0);
   const months=Math.max(1,Math.min(360, +document.getElementById("setupY2").value||60));
