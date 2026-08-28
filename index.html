@@ -1550,21 +1550,16 @@ function clearPlanFunds(){
   localStorage.removeItem("fp_sim_funds");
   renderPlanSim(); toast("已清空计划基金，改为自动来源（一键配置 / 推荐组合）");
 }
-// 调整某只计划基金的仓位占比（%），其余基金按原比例自动归一化到剩余份额
+// 调整某只计划基金的仓位占比（%）：自由编辑，只改这一只，其余基金保持不变（不再自动归一化，避免“改一只别的全变”）
 function setPlanWeight(code, pct){
   let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
   if(!manual.length) manual=getPlanFunds();
   const target=Math.max(0,Math.min(100,+pct||0))/100;
-  const others=manual.filter(f=>f.code!==code);
-  const rest=Math.max(0,1-target);
-  const oSum=others.reduce((s,f)=>s+(+f.weight||0),0)||1;
-  manual=manual.map(f=> f.code===code
-    ? {code:f.code, name:f.name, weight:+target.toFixed(4)}
-    : {code:f.code, name:f.name, weight:+(others.length?((+f.weight||0)/oSum*rest):0).toFixed(4)});
+  manual=manual.map(f=> f.code===code ? {...f, weight:+target.toFixed(4)} : f);
   localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
   renderPlanSim();
 }
-// 直接改某只基金的计划买入金额（元）→ 换算成占比，其余基金按原比例分担剩余份额
+// 直接改某只基金的计划买入金额（元）→ 换算成占比：自由编辑，只改这一只，其余保持不变
 function setPlanAmount(code, amt){
   const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
   const P=Math.max(0,+sim.principal||0);
@@ -1572,14 +1567,20 @@ function setPlanAmount(code, amt){
   let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
   if(!manual.length) manual=getPlanFunds();
   const target=Math.max(0,Math.min(P,+amt||0))/P;
-  const others=manual.filter(f=>f.code!==code);
-  const rest=Math.max(0,1-target);
-  const oSum=others.reduce((s,f)=>s+(+f.weight||0),0)||1;
-  manual=manual.map(f=> f.code===code
-    ? {code:f.code, name:f.name, suggest:f.suggest, weight:+target.toFixed(4)}
-    : {code:f.code, name:f.name, suggest:f.suggest, weight:+(others.length?((+f.weight||0)/oSum*rest):0).toFixed(4)});
+  manual=manual.map(f=> f.code===code ? {...f, suggest:f.suggest, weight:+target.toFixed(4)} : f);
   localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
   renderPlanSim();
+}
+// 归一化：保持各基金相对比例不变，把总仓位缩放回 100%（金额合计=本金）。用于自由编辑后想一键占满本金
+function normalizePlanWeights(){
+  let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
+  if(!manual.length) manual=getPlanFunds();
+  if(!manual.length){ toast("计划里还没有基金"); return; }
+  const tot=manual.reduce((s,f)=>s+(+f.weight||0),0)||1;
+  manual=manual.map(f=>({...f, weight:+((+f.weight||0)/tot).toFixed(4)}));
+  localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
+  renderPlanSim();
+  toast("已按当前比例归一化到 100%（各基金相对比例不变）");
 }
 // 智能配置（风险平价）：实时拉每只计划基金的历史净值，算出年化波动率，
 // 波动越低的基金配越多（风险平价），避免手动均分毫无依据
@@ -1676,6 +1677,11 @@ async function renderPlanSim(){
   // 参数编辑区 + 计划基金（可增删）
   const pe=document.getElementById("planSimParams");
   if(pe){
+    const tw=pf.reduce((s,f)=>s+(+f.weight||0),0);
+    const allocPct=Math.round(tw*100);
+    const allocAmt=Math.round(P*tw);
+    const allocDiff=allocAmt-P;
+    const allocOk=Math.abs(tw-1)<0.005;
     const rows=pf.length?pf.map(f=>{
       const wt=(+f.weight||0);
       return `<tr>
@@ -1695,6 +1701,7 @@ async function renderPlanSim(){
       <input id="planFundInput" class="num" type="text" placeholder="输入基金代码加入计划" style="max-width:180px" onkeydown="if(event.key==='Enter')addPlanFund()">
       <button class="btn-ghost btn-sm" onclick="addPlanFund()">+ 加入</button>
       <button class="btn-ghost btn-sm" onclick="resetPlanWeights()" title="实时分析每只基金历史波动，波动越低配越多（风险平价），比均分更科学">📊 智能配置（风险平价）</button>
+      <button class="btn-ghost btn-sm" onclick="normalizePlanWeights()" title="保持各基金相对比例不变，把总仓位缩放回 100%（金额合计=本金）">⚖️ 归一化</button>
       <button class="btn-ghost btn-sm" onclick="clearPlanFunds()">清空</button>
       <span class="muted" style="font-size:11px">${isPlanManual()?"手动设置":"自动（一键配置/推荐）"}</span>
       <span style="flex:1"></span>
@@ -1703,7 +1710,12 @@ async function renderPlanSim(){
     <div class="pf-table-wrap"><table class="pf-table">
       <thead><tr><th>基金</th><th class="num">仓位 %</th><th class="num">计划金额 ¥（可改）</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
-    </table></div>`;
+    </table></div>
+    <div style="margin-top:6px;font-size:11.5px;font-weight:600;color:${allocOk?'var(--good)':'var(--warn)'}">
+      已分配 <b>${allocPct}%</b> · 计划金额合计 <b>¥${allocAmt.toLocaleString()}</b>
+      （本金 ¥${P.toLocaleString()}，<b>${allocDiff>=0?'超出':'剩余'} ¥${Math.abs(allocDiff).toLocaleString()}</b>）
+      ${allocOk?'✅ 已占满本金':'⚠️ 未占满/超出，点「⚖️ 归一化」可一键按当前比例调回 100%'}
+    </div>`;
   }
   await renderOverviewTo(box,"planSimCanvas",{
     funds:funds, P:P, A:dca, months:months,
