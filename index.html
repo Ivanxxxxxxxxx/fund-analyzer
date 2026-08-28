@@ -1571,6 +1571,19 @@ function setPlanAmount(code, amt){
   localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
   renderPlanSim();
 }
+// 最大余数法：把总额按权重比例拆成整数金额，保证各基金金额之和精确等于 round(total)，
+// 消除「逐只 Math.round 后再合计」会凭空多/少 1 元的四舍五入错位（导致误报“超了1块”）。
+function distributeTotal(total, weights){
+  const n=weights.length; if(n===0) return [];
+  const wsum=weights.reduce((a,b)=>a+b,0);
+  if(wsum<=0) return weights.map(()=>0);
+  const raw=weights.map(w=>total*w/wsum);
+  const floors=raw.map(Math.floor);
+  let rem=Math.round(total)-floors.reduce((a,b)=>a+b,0);
+  const order=raw.map((v,i)=>({i,f:v-Math.floor(v)})).sort((a,b)=>b.f-a.f);
+  for(let k=0;k<rem;k++){ const idx=order[((k%order.length)+order.length)%order.length].i; floors[idx]++; }
+  return floors;
+}
 // 归一化：保持各基金相对比例不变，把总仓位缩放回 100%（金额合计=本金）。用于自由编辑后想一键占满本金
 function normalizePlanWeights(){
   let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
@@ -1679,16 +1692,20 @@ async function renderPlanSim(){
   const pe=document.getElementById("planSimParams");
   if(pe){
     const tw=pf.reduce((s,f)=>s+(+f.weight||0),0);
-    const allocPct=Math.round(tw*100);
-    const allocAmt=Math.round(P*tw);
-    const allocDiff=allocAmt-P;
     const allocOk=Math.abs(tw-1)<0.005;
-    const rows=pf.length?pf.map(f=>{
+    const effTw=allocOk?1:tw;                       // 权重已≈100%时按正好100%分配，消除 toFixed(4) 残留的“超1块”误报
+    const wts=pf.map(f=>(+f.weight||0));
+    const _allocTotal=P*effTw;                      // 计划实际要投的总额（按权重折算）
+    const _amts=distributeTotal(_allocTotal, wts);  // 最大余数法：各基金金额之和精确等于 round(_allocTotal)
+    const allocAmt=_amts.reduce((a,b)=>a+b,0);
+    const allocPct=Math.round(tw*100);
+    const allocDiff=allocAmt-P;
+    const rows=pf.length?pf.map((f,i)=>{
       const wt=(+f.weight||0);
       return `<tr>
         <td><span class="pf-code">${f.code}</span><span class="pf-name">${f.name||"—"}</span></td>
         <td class="num"><input class="num" type="number" min="0" max="100" step="1" value="${Math.round(wt*100)}" onchange="setPlanWeight('${f.code}',this.value)" style="width:66px" title="改这只基金的仓位占比">%</td>
-        <td class="num"><input class="num" type="number" min="0" step="1000" value="${Math.round(P*wt)}" onchange="setPlanAmount('${f.code}',this.value)" style="width:100px" title="直接改这只基金的计划买入金额"></td>
+        <td class="num"><input class="num" type="number" min="0" step="1000" value="${_amts[i]}" onchange="setPlanAmount('${f.code}',this.value)" style="width:100px" title="直接改这只基金的计划买入金额"></td>
         <td class="del" onclick="delPlanFund('${f.code}')" title="从计划移除">✕</td>
       </tr>`;
     }).join(""):'<tr><td colspan="4" class="muted" style="font-size:12px">暂无计划基金</td></tr>';
@@ -1714,7 +1731,7 @@ async function renderPlanSim(){
     </table></div>
     <div style="margin-top:6px;font-size:11.5px;font-weight:600;color:${allocOk?'var(--good)':'var(--warn)'}">
       已分配 <b>${allocPct}%</b> · 计划金额合计 <b>¥${allocAmt.toLocaleString()}</b>
-      （本金 ¥${P.toLocaleString()}，<b>${allocDiff>=0?'超出':'剩余'} ¥${Math.abs(allocDiff).toLocaleString()}</b>）
+      （本金 ¥${P.toLocaleString()}，${Math.abs(allocDiff)<1?'<b>正好占满</b>':`<b>${allocDiff>0?'超出':'剩余'} ¥${Math.abs(allocDiff).toLocaleString()}</b>`}）
       ${allocOk?'✅ 已占满本金':'⚠️ 未占满/超出，点「⚖️ 归一化」可一键按当前比例调回 100%'}
     </div>`;
   }
