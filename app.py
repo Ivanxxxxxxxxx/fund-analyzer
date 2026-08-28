@@ -1726,16 +1726,41 @@ def recommend_backtest():
             u, fac = best
             a, b = _nav_at(u["code"], asof_s), _nav_now(u["code"])
             fwd = (b / a - 1) if (a and b and a > 0) else None
+            # 盈利概率（与主推荐同一均值回归框架 muE）：锚点时点 1 年盈利概率
+            _muE = fac.get("muE")
+            _sig = fac.get("sigma")
+            _p12x = (0.5 * (1 + _erf(_sqrt(252.0) * _muE / _sig / _sqrt(2.0)))
+                     if (_muE is not None and _sig and _sig > 0) else None)
             picks.append({"asset": asset, "code": u["code"], "name": fac.get("name") or u["name"],
                           "score": round(fac["composite"], 1),
                           "verdict": "",   # 下方按当次分布自适应校准
                           "valPct": fac.get("valPct"), "buySignal": _buy_signal_of(fac),
+                          "p12": _p12x, "r3y": fac.get("r3y"),
                           "weight": alw, "fwdRet": (round(fwd * 100, 1) if fwd is not None else None)})
         # 阈值自适应（与主推荐一致）：基于各品类最优分的分布
         _pm = _median([p["score"] for p in picks]) or 50.0
         _tr = max(56.0, _pm + 8.0); _tw = max(42.0, _pm + 1.0)
         for p in picks:
             p["verdict"] = "推荐" if p["score"] >= _tr else ("谨慎" if p["score"] >= _tw else "观望")
+        # 宁缺毋滥（与一键配置 buildCombo 同口径）：只保留达到「推荐」标准的类别最优基金；
+        # 某类别无推荐级 → 该类空缺、权重重新归一，绝不把"谨慎/观望"级亏损基金塞进推荐组合。
+        _EQ_ASSETS = {"股票型", "混合型", "指数型", "海外(QDII)"}
+        _keep = []
+        for p in picks:
+            if p["score"] < _tr:
+                continue                                  # 未达推荐阈值 → 不配
+            if p.get("p12") is not None and p["p12"] < 0.35:
+                continue                                  # 盈利概率过低（如高位黄金）→ 不配
+            if p["asset"] in _EQ_ASSETS:
+                if (p.get("p12") is not None and p["p12"] < 0.50):
+                    continue                              # 权益类 p12<50% → 不配（与主推荐一致）
+                if (p.get("r3y") is not None and p["r3y"] < 0):
+                    continue                              # 权益类近3年负收益 → 不配
+            _keep.append(p)
+        picks = _keep
+        _wsum = sum(p["weight"] for p in picks) or 1.0
+        for p in picks:
+            p["weight"] = round(p["weight"] / _wsum, 4)   # 空缺类别后权重重新归一
         # 组合收益：按推荐配置比例加权（仅含成功取到净值的类别）；fwdRet 为百分数，先转回小数
         tot_w, acc = 0.0, 0.0
         for p in picks:
