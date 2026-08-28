@@ -1316,7 +1316,8 @@ async function calcPortfolioStats(list){
   if(!funds.length) return null;
   const codes=funds.map(h=>h.code).join(",");
   const today=new Date().toDateString();
-  const ck="fp_stats:"+codes+":"+today;
+  // v2：缓存结构含 maxDD/sharpe（v1 只有 ann/vol），换 key 避免读到旧结构
+  const ck="fp_stats2:"+codes+":"+today;
   const cached=JSON.parse(localStorage.getItem(ck)||"null");
   if(cached && cached.ann!=null) return cached;
   if(!window.__histCache) window.__histCache={};
@@ -1346,7 +1347,11 @@ async function calcPortfolioStats(list){
   const vol=Math.sqrt(variance)*Math.sqrt(252);
   const growth=pr.reduce((acc,r)=>acc*(1+r),1);
   const ann=Math.pow(growth,252/L)-1;
-  const out={ann, vol};
+  // 最大回撤（按组合累计净值曲线）与夏普比率（无风险利率 2%）
+  let peak=-Infinity, maxDD=0, cum=1;
+  for(const r of pr){ cum*=(1+r); if(cum>peak) peak=cum; const dd=cum/peak-1; if(dd<maxDD) maxDD=dd; }
+  const sharpe=(vol>0)?((ann-0.02)/vol):0;
+  const out={ann, vol, maxDD, sharpe};
   try{ localStorage.setItem(ck, JSON.stringify(out)); }catch(e){}
   return out;
 }
@@ -1407,7 +1412,18 @@ async function renderOverviewTo(box, canvasId, opt){
   // stat(l,v,s,col,dot)：col=数字颜色（可选），dot=标签前的曲线同色圆点（情景总金额与图表一一对应）
   const stat=(l,v,s,col,dot)=>`<div style="background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0"><div style="font-size:11px;color:var(--muted)">${dot?`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${dot};margin-right:5px;vertical-align:1px"></span>`:""}${l}</div><div style="font-size:16px;font-weight:750;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis${col?`;color:${col}`:""}">${v}</div>${s?`<div style="font-size:10.5px;color:var(--muted)">${s}</div>`:""}</div>`;
   const idealEnd=idealY[months][1], p95End=p95[months][1], p5End=p5[months][1];
+  // 当前组合指标（年化/波动/回撤/夏普）：让"这组基金现在什么水平"一眼可见
+  const dd=(stats&&stats.maxDD!=null)?stats.maxDD:null;
+  const sh=(stats&&stats.sharpe!=null)?stats.sharpe:null;
+  const metricsRow=`
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px">
+      ${stat("年化收益", (r*100).toFixed(1)+"%", "组合历史净值推算", r>=0?"var(--up)":"var(--down)")}
+      ${stat("年化波动", (vol*100).toFixed(1)+"%", vol<0.10?"低波动":(vol<0.20?"中波动":"高波动"), vol<0.10?"var(--good)":(vol<0.20?"var(--warn)":"var(--bad)"))}
+      ${stat("最大回撤", dd!=null?(dd*100).toFixed(1)+"%":"—", dd!=null?"历史最坏跌幅":"暂无", "var(--down)")}
+      ${stat("夏普比率", sh!=null?sh.toFixed(2):"—", sh!=null?(sh>=1?"优秀":(sh>=0.5?"良好":"一般")):"暂无", sh!=null?(sh>=1?"var(--good)":(sh>=0.5?"var(--warn)":"var(--muted)")):"")}
+    </div>`;
   box.innerHTML=`
+    ${metricsRow}
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px">
       ${stat(pLabel, yuan(P), opt.pSub||"")}
       ${stat(freqLabel+"定投", rawAmt>0?yuan(rawAmt):"—", rawAmt>0?("每期 "+yuan(rawAmt)+" · 共 "+dcaPeriods(months)+" 期 · 折合每月 "+yuan(A)):"未设置定投")}
@@ -1478,7 +1494,9 @@ function getPlanFunds(){
   if(window.__lastSetupCodes&&window.__lastSetupCodes.length) codes=[...window.__lastSetupCodes];
   else if(typeof selFunds!=="undefined"&&selFunds&&selFunds.size) codes=[...selFunds.keys()];
   else codes=rf.filter(f=>f.verdict==="推荐").map(f=>f.code);
-  return codes.map(c=>{const f=rf.find(x=>x.code===c); return {code:c,name:f?f.name:c,weight:(f&&f.weight)||0.05};});
+  // suggest=建议配置权重（来自推荐的 weight），供「按建议比例分配」一键复位
+  return codes.map(c=>{const f=rf.find(x=>x.code===c);
+    return {code:c, name:f?f.name:c, weight:(f&&f.weight)||0.05, suggest:(f&&f.weight)||0.05};});
 }
 function isPlanManual(){ return (JSON.parse(localStorage.getItem("fp_sim_funds")||"[]")).length>0; }
 async function addPlanFund(){
@@ -1491,9 +1509,11 @@ async function addPlanFund(){
   if(!f.ok||!f.name){ toast("未找到基金："+code); return; }
   // 未手动设置过 → 先把当前自动来源固化进手动列表，再加入新的（避免"加了1只只剩1只"）
   if(!manual.length) manual=getPlanFunds();
-  manual.push({code:code, name:f.name, weight:1});
+  manual.push({code:code, name:f.name, weight:1, suggest:0});
+  const eq=+(1/manual.length).toFixed(4);          // 新基金的建议权重=均分
   const tot=manual.reduce((s,x)=>s+(+x.weight||1),0)||1;
-  manual=manual.map(x=>({code:x.code, name:x.name, weight:+((+x.weight||1)/tot).toFixed(4)}));
+  manual=manual.map(x=>({code:x.code, name:x.name, weight:+((+x.weight||1)/tot).toFixed(4),
+                         suggest:(+x.suggest||0)||eq}));
   localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
   el.value=""; renderPlanSim(); toast("已加入投资计划："+f.name);
 }
@@ -1523,6 +1543,37 @@ function setPlanWeight(code, pct){
     : {code:f.code, name:f.name, weight:+(others.length?((+f.weight||0)/oSum*rest):0).toFixed(4)});
   localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
   renderPlanSim();
+}
+// 直接改某只基金的计划买入金额（元）→ 换算成占比，其余基金按原比例分担剩余份额
+function setPlanAmount(code, amt){
+  const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
+  const P=Math.max(0,+sim.principal||0);
+  if(P<=0){ toast("请先设定「计划本金」"); renderPlanSim(); return; }
+  let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
+  if(!manual.length) manual=getPlanFunds();
+  const target=Math.max(0,Math.min(P,+amt||0))/P;
+  const others=manual.filter(f=>f.code!==code);
+  const rest=Math.max(0,1-target);
+  const oSum=others.reduce((s,f)=>s+(+f.weight||0),0)||1;
+  manual=manual.map(f=> f.code===code
+    ? {code:f.code, name:f.name, suggest:f.suggest, weight:+target.toFixed(4)}
+    : {code:f.code, name:f.name, suggest:f.suggest, weight:+(others.length?((+f.weight||0)/oSum*rest):0).toFixed(4)});
+  localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
+  renderPlanSim();
+}
+// 按建议配置比例，把计划本金一键分配到各计划基金（手动加的基金无建议权重时按均分）
+function resetPlanWeights(){
+  let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
+  if(!manual.length) manual=getPlanFunds();
+  if(!manual.length){ toast("计划里还没有基金"); return; }
+  let sug=manual.map(f=>(+f.suggest||0));
+  const sSum=sug.reduce((a,b)=>a+b,0);
+  if(sSum<=0){ const eq=1/manual.length; sug=manual.map(()=>eq); }
+  else { sug=sug.map(v=>v/sSum); }
+  manual=manual.map((f,i)=>({code:f.code, name:f.name, suggest:f.suggest, weight:+sug[i].toFixed(4)}));
+  localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
+  renderPlanSim();
+  toast("已按建议比例分配到 "+manual.length+" 只计划基金");
 }
 // 计划 → 执行：按计划金额把基金买入，写入实时持仓（之前一键配置直接建仓，现改为先计划后执行）
 async function planToHoldings(){
@@ -1567,8 +1618,8 @@ async function renderPlanSim(){
       const wt=(+f.weight||0);
       return `<tr>
         <td><span class="pf-code">${f.code}</span><span class="pf-name">${f.name||"—"}</span></td>
-        <td class="num"><input class="num" type="number" min="0" max="100" step="1" value="${Math.round(wt*100)}" onchange="setPlanWeight('${f.code}',this.value)" style="width:66px" title="可直接改这只基金的仓位占比"></td>
-        <td class="num">${yuan(P*wt)}</td>
+        <td class="num"><input class="num" type="number" min="0" max="100" step="1" value="${Math.round(wt*100)}" onchange="setPlanWeight('${f.code}',this.value)" style="width:66px" title="改这只基金的仓位占比">%</td>
+        <td class="num"><input class="num" type="number" min="0" step="1000" value="${Math.round(P*wt)}" onchange="setPlanAmount('${f.code}',this.value)" style="width:100px" title="直接改这只基金的计划买入金额"></td>
         <td class="del" onclick="delPlanFund('${f.code}')" title="从计划移除">✕</td>
       </tr>`;
     }).join(""):'<tr><td colspan="4" class="muted" style="font-size:12px">暂无计划基金</td></tr>';
@@ -1581,13 +1632,14 @@ async function renderPlanSim(){
       <label>计划基金</label>
       <input id="planFundInput" class="num" type="text" placeholder="输入基金代码加入计划" style="max-width:180px" onkeydown="if(event.key==='Enter')addPlanFund()">
       <button class="btn-ghost btn-sm" onclick="addPlanFund()">+ 加入</button>
+      <button class="btn-ghost btn-sm" onclick="resetPlanWeights()" title="把计划本金按建议配置比例分配到各基金">📊 按建议比例分配</button>
       <button class="btn-ghost btn-sm" onclick="clearPlanFunds()">清空</button>
       <span class="muted" style="font-size:11px">${isPlanManual()?"手动设置":"自动（一键配置/推荐）"}</span>
       <span style="flex:1"></span>
       <button class="btn-primary btn-sm" onclick="planToHoldings()" title="按计划的金额把基金买入，写入实时持仓">➡ 转到实时持仓</button>
     </div>
     <div class="pf-table-wrap"><table class="pf-table">
-      <thead><tr><th>基金</th><th class="num">仓位 %</th><th class="num">金额</th><th></th></tr></thead>
+      <thead><tr><th>基金</th><th class="num">仓位 %</th><th class="num">计划金额 ¥（可改）</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }
