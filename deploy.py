@@ -97,11 +97,11 @@ def push_file(repo, f, msg):
 
 print("\n[1/2] 前端 → Pages 仓库 %s" % FRONT_REPO)
 for f in FRONT_FILES:
-    push_file(FRONT_REPO, f, f"feat: 行情卡接入高新区二手房均价(房天下实时·参考口径)·参考行显示真实环比 ({f})")
+    push_file(FRONT_REPO, f, f"feat: 推荐卡加买点徽章(低估布局/偏高谨慎等)·新增「推荐效果回测」面板(6/12/24月模拟持有收益对比) ({f})")
 
 print("\n[2/2] 后端源码 → 仓库 %s" % BACK_REPO)
 for f in BACK_FILES:
-    push_file(BACK_REPO, f, f"feat: 后端新增房天下房价地图抓取高新区二手挂牌均价,补充吉屋未覆盖区;改写districtNote ({f})")
+    push_file(BACK_REPO, f, f"feat: 推荐算法科学化-去追涨候选分层抽样/主动基金估值修正/权重重平衡(风险调整主导)/均值回归盈利概率/跨类相关性去重/买点纪律;新增/api/recommend-backtest回测 ({f})")
 
 print("\n完成。")
 print("· 前端：GitHub Pages 监听 fund-analyzer-web 会自动重建（几十秒~几分钟），刷新 https://ivanxxxxxxxxx.github.io/fund-analyzer-web/ 即可见。")
