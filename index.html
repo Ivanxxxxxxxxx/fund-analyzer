@@ -384,7 +384,7 @@ table.plan th{color:var(--muted);font-weight:600}
 /* ---------- 全局常驻走势区 ---------- */
 .trend-dock{background:linear-gradient(180deg, rgba(24,24,30,.9), rgba(16,16,20,.92));
   border:1px solid var(--line);border-radius:16px;padding:14px 18px 12px;margin-bottom:16px;
-  position:relative;overflow:hidden;box-shadow:var(--shadow)}
+  position:relative;overflow:visible;box-shadow:var(--shadow)}
 .trend-dock::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(232,179,57,.5),transparent)}
 .trend-dock .td-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
@@ -633,13 +633,13 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
       <span class="vline" style="flex:1;height:1px;background:var(--line)"></span>
     </div>
     <div id="trendBox"><div class="empty">点击「开始分析」后展示组合 vs 沪深300 的累计收益曲线。</div></div>
-    <div id="trendCanvasWrap" class="trend-wrap" style="display:none"><canvas id="trendCanvas"></canvas>
-      <div id="trendDiag" style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center;line-height:1.7"></div>
-      <div id="trendLegend" style="display:flex;gap:14px 18px;justify-content:center;flex-wrap:wrap;margin-top:4px;font-size:12px;color:#f1f0ea;line-height:1.7">
-        <span id="legendCombo"><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f2c14e;vertical-align:middle;margin-right:6px"></i><b id="legendComboTxt">我的组合</b></span>
-        <span id="legendPlan" style="display:none"><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#a78bfa;vertical-align:middle;margin-right:6px"></i><b id="legendPlanTxt">投资计划</b></span>
-        <span id="legendBench"><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#4da3ff;vertical-align:middle;margin-right:6px"></i><b id="legendBenchTxt">沪深300</b></span>
-      </div>
+    <div id="trendCanvasWrap" class="trend-wrap" style="display:none"><canvas id="trendCanvas"></canvas></div>
+    <!-- 诊断行与图例放在 canvas 容器之外，避免被固定高度容器 + overflow:hidden 裁掉 -->
+    <div id="trendDiag" style="display:none;margin-top:8px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.8"></div>
+    <div id="trendLegend" style="display:none;gap:12px 20px;justify-content:center;flex-wrap:wrap;margin-top:6px;font-size:12.5px;color:#f1f0ea;line-height:1.8">
+      <span id="legendCombo"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#f2c14e;vertical-align:middle;margin-right:6px"></i><b id="legendComboTxt">我的组合</b></span>
+      <span id="legendPlan" style="display:none"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#a78bfa;vertical-align:middle;margin-right:6px"></i><b id="legendPlanTxt">投资计划</b></span>
+      <span id="legendBench"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#4da3ff;vertical-align:middle;margin-right:6px"></i><b id="legendBenchTxt">沪深300</b></span>
     </div>
   </div>
 
@@ -1565,19 +1565,50 @@ function setPlanAmount(code, amt){
   localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
   renderPlanSim();
 }
-// 按建议配置比例，把计划本金一键分配到各计划基金（手动加的基金无建议权重时按均分）
-function resetPlanWeights(){
+// 智能配置（风险平价）：实时拉每只计划基金的历史净值，算出年化波动率，
+// 波动越低的基金配越多（风险平价），避免手动均分毫无依据
+async function resetPlanWeights(){
   let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
   if(!manual.length) manual=getPlanFunds();
   if(!manual.length){ toast("计划里还没有基金"); return; }
-  let sug=manual.map(f=>(+f.suggest||0));
-  const sSum=sug.reduce((a,b)=>a+b,0);
-  if(sSum<=0){ const eq=1/manual.length; sug=manual.map(()=>eq); }
-  else { sug=sug.map(v=>v/sSum); }
-  manual=manual.map((f,i)=>({code:f.code, name:f.name, suggest:f.suggest, weight:+sug[i].toFixed(4)}));
+  if(!window.__histCache) window.__histCache={};
+  for(const f of manual){
+    if(!window.__histCache[f.code]){
+      const r=await api("/api/history/"+f.code+"?days=730").catch(()=>({data:[]}));
+      window.__histCache[f.code]=r.data||[];
+    }
+  }
+  // 各基金年化波动率（基于真实历史日收益）
+  const annVols=manual.map(f=>{
+    const arr=(window.__histCache[f.code]||[]).map(d=>d.nav).filter(v=>v>0);
+    if(arr.length<10) return null;
+    const dr=[]; for(let i=1;i<arr.length;i++){ const x=(arr[i]-arr[i-1])/arr[i-1]; if(Math.abs(x)<0.5) dr.push(x); }
+    if(dr.length<5) return null;
+    const mean=dr.reduce((a,b)=>a+b,0)/dr.length;
+    const variance=dr.reduce((a,b)=>a+(b-mean)**2,0)/(dr.length-1);
+    return Math.sqrt(variance)*Math.sqrt(252);
+  });
+  const inv=annVols.map(v=>(v&&v>0)?1/v:null);
+  const hasInv=inv.some(x=>x!=null);
+  let w=manual.map(()=>0);
+  if(hasInv){
+    const hasSafe=inv.some(x=>x==null);
+    const riskyShare=hasSafe?0.85:1;          // 有波动数据的按风险平价分摊 85%（或全部）
+    const safeShare=hasSafe?0.15:0;           // 无历史数据的基金均分剩余 15%
+    const totInv=inv.reduce((s,x)=>s+(x||0),0)||1;
+    manual.forEach((f,i)=>{ if(inv[i]!=null) w[i]=inv[i]/totInv*riskyShare; });
+    const safeIdx=inv.map((x,i)=>x==null?i:-1).filter(i=>i>=0);
+    if(safeIdx.length) safeIdx.forEach(i=> w[i]=safeShare/safeIdx.length);
+  } else {
+    const eq=1/manual.length; w=manual.map(()=>eq);
+  }
+  const tot=w.reduce((a,b)=>a+b,0)||1;
+  w=w.map(x=>+(x/tot).toFixed(4));
+  manual=manual.map((f,i)=>({code:f.code, name:f.name, weight:w[i]}));
   localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
   renderPlanSim();
-  toast("已按建议比例分配到 "+manual.length+" 只计划基金");
+  const info=manual.map((f,i)=>`${f.name||f.code} ${(w[i]*100).toFixed(0)}%`).join("、");
+  toast("已按风险平价智能配置（波动越低配越多）："+info);
 }
 // 计划 → 执行：按计划金额把基金买入，写入实时持仓（之前一键配置直接建仓，现改为先计划后执行）
 async function planToHoldings(){
@@ -1636,7 +1667,7 @@ async function renderPlanSim(){
       <label>计划基金</label>
       <input id="planFundInput" class="num" type="text" placeholder="输入基金代码加入计划" style="max-width:180px" onkeydown="if(event.key==='Enter')addPlanFund()">
       <button class="btn-ghost btn-sm" onclick="addPlanFund()">+ 加入</button>
-      <button class="btn-ghost btn-sm" onclick="resetPlanWeights()" title="把计划本金按建议配置比例分配到各基金">📊 按建议比例分配</button>
+      <button class="btn-ghost btn-sm" onclick="resetPlanWeights()" title="实时分析每只基金历史波动，波动越低配越多（风险平价），比均分更科学">📊 智能配置（风险平价）</button>
       <button class="btn-ghost btn-sm" onclick="clearPlanFunds()">清空</button>
       <span class="muted" style="font-size:11px">${isPlanManual()?"手动设置":"自动（一键配置/推荐）"}</span>
       <span style="flex:1"></span>
@@ -1855,7 +1886,8 @@ async function analyze(){
     toast("正在拉取历史净值并计算…");
     if(!window.__histCache) window.__histCache={};  // O3：按 code 缓存历史净值，避免重复拉取
     for(const h of holdings){
-      if(window.__histCache[h.code]){ h.history=window.__histCache[h.code]; continue; }
+      const cached=window.__histCache[h.code];
+      if(cached && cached.length>=20){ h.history=cached; continue; }   // 缓存有效才复用，避免脏空缓存把曲线压平
       const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]}));
       h.history=r.data||[]; window.__histCache[h.code]=h.history;
     }
@@ -1873,8 +1905,10 @@ async function analyze(){
     });
     const rets=series.map(dailyReturns);
 
-    const totalVal=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
-    const w=holdings.map(h=>(+h.value||0)/totalVal);
+    // 持仓权重：优先按市值；若全部缺失/为 0（老数据或手动未填），回退为等权，避免权重全 0 把组合线压成平线
+    const totalVal=holdings.reduce((s,h)=>s+(+h.value||0),0);
+    const w = totalVal>0 ? holdings.map(h=>(+h.value||0)/totalVal)
+                          : holdings.map(()=>1/holdings.length);
 
     const L=Math.min(...rets.map(r=>r.length));
     const pr=[];
@@ -2344,8 +2378,10 @@ async function calcPlanCum(dates){
 function renderTrend(dates, portCum, benchCum, benchName, planCum){
   const box=document.getElementById("trendBox");
   const wrap=document.getElementById("trendCanvasWrap");
-  if(!portCum || !portCum.length){ box.innerHTML='<div class="empty">暂无可绘制数据。</div>'; wrap.style.display="none"; return; }
+  if(!portCum || !portCum.length){ box.innerHTML='<div class="empty">暂无可绘制数据。</div>'; wrap.style.display="none"; const _e=document.getElementById("trendDiag"); if(_e)_e.style.display="none"; const _l=document.getElementById("trendLegend"); if(_l)_l.style.display="none"; return; }
   box.innerHTML=""; wrap.style.display="block";
+  const _dg0=document.getElementById("trendDiag"); if(_dg0)_dg0.style.display="block";
+  const _lg0=document.getElementById("trendLegend"); if(_lg0)_lg0.style.display="flex";
   // 数据点抽样：700+ 个点在窄图上挤成一团，抽到 ~200 点（保留首尾）曲线更清晰
   const MAXPTS=200;
   const stride=Math.max(1,Math.ceil(dates.length/MAXPTS));
@@ -2365,13 +2401,19 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
   const _dg=document.getElementById("trendDiag");
   if(_dg){
     const lastOf=a=>{ if(!a) return null; for(let i=a.length-1;i>=0;i--){ const v=a[i]; if(v!=null&&isFinite(v)) return v; } return null; };
+    const rng=a=>{ if(!a) return 0; const v=a.filter(x=>x!=null&&isFinite(x)); if(!v.length) return 0; return Math.max(...v)-Math.min(...v); };
     const nn=v=>(v==null)?"—":((v>=0?"+":"")+v.toFixed(1)+"%");
     const pc=lastOf(portCum), bc=lastOf(benchCum), plc=lastOf(planCum);
+    const rP=rng(portCum), rPlan=rng(planCum), rB=rng(benchCum);
+    // 终值接近平（<0.5%）→ 组合本身几乎无波动
     const flat=(pc!=null&&Math.abs(pc)<0.5);
+    // 我的组合波动远小于投资计划（且计划确有走势）→ 提示组合偏稳健，非数据错误
+    const relFlat=(rPlan>5 && rP < rPlan*0.25);
     _dg.innerHTML=`数据 ${sDates.length} 个交易日（${sDates[0]||"—"} ~ ${sDates[sDates.length-1]||"—"}）· 我的组合累计 <b style="color:#f2c14e">${nn(pc)}</b>`
       + (plc!=null?` · 投资计划 <b style="color:#a78bfa">${nn(plc)}</b>`:"")
       + ` · ${benchName} <b style="color:#4da3ff">${nn(bc)}</b>`
-      + (flat?`<br><span style="color:var(--warn)">组合波动极小（多为货币/短债类资产），曲线接近水平属正常；若持仓含权益基金却仍为平线，请点「刷新」重拉净值。</span>`:"");
+      + (flat?`<br><span style="color:var(--warn)">我的组合波动极小（多为货币/短债类资产），曲线接近水平属正常；若持仓含权益基金却仍平线，请点「刷新」重拉净值。</span>`:"")
+      + (relFlat&&!flat?`<br><span style="color:var(--muted)">提示：我的组合波动幅度明显小于投资计划（前者更偏稳健/债券货币类），这是真实风险差异，并非数据错误；想看到更明显的走势，可在「组合工作台」增加权益类基金。</span>`:"");
   }
   // 双 Y 轴：组合/计划用左轴、沪深300 用右轴——否则组合涨 200%+ 时基准的 20% 波动会被压成一条贴底直线
   const ds=[{label:"我的组合",data:sArr(portCum.map(v=>+(v*100).toFixed(2))),borderColor:"#f2c14e",
