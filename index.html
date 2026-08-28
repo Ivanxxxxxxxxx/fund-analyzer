@@ -211,7 +211,17 @@ table.plan th{color:var(--muted);font-weight:600}
 /* 诊断卡输入行：窄列内自动换行，不挤成一团 */
 .add-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .add-bar .add-input-wrap{flex:1 1 200px;min-width:0}
-/* 投资计划：计划基金 chips（可增删） */
+/* 投资计划：计划基金列表（仓位可直接改）+ chips 兼容 */
+.pf-table-wrap{margin-top:8px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.pf-table{width:100%;border-collapse:collapse;font-size:12px}
+.pf-table th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;padding:7px 10px;background:rgba(255,255,255,.04);border-bottom:1px solid var(--line)}
+.pf-table td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle}
+.pf-table tr:last-child td{border-bottom:none}
+.pf-table .num{text-align:right}
+.pf-table td.del{text-align:center;cursor:pointer;color:var(--muted);width:34px}
+.pf-table td.del:hover{color:#fb7185}
+.pf-code{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--gold);background:rgba(232,179,57,.10);border-radius:5px;padding:1px 6px;margin-right:7px}
+.pf-name{color:var(--text)}
 .pf-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
 .pf-chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;background:rgba(232,179,57,.10);border:1px solid rgba(232,179,57,.32);border-radius:999px;padding:3px 4px 3px 10px;color:var(--text);max-width:100%}
 .pf-chip .pf-w{color:var(--gold);font-weight:700}
@@ -1500,6 +1510,47 @@ function clearPlanFunds(){
   localStorage.removeItem("fp_sim_funds");
   renderPlanSim(); toast("已清空计划基金，改为自动来源（一键配置 / 推荐组合）");
 }
+// 调整某只计划基金的仓位占比（%），其余基金按原比例自动归一化到剩余份额
+function setPlanWeight(code, pct){
+  let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
+  if(!manual.length) manual=getPlanFunds();
+  const target=Math.max(0,Math.min(100,+pct||0))/100;
+  const others=manual.filter(f=>f.code!==code);
+  const rest=Math.max(0,1-target);
+  const oSum=others.reduce((s,f)=>s+(+f.weight||0),0)||1;
+  manual=manual.map(f=> f.code===code
+    ? {code:f.code, name:f.name, weight:+target.toFixed(4)}
+    : {code:f.code, name:f.name, weight:+(others.length?((+f.weight||0)/oSum*rest):0).toFixed(4)});
+  localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
+  renderPlanSim();
+}
+// 计划 → 执行：按计划金额把基金买入，写入实时持仓（之前一键配置直接建仓，现改为先计划后执行）
+async function planToHoldings(){
+  const pf=getPlanFunds();
+  const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
+  const P=Math.max(0,+sim.principal||0);
+  if(!pf.length){ toast("计划里还没有基金"); return; }
+  if(P<=0){ toast("请先设定「计划本金」"); return; }
+  const tot=pf.reduce((s,f)=>s+(+f.weight||0),0)||1;
+  let added=0, sum=0;
+  for(const f of pf){
+    const amt=Math.round(P*((+f.weight||0)/tot));
+    if(amt<=0) continue;
+    const ex=holdings.find(h=>h.code===f.code);
+    if(ex){ ex.cost=(+ex.cost||0)+amt; ex.value=(+ex.value||0)+amt; }   // 已持有 → 加仓
+    else{
+      const fd=await api("/api/fund/"+f.code).catch(()=>({}));
+      holdings.push({code:f.code, name:fd.name||f.name, type:fd.type||"", nav:fd.nav, navDate:fd.navDate,
+        changePct:fd.changePct, value:amt, cost:amt, assetAllocation:fd.assetAllocation||[],
+        industry:fd.industry||[], industryBasis:"", holdings:fd.holdings||[]});
+    }
+    added++; sum+=amt;
+  }
+  saveHoldings(); renderHoldings(); setDataStamp();
+  toast("已将计划 "+added+" 只、共 "+yuan(sum)+" 转入实时持仓");
+  setFold("portfolio", true);
+  if(window.analyze) analyze();
+}
 async function renderPlanSim(){
   const box=document.getElementById("planSimBox"); if(!box) return;
   const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
@@ -1512,7 +1563,15 @@ async function renderPlanSim(){
   // 参数编辑区 + 计划基金（可增删）
   const pe=document.getElementById("planSimParams");
   if(pe){
-    const chips=pf.length?pf.map(f=>`<span class="pf-chip">${f.name||f.code}<span class="pf-w">${Math.round((+f.weight||0)*100)}%</span><b onclick="delPlanFund('${f.code}')" title="从计划移除">✕</b></span>`).join(""):'<span class="muted" style="font-size:11px">暂无</span>';
+    const rows=pf.length?pf.map(f=>{
+      const wt=(+f.weight||0);
+      return `<tr>
+        <td><span class="pf-code">${f.code}</span><span class="pf-name">${f.name||"—"}</span></td>
+        <td class="num"><input class="num" type="number" min="0" max="100" step="1" value="${Math.round(wt*100)}" onchange="setPlanWeight('${f.code}',this.value)" style="width:66px" title="可直接改这只基金的仓位占比"></td>
+        <td class="num">${yuan(P*wt)}</td>
+        <td class="del" onclick="delPlanFund('${f.code}')" title="从计划移除">✕</td>
+      </tr>`;
+    }).join(""):'<tr><td colspan="4" class="muted" style="font-size:12px">暂无计划基金</td></tr>';
     pe.innerHTML=`<div class="ov-p-row">
       <label>计划本金 ¥</label><input id="simP" class="num" type="number" min="0" step="1000" value="${P}" onchange="savePlanSim()">
       <label>${FREQ[freq].label}定投 ¥</label><input id="simD" class="num" type="number" min="0" step="100" value="${dca}" onchange="savePlanSim()">
@@ -1524,8 +1583,13 @@ async function renderPlanSim(){
       <button class="btn-ghost btn-sm" onclick="addPlanFund()">+ 加入</button>
       <button class="btn-ghost btn-sm" onclick="clearPlanFunds()">清空</button>
       <span class="muted" style="font-size:11px">${isPlanManual()?"手动设置":"自动（一键配置/推荐）"}</span>
+      <span style="flex:1"></span>
+      <button class="btn-primary btn-sm" onclick="planToHoldings()" title="按计划的金额把基金买入，写入实时持仓">➡ 转到实时持仓</button>
     </div>
-    <div class="pf-chips">${chips}</div>`;
+    <div class="pf-table-wrap"><table class="pf-table">
+      <thead><tr><th>基金</th><th class="num">仓位 %</th><th class="num">金额</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
   }
   await renderOverviewTo(box,"planSimCanvas",{
     funds:funds, P:P, A:dca, months:months,
@@ -1686,7 +1750,9 @@ async function analyze(){
 
     const L=Math.min(...rets.map(r=>r.length));
     const pr=[];
-    for(let t=0;t<L;t++){ let r=0; for(let i=0;i<holdings.length;i++) r+=w[i]*rets[i][t]; pr.push(r); }
+    // 尾部对齐（与 calcPortfolioStats 一致）：各基金历史长度不同时，取各自"最后 L 个"交易日，
+    // 原来是 rets[i][t] 头部对齐——A 基金 729 天、B 基金 300 天时会把 A 的早期和 B 的近期混在一起，时间错位。
+    for(let t=0;t<L;t++){ let r=0; for(let i=0;i<holdings.length;i++) r+=w[i]*rets[i][rets[i].length-L+t]; pr.push(r); }
 
     // 基准对比（沪深300）与组合累计收益曲线
     let benchName="沪深300", benchCum=null, portCum=null, trendDates=null;
@@ -2152,21 +2218,28 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
   const wrap=document.getElementById("trendCanvasWrap");
   if(!portCum || !portCum.length){ box.innerHTML='<div class="empty">暂无可绘制数据。</div>'; wrap.style.display="none"; return; }
   box.innerHTML=""; wrap.style.display="block";
+  // 数据点抽样：700+ 个点在窄图上挤成一团，抽到 ~200 点（保留首尾）曲线更清晰
+  const MAXPTS=200;
+  const stride=Math.max(1,Math.ceil(dates.length/MAXPTS));
+  const pick=dates.map((_,i)=>i).filter(i=>i%stride===0||i===dates.length-1);
+  const sDates=pick.map(i=>dates[i]);
+  const sArr=a=>pick.map(i=>a[i]);
   const _lp=document.getElementById("legendPlan");
   if(_lp) _lp.style.display=(planCum&&planCum.some(v=>v!=null))?"inline-flex":"none";
-  const ds=[{label:"我的组合",data:portCum.map(v=>+(v*100).toFixed(2)),borderColor:"#f2c14e",
-    backgroundColor:"rgba(242,193,78,.12)",fill:true,tension:.25,pointRadius:0}];
+  // 双 Y 轴：组合/计划用左轴、沪深300 用右轴——否则组合涨 200%+ 时基准的 20% 波动会被压成一条贴底直线
+  const ds=[{label:"我的组合",data:sArr(portCum.map(v=>+(v*100).toFixed(2))),borderColor:"#f2c14e",
+    backgroundColor:"rgba(242,193,78,.12)",fill:true,tension:.25,pointRadius:0,yAxisID:"y"}];
   // 投资计划组合（决策区设定的计划基金）：紫色虚线，与"我的实际持仓"对比看计划是否更优
   if(planCum && planCum.some(v=>v!=null))
-    ds.push({label:"投资计划",data:planCum.map(v=>v==null?null:+(v*100).toFixed(2)),
-      borderColor:"#a78bfa",borderDash:[6,4],borderWidth:2,backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0});
+    ds.push({label:"投资计划",data:sArr(planCum.map(v=>v==null?null:+(v*100).toFixed(2))),
+      borderColor:"#a78bfa",borderDash:[6,4],borderWidth:2,backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0,yAxisID:"y"});
   if(benchCum && benchCum.some(v=>v!=null))
-    ds.push({label:benchName,data:benchCum.map(v=>v==null?null:+(v*100).toFixed(2)),
-      borderColor:"#4da3ff",backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0});
+    ds.push({label:benchName,data:sArr(benchCum.map(v=>v==null?null:+(v*100).toFixed(2))),
+      borderColor:"#4da3ff",backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0,yAxisID:"y1"});
   if(trendChart) trendChart.destroy();
   trendChart=new Chart(document.getElementById("trendCanvas"),{
     type:"line",
-    data:{labels:dates,datasets:ds},
+    data:{labels:sDates,datasets:ds},
     options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
       plugins:{legend:{labels:{color:"#f1f0ea",
           generateLabels:chart=>chart.data.datasets.map((d,i)=>{
@@ -2177,7 +2250,8 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
           })}},
         tooltip:{callbacks:{label:c=>c.dataset.label+": "+(c.parsed.y==null?"—":(c.parsed.y>=0?"+":"")+c.parsed.y+"%")}}},
       scales:{x:{ticks:{color:"#9896a6",maxTicksLimit:8},grid:{color:"rgba(255,255,255,.05)"}},
-        y:{ticks:{color:"#9896a6",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,.05)"}}}}
+        y:{position:"left",ticks:{color:"#f2c14e",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,.05)"}},
+        y1:{position:"right",grid:{drawOnChartArea:false},ticks:{color:"#4da3ff",callback:v=>v+"%"}}}}
   });
 }
 
@@ -2383,11 +2457,11 @@ async function loadRecommend(){
         <input id="setupD2" type="number" value="1000" min="0" step="100" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
       <div><div class="muted" style="font-size:11px;margin-bottom:4px">持有时间（月）</div>
         <input id="setupY2" type="number" value="60" min="1" max="360" step="1" inputmode="numeric" style="width:74px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
-      <button class="btn-primary" onclick="quickSetupFromModal()" style="padding:9px 16px">⚡ 一键配置建仓</button>
+      <button class="btn-primary" onclick="quickSetupFromModal()" style="padding:9px 16px" title="按推荐生成组合并加入「投资计划」，确认后再转到实时持仓">⚡ 加入投资计划</button>
       <button class="btn-ghost btn-sm" onclick="openAllocateFromReco()" style="padding:9px 16px">⚡ 一键配资（自选方案）</button>
     </div>
     <div id="comboPrev" class="note" style="margin-top:8px;padding:8px 10px;font-size:11.5px"></div>
-    <div class="muted" style="font-size:11px;margin-top:4px">组合按市场温度自动配比（弱市→债券/货币防守、牛市→权益进攻）；只从「推荐」级选，绝不硬凑近期表现差的谨慎级基金。</div>
+    <div class="muted" style="font-size:11px;margin-top:4px">组合按市场温度自动配比（弱市→债券/货币防守、牛市→权益进攻）；只从「推荐」级选，绝不硬凑近期表现差的谨慎级基金。点「加入投资计划」后进决策页的「投资计划概览」调本金与每只基金仓位，确认后再「转到实时持仓」。</div>
   </div>`;
   // === 卡片 recoBox 改为简短摘要，完整内容塞进弹窗 ===
   const summaryHtml = `<div class="empty" style="text-align:left;padding:18px 14px">
@@ -2528,42 +2602,22 @@ async function quickSetup(nIn, principalIn, dcaIn, monthsIn, freqIn){
     const uSum=underIdx.reduce((s,i)=>s+amts[i],0)||1;
     underIdx.forEach(i=>{ amts[i]+=overSum*amts[i]/uSum; });
   }
-  const amounts=picked.map((f,i)=>({f,amt:Math.round(amts[i])}));
-  let diff=principal-amounts.reduce((s,a)=>s+a.amt,0);   // 舍入尾差补到最大一笔
-  if(diff!==0){ const mx=amounts.reduce((a,b)=>a.amt>=b.amt?a:b); mx.amt+=diff; }
-  let added=0,sum=0;
-  for(const {f,amt} of amounts){
-    if(amt<=0) continue;
-    const ex=holdings.find(h=>h.code===f.code);
-    if(ex){ ex.cost=amt; ex.value=amt; }
-    else{
-      const fd=await api("/api/fund/"+f.code).catch(()=>({}));
-      holdings.push({code:f.code, name:fd.name||f.name, type:fd.type||f.asset||f.type||"", nav:fd.nav, navDate:fd.navDate,
-        changePct:fd.changePct, value:amt, cost:amt, assetAllocation:fd.assetAllocation||[],
-        industry:fd.industry||[], industryBasis:"", holdings:fd.holdings||[]});
-    }
-    added++; sum+=amt;
-  }
+  // 一键配置 = 建到「投资计划」（不是直接建到实时持仓）：先在计划里调仓位/金额，
+  // 确认后由用户点「转到实时持仓」执行——计划 → 执行 才是正确的操作链路。
+  const planFunds=picked.map((f,i)=>({code:f.code, name:f.name, weight:+(amts[i]/principal).toFixed(4)}));
+  localStorage.setItem("fp_sim_funds", JSON.stringify(planFunds));
   if(dca>0) localStorage.setItem("fp_dca", JSON.stringify({amount:dca, freq, day:10, at:Date.now()}));
-  // 保存投资计划（本金/持有月数）→ 决策区「投资计划概览」实时关联（计划也随之更新）
-  localStorage.setItem("fp_plan", JSON.stringify({principal, months, at:Date.now()}));
-  const _sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
-  localStorage.setItem("fp_sim", JSON.stringify({principal:(_sim.principal||principal), months:(_sim.months||months),
-                                                 dca:(_sim.dca!=null?_sim.dca:dca), at:Date.now()}));
-  if(window.renderPlanOverview) renderPlanOverview();
-  saveHoldings(); renderHoldings(); setDataStamp();
-  if(window.renderPlanSim) renderPlanSim();   // 一键配置选出的基金 = 计划基金，计划概览联动
-  saveHoldings(); renderHoldings(); setDataStamp();
+  localStorage.setItem("fp_sim", JSON.stringify({principal:principal, months:months, dca:dca, at:Date.now()}));
+  if(window.renderPlanSim) renderPlanSim();   // 计划概览联动（计划基金+金额）
   // 组合平均 1 年盈利概率（基于推荐时的 prob12，均值回归口径）
   const probs=picked.map(f=>f.prob12).filter(p=>p!=null&&p>0);
   const avgProb=probs.length?Math.round(probs.reduce((a,b)=>a+b,0)/probs.length*100):null;
-  let msg="已按推荐配置 "+added+" 只、建仓 "+yuan(sum)+"（"+comboDesc(picked)+"）";
-  if(combo.note) msg="⚠️ "+combo.note+"，已按 "+added+" 只稳健建仓 "+yuan(sum)+"（"+comboDesc(picked)+"）";
+  let msg="已按推荐配置 "+picked.length+" 只、计划投入 "+yuan(principal)+"（"+comboDesc(picked)+"）→ 已加入「投资计划」";
+  if(combo.note) msg="⚠️ "+combo.note+"，已按 "+picked.length+" 只加入「投资计划」（"+comboDesc(picked)+"）";
   if(avgProb!=null) msg+=" · 组合平均 1年盈利概率 "+avgProb+"%";
-  toast(msg+(dca>0?"，"+FREQ[freq].label+"定投 "+yuan(dca):""));
-  setFold("portfolio", true); setFold("tools", false);
-  if(window.analyze) analyze();
-  // 弹窗内建仓：自动关闭弹窗，回到组合页
+  toast(msg+"；确认后点「转到实时持仓」");
+  setFold("tools", true);   // 停在决策页看计划
+  // 弹窗内建仓：关闭弹窗，停留在决策页查看/调整计划
   const ro=document.getElementById("recoOverlay"); if(ro&&ro.classList.contains("show")) closeRecoModal();
 }
 
