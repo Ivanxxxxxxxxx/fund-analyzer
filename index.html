@@ -194,6 +194,7 @@ table.plan th{color:var(--muted);font-weight:600}
 .bt-fs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 12px}
 .bt-f{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:5px 9px;border-radius:8px;background:rgba(255,255,255,.04);min-width:0}
 .bt-fn{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-rand{margin-top:8px;font-size:12px;color:var(--muted);background:rgba(120,180,255,.06);border:1px dashed rgba(120,180,255,.3);border-radius:8px;padding:7px 10px;line-height:1.6}
 /* ---------- 推荐卡 ---------- */
 .reco-cat{margin:10px 0 4px}
 .reco-cat-h{font-size:13px;font-weight:700;color:var(--text);margin:16px 0 4px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
@@ -2070,6 +2071,7 @@ async function loadBacktest(mode){
           <div class="bt-kpi"><div class="l">等权全宇宙</div><div class="v" style="color:${cls(ur)}">${pv(ur)}</div></div>
         </div>
         <div class="bt-fs">${chips||'<span class="muted">—</span>'}</div>
+        ${r.randRet!=null?`<div class="bt-rand">🎲 随机选基对照（同一候选池随机选20次）：均值 <b>${r.randRet}%</b> · 90分位 <b>${r.randP90!=null?r.randP90+"%":"—"}</b> · 我们的组合 ${(pr!=null&&r.randP90!=null)?(pr>r.randP90?"<b style=\"color:var(--good)\">跑赢 90% 的随机组合</b>":"<b style=\"color:var(--warn)\">未跑赢随机 90 分位</b>"):"—"}</div>`:""}
       </div>`;
     }).join("");
     body.innerHTML=sw+sub+`
