@@ -2448,13 +2448,13 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
       + (flat?`<br><span style="color:var(--warn)">我的组合波动极小（多为货币/短债类资产），曲线接近水平属正常；若持仓含权益基金却仍平线，请点「刷新」重拉净值。</span>`:"")
       + (relFlat&&!flat?`<br><span style="color:var(--muted)">提示：我的组合波动幅度明显小于投资计划（前者更偏稳健/债券货币类），这是真实风险差异，并非数据错误；想看到更明显的走势，可在「组合工作台」增加权益类基金。</span>`:"");
   }
-  // 三轴：我的组合=左轴、沪深300=右轴、投资计划=隐藏右轴——计划的高涨幅不再压平组合线
+  // 双轴：我的组合/投资计划共用左轴（y），沪深300 用右轴（y1）；去掉了此前为规避 9216% bug 而加的隐藏第三轴（y2）
   const ds=[{label:"我的组合",data:sArr(portCum.map(v=>+(v*100).toFixed(2))),borderColor:"#f2c14e",
     backgroundColor:"rgba(242,193,78,.12)",fill:true,tension:.25,pointRadius:0,yAxisID:"y"}];
   // 投资计划组合（决策区设定的计划基金）：紫色虚线，与"我的实际持仓"对比看计划是否更优
   if(planCum && planCum.some(v=>v!=null))
     ds.push({label:"投资计划",data:sArr(planCum.map(v=>v==null?null:+(v*100).toFixed(2))),
-      borderColor:"#a78bfa",borderDash:[6,4],borderWidth:2,backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0,yAxisID:"y2"});
+      borderColor:"#a78bfa",borderDash:[6,4],borderWidth:2,backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0,yAxisID:"y"});
   if(benchCum && benchCum.some(v=>v!=null))
     ds.push({label:benchName,data:sArr(benchCum.map(v=>v==null?null:+(v*100).toFixed(2))),
       borderColor:"#4da3ff",backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0,yAxisID:"y1"});
@@ -2467,8 +2467,7 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
         tooltip:{callbacks:{label:c=>c.dataset.label+": "+(c.parsed.y==null?"—":(c.parsed.y>=0?"+":"")+c.parsed.y+"%")}}},
       scales:{x:{ticks:{color:"#9896a6",maxTicksLimit:8},grid:{color:"rgba(255,255,255,.05)"}},
         y:{position:"left",ticks:{color:"#f2c14e",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,.05)"}},
-        y1:{position:"right",grid:{drawOnChartArea:false},ticks:{color:"#4da3ff",callback:v=>v+"%"}},
-        y2:{position:"right",grid:{drawOnChartArea:false},ticks:{display:false},display:true}}}
+        y1:{position:"right",grid:{drawOnChartArea:false},ticks:{color:"#4da3ff",callback:v=>v+"%"}}}}
   });
 }
 
