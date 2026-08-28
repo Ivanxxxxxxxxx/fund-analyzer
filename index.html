@@ -216,6 +216,12 @@ table.plan th{color:var(--muted);font-weight:600}
 .rf-reasons{margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--muted);line-height:1.7}
 .rf-reasons li{margin:4px 0}
 .rf-reasons li::marker{color:var(--gold)}
+/* 观望区：未达推荐标准的基金折叠展示（宁缺毋滥，防止误选买入亏损标的） */
+.reco-watch{margin:10px 0 2px;border:1px dashed rgba(251,113,133,.35);border-radius:10px;background:rgba(251,113,133,.04)}
+.reco-watch summary{cursor:pointer;padding:8px 12px;font-size:12px;color:#fb7185;font-weight:600;user-select:none}
+.reco-watch summary:hover{background:rgba(251,113,133,.06)}
+.reco-watch .reco-fund{opacity:.78;margin:0 8px 8px}
+.reco-watch .rf-sel{pointer-events:none}
 .dyn-banner{background:rgba(232,179,57,.10);border:1px solid rgba(232,179,57,.3);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:12px;line-height:1.5}
 .warn-banner{background:rgba(240,162,58,.1);border:1px solid rgba(240,162,58,.35);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:12px}
 /* 资产配置进度条 */
@@ -2024,9 +2030,19 @@ async function loadBacktest(mode){
     codes=(window.__lastSetupCodes&&window.__lastSetupCodes.length)?[...window.__lastSetupCodes]:
           ((window.selFunds&&window.selFunds.size)?[...window.selFunds.keys()]:[]);
     if(!codes.length){ body.innerHTML=sw+'<div class="bt-sub">还没有选出的组合：在推荐弹窗里「一键配置建仓」，或点推荐卡片「选入配资」后，再来回测。</div>'; return; }
-    subTxt=`你选出的 ${codes.length} 只基金组合 · 等权`;
-  }else{
-    subTxt=`推荐组合 · 各品类按修复后逻辑选最优、按推荐配置加权`;
+    const nonRec=codes.filter(c=>{const f=window.__recoFunds&&window.__recoFunds[c]; return f&&f.verdict&&f.verdict!=="推荐";});
+    subTxt=`你选出的 ${codes.length} 只基金组合 · 等权`+(nonRec.length?` · ⚠️ 含 ${nonRec.length} 只未达推荐标准的基金（过去表现可能不佳）`:"");
+  }else{   // reco：推荐组合 = 当前「推荐」级基金（与一键配置 buildCombo 同源，宁缺毋滥）
+    const recs=Object.values(window.__recoFunds||{}).filter(f=>f.verdict==="推荐");
+    if(!recs.length){
+      body.innerHTML=sw+'<div class="bt-sub">请先点「生成推荐」再回测推荐组合——回测对象与「一键配置」完全一致（仅「推荐」级基金，宁缺毋滥，绝不硬凑）。</div>';
+      return;
+    }
+    codes=recs.map(f=>f.code);
+    const ws=recs.map(f=>Math.max(0,+f.weight||0));
+    const wsum=ws.reduce((a,b)=>a+b,0)||1;
+    weights=ws.map(w=>+(w/wsum).toFixed(4));
+    subTxt=`推荐组合 · 仅「推荐」级 ${recs.length} 只（与一键配置同源）· 按推荐权重`;
   }
   const q=codes.length?("?codes="+codes.join(",")+(weights?"&weights="+weights.join(","):"")):"";
   const sub=`<div class="bt-sub">回测对象：<b>${subTxt}</b> · 模拟买入持有至今，与沪深300对比${codes.length?"；若某基金在锚点日尚未成立则不计入该周期":""}</div>`;
@@ -2098,22 +2114,31 @@ async function loadRecommend(){
   const fundHtml = Object.entries(byCat).map(([cat,fs])=>{
     const catW=(d.alloc&&d.alloc[cat]!=null)?(d.alloc[cat]*100).toFixed(0)+"%":"";
     const catReason=catReasons[cat]?`<div class="reco-cat-reason">💡 ${catReasons[cat]}</div>`:"";
-    const rows=fs.map(f=>{
+    const card=f=>{
       const vc=f.verdict==="推荐"?"var(--good)":(f.verdict==="谨慎关注"?"var(--warn)":"var(--bad)");
       const valTxt=(f.valPct==null)?"不适用":f.valPct+"%";
       const peerTxt=(f.peerN&&f.peerN>1)?`<span class="rf-peer">同类第${f.peerRank}/${f.peerN}</span>`:"";
       const rsnList=(f.reasons||[]).map(r=>`<li>${r}</li>`).join("");
       window.__recoFunds[f.code]=f;
-      return `<div class="reco-fund" onclick="addByCode('${f.code}')" title="点击加入组合">
+      // 只有「推荐」级才能选入配资/一键加入组合；非推荐级只读（防止误把观望基金买进组合）
+      const selBtn=f.verdict==="推荐"
+        ? `<button class="rf-sel" id="sel-${f.code}" onclick="event.stopPropagation();toggleSel('${f.code}')">选入配资</button>`
+        : `<span class="rf-sel" style="cursor:default;color:var(--muted);border-color:var(--line)">观望</span>`;
+      return `<div class="reco-fund" ${f.verdict==="推荐"?`onclick="addByCode('${f.code}')" title="点击加入组合"`:""}>
         <div class="rf-head"><span class="rf-code">${f.code}</span><span class="rf-name">${f.name}</span>${peerTxt}
-          <button class="rf-sel" id="sel-${f.code}" onclick="event.stopPropagation();toggleSel('${f.code}')">选入配资</button>
+          ${selBtn}
           <span class="badge" style="color:${vc};border-color:${vc}">${f.verdict}</span>
           ${f.buySignal?`<span class="badge" style="color:${f.buySignal==="低估布局"||f.buySignal==="回撤布局"?"var(--good)":(f.buySignal==="偏高谨慎"?"var(--warn)":"var(--muted)")};border-color:${f.buySignal==="低估布局"||f.buySignal==="回撤布局"?"var(--good)":(f.buySignal==="偏高谨慎"?"var(--warn)":"var(--muted)")}">${f.buySignal}</span>`:""}</div>
         <div class="rf-meta"><span>综合评分 ${f.score}</span><span>建议配置 ${(f.weight*100).toFixed(0)}%</span><span>估值 ${valTxt}</span>
           <span>1年盈利 <b style="color:${f.prob12==null?"var(--muted)":(f.prob12>=0.6?"#34d399":f.prob12>=0.45?"#f0a23a":"#fb7185")}">${f.prob12==null?"—":(f.prob12*100).toFixed(0)+"%"}</b></span></div>
         <ul class="rf-reasons">${rsnList}</ul></div>`;
-    }).join("");
-    return `<div class="reco-cat"><div class="reco-cat-h">${cat} <span class="muted" style="font-weight:600">${catW}</span></div>${catReason}${rows}</div>`;
+    };
+    const recRows=fs.filter(f=>f.verdict==="推荐").map(card).join("");
+    const watchRows=fs.filter(f=>f.verdict!=="推荐").map(card).join("");
+    return `<div class="reco-cat"><div class="reco-cat-h">${cat} <span class="muted" style="font-weight:600">${catW}</span></div>${catReason}
+      ${recRows||'<div class="muted" style="font-size:12px;padding:4px 0">该品类当前无达到「推荐」标准的基金（宁缺毋滥，不硬凑）。</div>'}
+      ${watchRows?`<details class="reco-watch"><summary>⚠️ 观望 ${fs.filter(f=>f.verdict!=="推荐").length} 只 · 未达推荐标准，不建议现在买入（点击展开详情）</summary>${watchRows}</details>`:""}
+    </div>`;
   }).join("") || '<span class="muted">基金池校验未通过（数据源海外受限），请手动搜索代码添加。</span>';
   const dynBanner = `<div class="dyn-banner"><svg class="i"><use href="#i-activity"/></svg> <b>动态实时推荐</b>（非内置名单）：本次实时扫描全市场 <b>${d.universe}</b> 只候选基金，按多因子评分精选。数据更新于 <b>${d.generatedAt||"—"}</b>（每 30 分钟自动重扫）。</div>`;
   const warnBanner = (d.note && d.note.indexOf("暂不可用")>=0) ? `<div class="warn-banner">⚠️ 部分品类实时榜单在本节点暂不可用，已留空（可手动添加对应基金）。</div>` : "";
@@ -2341,6 +2366,9 @@ let selFunds = new Map();   // code -> {code,name,weight,asset,verdict}
 function toggleSel(code){
   const f = window.__recoFunds[code];
   if(!f) return;
+  if(f.verdict && f.verdict!=="推荐"){
+    toast("「"+f.name+"」未达推荐标准（"+f.verdict+"），不建议买入；只可将「推荐」级基金加入组合"); return;
+  }
   const b = document.getElementById("sel-"+code);
   if(selFunds.has(code)){
     selFunds.delete(code);
