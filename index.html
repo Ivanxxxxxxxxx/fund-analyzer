@@ -195,6 +195,16 @@ table.plan th{color:var(--muted);font-weight:600}
 .bt-f{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:5px 9px;border-radius:8px;background:rgba(255,255,255,.04);min-width:0}
 .bt-fn{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-rand{margin-top:8px;font-size:12px;color:var(--muted);background:rgba(120,180,255,.06);border:1px dashed rgba(120,180,255,.3);border-radius:8px;padding:7px 10px;line-height:1.6}
+/* 投资概览双模式 Tab + 参数行（我的持仓预测 / 计划模拟） */
+.ov-tabs{display:inline-flex;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px}
+.ov-tabs button{border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;padding:5px 10px;border-radius:7px;cursor:pointer;transition:all .15s}
+.ov-tabs button:hover{color:var(--text)}
+.ov-tabs button.on{background:linear-gradient(135deg,#f2c558,#c9921f);color:#1a1a1a}
+.ov-params{margin:8px 0 4px;padding:9px 11px;background:rgba(255,255,255,.03);border:1px dashed var(--line);border-radius:10px}
+.ov-p-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px}
+.ov-p-row label{color:var(--muted);font-size:11px;font-weight:600}
+.ov-p-row input,.ov-p-row select{width:auto;max-width:110px;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:13px;font-weight:600}
+.ov-p-row select{max-width:130px}
 .bt-win{margin-top:8px;font-size:12px;background:rgba(52,211,153,.06);border:1px dashed rgba(52,211,153,.3);border-radius:8px;padding:7px 10px}
 /* ---------- 推荐卡 ---------- */
 .reco-cat{margin:10px 0 4px}
@@ -633,12 +643,19 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     <span class="pill">数据来源：天天基金公开接口（仅作分析参考，非投资建议）</span>
     <span class="pill pill-soft"><svg class="i"><use href="#i-lightbulb"/></svg> 支付宝/蚂蚁财富销售的是同一批公募基金，6 位代码通用</span>
   </div>
-<!-- 投资概览：本金 / 定投 / 总成本 / 预期收益 / 总金额 + 复利曲线（与「一键配置」输入数据实时关联） -->
+<!-- 投资概览：双模式（我的持仓预测 / 计划模拟）+ 本金/定投/期限可编辑 + 预期收益 + 复利曲线 -->
   <div class="card">
-    <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-trending-up"/></svg></span>投资概览（本金 / 定投 / 预期收益 / 复利曲线）
-      <span style="margin-left:auto" class="row"><span class="muted" style="font-size:11px;font-weight:600" id="planSource">数据关联「一键配置」的输入</span></span>
+    <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-trending-up"/></svg></span>投资概览
+      <span style="margin-left:auto" class="row">
+        <span class="ov-tabs" id="ovTabs">
+          <button class="on" data-ov="holdings" onclick="setOvMode('holdings')">我的持仓预测</button>
+          <button data-ov="plan" onclick="setOvMode('plan')">计划模拟</button>
+        </span>
+        <span class="muted" style="font-size:11px;font-weight:600" id="planSource"></span>
+      </span>
     </h3>
-    <div id="planOverview"><div class="empty">用「智能决策 → 一键配置最优基金」输入本金、定投、持有时间并建仓后，这里自动生成投资概览与复利曲线。</div></div>
+    <div id="ovParams" class="ov-params"></div>
+    <div id="planOverview"><div class="empty">我的持仓预测：基于你的<b>实际持仓</b>实时计算，参数可随时修改。计划模拟：选定基金组合、设定本金/定投/期限，模拟预期走势。</div></div>
   </div>
 <!-- 配置合理性速览 + 每月定投计划：并排两列（正方形卡片，减少下滑） -->
   <div class="pair-grid">
@@ -1266,35 +1283,36 @@ function saveDcaAmt(){
 
 // 组合历史收益统计：按【实际持仓】市值加权计算年化收益/年化波动（一键配置选的 N 只基金）
 // 用 __histCache 复用历史净值；结果按"持仓组合+日期"缓存到 localStorage（当天有效），避免每次刷新重拉
-async function calcPortfolioStats(){
-  if(!holdings.length) return null;
-  const codes=holdings.map(h=>h.code).join(",");
+async function calcPortfolioStats(list){
+  const funds=list||holdings;
+  if(!funds.length) return null;
+  const codes=funds.map(h=>h.code).join(",");
   const today=new Date().toDateString();
   const ck="fp_stats:"+codes+":"+today;
   const cached=JSON.parse(localStorage.getItem(ck)||"null");
   if(cached && cached.ann!=null) return cached;
   if(!window.__histCache) window.__histCache={};
-  const missing=holdings.filter(h=>!window.__histCache[h.code]);
+  const missing=funds.filter(h=>!window.__histCache[h.code]);
   for(const h of missing){
     const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]}));
     window.__histCache[h.code]=r.data||[];
   }
   const allDates=new Set();
-  holdings.forEach(h=>(window.__histCache[h.code]||[]).forEach(d=>{ if(d&&d.date) allDates.add(d.date); }));
+  funds.forEach(h=>(window.__histCache[h.code]||[]).forEach(d=>{ if(d&&d.date) allDates.add(d.date); }));
   const dates=[...allDates].sort();
-  const series=holdings.map(h=>{
+  const series=funds.map(h=>{
     const m={}; (window.__histCache[h.code]||[]).forEach(d=>{ if(d&&d.date!=null) m[d.date]=d.nav; });
     const arr=[]; let last=null;
     dates.forEach(dt=>{ if(m[dt]!=null) last=m[dt]; arr.push(last); });
     return arr;
   });
   const rets=series.map(s=>{ const r=[]; for(let i=1;i<s.length;i++){ const a=s[i-1],b=s[i]; if(a>0&&isFinite(b)){ const x=(b-a)/a; if(Math.abs(x)<0.5) r.push(x); } } return r; });
-  const total=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
-  const w=holdings.map(h=>(+h.value||0)/total);
+  const total=funds.reduce((s,h)=>s+(+h.value||0),0)||1;
+  const w=funds.map(h=>(+h.value||0)/total);
   const L=Math.min(...rets.map(r=>r.length));
   if(L<60) return null;
   const pr=[];
-  for(let t=0;t<L;t++){ let s=0; for(let i=0;i<holdings.length;i++) s+=w[i]*rets[i][rets[i].length-L+t]; pr.push(s); }
+  for(let t=0;t<L;t++){ let s=0; for(let i=0;i<funds.length;i++) s+=w[i]*rets[i][rets[i].length-L+t]; pr.push(s); }
   const mean=pr.reduce((a,b)=>a+b,0)/L;
   const variance=pr.reduce((a,b)=>a+(b-mean)**2,0)/(L-1);
   const vol=Math.sqrt(variance)*Math.sqrt(252);
@@ -1305,27 +1323,82 @@ async function calcPortfolioStats(){
   return out;
 }
 
-// 投资概览：本金/定投/总成本/预期收益/总金额 + 复利曲线（实时，关联「一键配置」输入数据）
-let planChart=null;
+// 投资概览：双模式（我的持仓预测 / 计划模拟），本金/定投/期限可编辑，复利曲线实时
+let planChart=null, __ovMode=localStorage.getItem("fp_ov_mode")||"holdings";
+function setOvMode(m){
+  __ovMode=m; localStorage.setItem("fp_ov_mode",m);
+  document.querySelectorAll("#ovTabs button").forEach(b=>b.classList.toggle("on", b.dataset.ov===m));
+  renderPlanOverview();
+}
+function saveOvParam(){
+  const isPlan=__ovMode==="plan";
+  const P=Math.max(0,+document.getElementById("ovP").value||0);
+  const months=Math.max(1,Math.min(360,+document.getElementById("ovY").value||60));
+  const dca=Math.max(0,+document.getElementById("ovD").value||0);
+  if(isPlan){
+    localStorage.setItem("fp_sim", JSON.stringify({principal:P, months, dca, at:Date.now()}));
+  }else{
+    const cur=JSON.parse(localStorage.getItem("fp_plan")||"{}");
+    cur.principal=P; cur.months=months; cur.at=Date.now();
+    localStorage.setItem("fp_plan", JSON.stringify(cur));
+    const ds=getDca(); ds.amount=dca; ds.at=Date.now();
+    localStorage.setItem("fp_dca", JSON.stringify(ds));
+    if(window.renderDcaGuide) renderDcaGuide();
+  }
+  renderPlanOverview();
+}
 async function renderPlanOverview(){
   const box=document.getElementById("planOverview"); if(!box) return;
-  const plan=JSON.parse(localStorage.getItem("fp_plan")||"{}");
-  const P=Math.max(0, +plan.principal||0);
-  // 持有月数：新字段 months；兼容旧数据 years（年）
-  const months=Math.max(1,Math.min(360, +plan.months || ((+plan.years||5)*12) || 60));
+  document.querySelectorAll("#ovTabs button").forEach(b=>b.classList.toggle("on", b.dataset.ov===__ovMode));
+  const isPlan=__ovMode==="plan";
+  const storeKey=isPlan?"fp_sim":"fp_plan";
+  const plan=JSON.parse(localStorage.getItem(storeKey)||"{}");
+  let P=Math.max(0,+plan.principal||0);
+  let months=Math.max(1,Math.min(360,+plan.months||((+plan.years||5)*12)||60));
   const ds=getDca();
-  const rawAmt=Math.max(0,+(ds.amount)||0);
-  const A=dcaMonthly();   // 每月投入当量（复利公式统一用月当量，频率差异已折算进来）
-  if(!holdings.length){
-    box.innerHTML='<div class="empty">投资概览基于你的实际持仓计算。用「智能决策 → 一键配置最优基金」输入本金、定投、持有时间并建仓后，这里自动生成投资概览与复利曲线。</div>';
+  const simDca=isPlan?Math.max(0,+(plan.dca)||0):0;
+  const rawAmt=isPlan?simDca:Math.max(0,+(ds.amount)||0);
+  // 基金来源：计划模拟=选定组合（推荐级/持仓/我选出的）；持仓预测=实际持仓
+  let funds=isPlan?[]:(holdings||[]);
+  let srcTxt="";
+  if(isPlan){
+    const src=((document.getElementById("ovF")||{}).value)||"reco";
+    const recs=Object.values(window.__recoFunds||{}).filter(f=>f.verdict==="推荐");
+    const pickedCodes=(typeof selFunds!=="undefined"&&selFunds&&selFunds.size)?[...selFunds.keys()]:(window.__lastSetupCodes||[]);
+    const rf=Object.values(window.__recoFunds||{});
+    if(src==="reco"){ funds=recs.map(f=>({code:f.code,name:f.name,value:Math.max(1,+(f.weight||0.05)*10000)})); srcTxt="模拟对象：推荐组合（仅「推荐」级 "+funds.length+" 只）"; }
+    else if(src==="holdings"){ funds=holdings.map(h=>({code:h.code,name:h.name,value:Math.max(1,+h.value||10000)})); srcTxt="模拟对象：我的持仓（"+funds.length+" 只）"; }
+    else { funds=pickedCodes.map(c=>{const f=rf.find(x=>x.code===c); return {code:c,name:f?f.name:c,value:10000};}); srcTxt="模拟对象：我选出的组合（"+funds.length+" 只）"; }
+  } else {
+    srcTxt="基于实际持仓 "+holdings.length+" 只实时计算 · 参数可随时修改（改完自动应用）";
+  }
+  // 参数编辑区（两模式各自存参数：fp_plan / fp_sim）
+  const pe=document.getElementById("ovParams");
+  if(pe){
+    const freq=(JSON.parse(localStorage.getItem("fp_dca")||"{}")).freq||"month";
+    const ovFv=((document.getElementById("ovF")||{}).value)||"reco";
+    pe.innerHTML=`<div class="ov-p-row">
+      ${isPlan?`<label>模拟对象</label><select id="ovF" onchange="saveOvParam()">
+        <option value="reco" ${ovFv==="reco"?"selected":""}>推荐组合</option>
+        <option value="holdings" ${ovFv==="holdings"?"selected":""}>我的持仓</option>
+        <option value="picked" ${ovFv==="picked"?"selected":""}>我选出的</option></select>`:""}
+      <label>初始本金 ¥</label><input id="ovP" class="num" type="number" min="0" step="1000" value="${P}" onchange="saveOvParam()">
+      <label>${FREQ[freq].label}定投 ¥</label><input id="ovD" class="num" type="number" min="0" step="100" value="${rawAmt}" onchange="saveOvParam()">
+      <label>持有</label><input id="ovY" class="num" type="number" min="1" max="360" value="${months}" onchange="saveOvParam()"><span class="muted">个月</span>
+      <span class="muted" style="font-size:11px">${srcTxt}</span>
+    </div>`;
+  }
+  if(!funds.length){
+    box.innerHTML='<div class="empty">'+(isPlan?"还没有可模拟的基金：先点「智能决策 → 生成推荐」，或用「一键配置建仓」后，再来计划模拟。":"还没有持仓：用「智能决策 → 一键配置最优基金」建仓，或手动添加基金后自动生成。")+'</div>';
     return;
   }
-  // 年化收益/波动：优先按【实际持仓】实时计算（一键配置选的 N 只基金，市值加权）
-  const stats = await calcPortfolioStats();
+  const A=isPlan?rawAmt:dcaMonthly();
+  // 年化收益/波动：按选定组合（市值加权）实时计算
+  const stats = await calcPortfolioStats(funds);
   let r=null, vol=null;
   if(stats){ r=stats.ann; vol=stats.vol; }
-  else if(window.__annRet!=null && isFinite(window.__annRet)){ r=window.__annRet; vol=window.__annVol||0.15; }
-  else if(window.__recoProb && window.__recoProb.exp12m!=null && isFinite(window.__recoProb.exp12m)){ r=window.__recoProb.exp12m; vol=0.15; }
+  else if(!isPlan && window.__annRet!=null && isFinite(window.__annRet)){ r=window.__annRet; vol=window.__annVol||0.15; }
+  else if(!isPlan && window.__recoProb && window.__recoProb.exp12m!=null && isFinite(window.__recoProb.exp12m)){ r=window.__recoProb.exp12m; vol=0.15; }
   if(r==null || !isFinite(r)) r=0.06;
   if(vol==null || !isFinite(vol) || vol<=0) vol=0.15;
   r=Math.max(-0.4, Math.min(0.4, r));
@@ -1364,7 +1437,7 @@ async function renderPlanOverview(){
   const idealEnd=idealY[months][1], p95End=p95[months][1], p5End=p5[months][1];
   box.innerHTML=`
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px">
-      ${stat("初始本金", yuan(P), plan.principal?"一键配置时输入":"手动持仓")}
+      ${stat("初始本金", yuan(P), "可随时在上方修改")}
       ${stat(FREQ[ds.freq].label+"定投", rawAmt>0?yuan(rawAmt):"—", rawAmt>0?("每期 "+yuan(rawAmt)+" · 共 "+dcaPeriods(months)+" 期 · 折合每月 "+yuan(A)):"未设置定投")}
       ${stat("总成本", yuan(totalCost), P+" + "+A+"×"+months)}
     </div>
@@ -1380,7 +1453,7 @@ async function renderPlanOverview(){
       ${stat("悲观预期收益", fmtGain(p5Gain), "5% 分位最差情景", gainCol(p5Gain))}
     </div>
     <div style="position:relative;height:240px"><canvas id="planChartCanvas"></canvas></div>
-    <div class="note" style="font-size:11px;margin-top:8px">年化收益 ${(r*100).toFixed(1)}% · 波动 ${(vol*100).toFixed(0)}% —— 按你<b>实际持仓 ${holdings.length} 只基金</b>的历史净值（市值加权）实时计算${stats?"，每只基金近 2 年数据":""}；理想=无波动复利、中位=50%分位、悲观/乐观=5%/95% 分位。模拟基于历史假设，非收益承诺。</div>`;
+    <div class="note" style="font-size:11px;margin-top:8px">年化收益 ${(r*100).toFixed(1)}% · 波动 ${(vol*100).toFixed(0)}% —— 按${isPlan?"<b>选定组合</b>":"你<b>实际持仓</b>"} ${funds.length} 只基金的历史净值（市值加权）实时计算${stats?"，每只基金近 2 年数据":""}；理想=无波动复利、中位=50%分位、悲观/乐观=5%/95% 分位。模拟基于历史假设，非收益承诺。</div>`;
   if(planChart) planChart.destroy();
   const cv=document.getElementById("planChartCanvas"); if(!cv) return;
   window.__planChart=null;   // 供 switchView 在隐藏视图创建后 resize 恢复尺寸
