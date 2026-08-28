@@ -2750,13 +2750,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/recommend-backtest":
             # 回测较重，结果缓存 12h（数据日频，足够且避免每次点击都大扫描拖垮服务）
-            # 支持 ?codes=110011,163415 回测用户指定的组合；不传则回测推荐组合
+            # 支持 ?codes=110011,163415[&weights=0.3,0.3,0.4] 回测用户指定的组合（可带权重，
+            # 如按持仓市值占比回测"我的持仓"）；不传 codes 则回测推荐组合
             try:
                 codes = qs.get("codes", [""])[0]
                 codes = [c for c in codes.replace("，", ",").split(",") if c.strip()]
+                weights = None
                 if codes:
-                    data = cached("reco", "btcodes:" + ",".join(sorted(set(codes))), 43200,
-                                  lambda: recommend_backtest_codes(codes, None))
+                    wq = qs.get("weights", [""])[0]
+                    wl = [w for w in wq.replace("，", ",").split(",") if w.strip()]
+                    try:
+                        if len(wl) == len(codes):
+                            weights = [float(w) for w in wl]
+                    except Exception:
+                        weights = None
+                    data = cached("reco", "btcodes:" + ",".join(codes) + ("|" + ",".join(wl) if wl else ""), 43200,
+                                  lambda: recommend_backtest_codes(codes, weights))
                 else:
                     data = cached("reco", "backtest", 43200, recommend_backtest)
             except Exception as e:
