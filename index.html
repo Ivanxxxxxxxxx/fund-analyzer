@@ -2086,8 +2086,9 @@ async function loadRecommend(){
       <div style="font-size:13px;font-weight:700;margin-bottom:6px"><svg class="i"><use href="#i-trending-up"/></svg> 推荐组合盈利预期（蒙特卡洛模拟，按推荐权重）</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">
         ${span("1月",rp.p1m,rp.exp1m)}${span("3月",rp.p3m,rp.exp3m)}${span("6月",rp.p6m,rp.exp6m)}${span("1年",rp.p12m,rp.exp12m)}
+        ${rp.sigma!=null?`<span>组合年化波动 <b style="color:${rp.sigma>0.25?"var(--warn)":"var(--text)"}">${(rp.sigma*100).toFixed(0)}%</b></span>`:""}
       </div>
-      <div class="muted" style="font-size:10.5px;margin-top:4px">盈利概率：≥60% 绿（较稳）/ 45-60% 橙（中性）/ &lt;45% 红（谨慎）；预期收益：红涨绿跌（A股习惯）。按近 3 年历史波动假设模拟，非收益承诺。</div>
+      <div class="muted" style="font-size:10.5px;margin-top:4px">盈利概率：≥60% 绿（较稳）/ 45-60% 橙（中性）/ &lt;45% 红（谨慎）；预期收益：红涨绿跌（A股习惯）。按近 3 年历史波动假设模拟，非收益承诺。<b style="color:var(--warn)">基金有风险：年化波动反映净值涨跌幅度，权益组合可能单年浮亏 20%+，请用闲钱、按仓位纪律分批买入。</b></div>
     </div>`;
   }
   box.innerHTML=`
@@ -2109,9 +2110,9 @@ async function loadRecommend(){
       <span class="muted" style="font-size:11px;font-weight:600">按「类别分散 + 综合分择优」选最优 N 只组合（A股权益为主 + 海外/债券分散），支持定投（日/周/月/年）</span>
     </div>
     <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
-      <div><div class="muted" style="font-size:11px;margin-bottom:4px">选几只</div>
+      <div><div class="muted" style="font-size:11px;margin-bottom:4px">选几只（1-10）</div>
         <select id="setupN2" style="width:84px;padding:8px 8px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px;font-weight:600">
-          <option value="3">3 只</option><option value="4">4 只</option><option value="5" selected>5 只</option>
+          ${Array.from({length:10},(_,i)=>`<option value="${i+1}" ${i+1===5?"selected":""}>${i+1} 只</option>`).join("")}
         </select></div>
       <div><div class="muted" style="font-size:11px;margin-bottom:4px">本金（¥）</div>
         <input id="setupP2" type="number" value="100000" min="0" step="1000" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
@@ -2146,9 +2147,9 @@ async function loadRecommend(){
   saveRecoPersist();   // 持久化推荐目标，供操作信号交叉验证（即使刷新也不矛盾）
 }
 
-// 选 N 只最优组合：按「资产类别分散 + 类内综合分择优」。
-// 规则：A股权益（股/混/指）占多数席位，海外(QDII)、债券/黄金各留 1 席（若有），
-// 避免选出一把同涨同跌的基金；名额不满时用剩余高分基金补足。
+// 选 N 只最优组合：按「资产类别分散 + 类内综合分择优」，支持任意 N（1~10）。
+// 规则：A股权益（股/混/指）约占 55% 席位（至少1、不超过池容量），海外(QDII) 有则留1席，
+// 其余给债券/黄金/货币；名额不满时用剩余高分基金补足。避免选出一把同涨同跌的基金。
 function pickBestN(list, n){
   const EQ=["股票型","混合型","指数型"];
   const pools={eq:[],ov:[],ot:[]};
@@ -2160,18 +2161,35 @@ function pickBestN(list, n){
   });
   const byS=a=>a.sort((x,y)=>(y.score||0)-(x.score||0));
   byS(pools.eq); byS(pools.ov); byS(pools.ot);
-  let eqSeats, ovSeats, otSeats;
-  if(n<=3){ eqSeats=Math.min(pools.eq.length,2); ovSeats=Math.min(pools.ov.length,1); otSeats=Math.min(pools.ot.length,Math.max(0,n-eqSeats-ovSeats)); }
-  else if(n===4){ eqSeats=Math.min(pools.eq.length,2); ovSeats=Math.min(pools.ov.length,1); otSeats=Math.min(pools.ot.length,Math.max(0,n-eqSeats-ovSeats)); }
-  else { eqSeats=Math.min(pools.eq.length,Math.max(2,Math.ceil(n*0.6))); ovSeats=Math.min(pools.ov.length,1); otSeats=Math.min(pools.ot.length,Math.max(0,n-eqSeats-ovSeats)); }
+  let eqSeats=Math.min(pools.eq.length, Math.max(1, Math.round(n*0.55)));
+  let ovSeats=(n>=2&&pools.ov.length)?1:0;
+  if(eqSeats+ovSeats>n){ eqSeats=Math.max(1,n-ovSeats); }
+  let otSeats=Math.min(pools.ot.length, Math.max(0,n-eqSeats-ovSeats));
+  if(eqSeats+ovSeats+otSeats<n){   // 名额未满（某类池空）→ 权益优先补，再债券/黄金/货币
+    const fill=n-eqSeats-ovSeats-otSeats;
+    eqSeats+=Math.min(pools.eq.length-eqSeats, fill);
+    otSeats=Math.min(pools.ot.length, otSeats+(n-eqSeats-ovSeats-otSeats));
+  }
   const picked=[];
   const take=(pool,k)=>{ for(let i=0;i<pool.length&&k>0;i++){ if(picked.indexOf(pool[i])<0){ picked.push(pool[i]); k--; } } };
   take(pools.eq,eqSeats); take(pools.ov,ovSeats); take(pools.ot,otSeats);
-  if(picked.length<n){   // 名额未满（某类池空）→ 用剩余高分基金补足
+  if(picked.length<n){   // 兜底：剩余高分补足
     const rest=[...list].filter(f=>picked.indexOf(f)<0).sort((x,y)=>(y.score||0)-(x.score||0));
     for(const f of rest){ if(picked.length>=n) break; picked.push(f); }
   }
   return picked;
+}
+
+// 组合构成说明：如 "5 只组合 = A股权益 3只 + 海外QDII 1只 + 债券/黄金/货币 1只"
+function comboDesc(picked){
+  const EQ=["股票型","混合型","指数型"];
+  const cnt={};
+  picked.forEach(f=>{
+    const a=f.asset||f.category||"";
+    const k=EQ.indexOf(a)>=0?"A股权益":(a==="海外(QDII)"?"海外QDII":"债券/黄金/货币");
+    cnt[k]=(cnt[k]||0)+1;
+  });
+  return picked.length+" 只组合 = "+Object.entries(cnt).map(([k,v])=>k+" "+v+"只").join(" + ");
 }
 
 // 一键配置最优基金：从推荐结果按「类别分散+综合分」选最优 N 只组合，分配本金建仓，并记录定投计划
@@ -2222,7 +2240,7 @@ async function quickSetup(nIn, principalIn, dcaIn, monthsIn, freqIn){
   localStorage.setItem("fp_plan", JSON.stringify({principal, months, at:Date.now()}));
   if(window.renderPlanOverview) renderPlanOverview();
   saveHoldings(); renderHoldings(); setDataStamp();
-  toast("已按推荐配置 "+added+" 只、建仓 "+yuan(sum)+(dca>0?"，"+FREQ[freq].label+"定投 "+yuan(dca):""));
+  toast("已按推荐配置 "+added+" 只、建仓 "+yuan(sum)+"（"+comboDesc(picked)+"）"+(dca>0?"，"+FREQ[freq].label+"定投 "+yuan(dca):""));
   setFold("portfolio", true); setFold("tools", false);
   if(window.analyze) analyze();
   // 弹窗内建仓：自动关闭弹窗，回到组合页
