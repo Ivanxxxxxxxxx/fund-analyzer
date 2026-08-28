@@ -177,12 +177,21 @@ table.plan th{color:var(--muted);font-weight:600}
 .g-action .gbar{background:#22c58b}
 .g-data .gbar{background:#8b7cf6}
 .g-ref .gbar{background:#9896a6}
-/* 回测弹窗卡片式布局 */
+/* 回测弹窗卡片式布局（2026-08-28 重排版：对象切换+四格指标+基金网格） */
+.bt-switch{display:flex;gap:6px;margin:2px 0 10px;flex-wrap:wrap}
+.bt-switch button{flex:1;min-width:112px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s}
+.bt-switch button:hover{color:var(--text)}
+.bt-switch button.on{background:rgba(232,179,57,.14);border-color:var(--gold);color:var(--gold)}
+.bt-sub{font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.7}
 .bt-block{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0;background:rgba(255,255,255,.02)}
-.bt-h{font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px}
-.bt-stats{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px}
-.bt-stat{display:flex;flex-direction:column;gap:2px}
-.bt-fs{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 12px}
+.bt-h{font-size:13.5px;font-weight:700;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px}
+.bt-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.bt-kpi{border-radius:10px;background:rgba(255,255,255,.04);padding:8px 6px;text-align:center;min-width:0}
+.bt-kpi .l{font-size:10.5px;color:var(--muted);margin-bottom:3px;white-space:nowrap}
+.bt-kpi .v{font-size:15px;font-weight:700;white-space:nowrap}
+.bt-kpi.main{background:rgba(232,179,57,.08);border:1px solid rgba(232,179,57,.25)}
+.bt-kpi.main .v{font-size:19px}
+.bt-fs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 12px}
 .bt-f{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:5px 9px;border-radius:8px;background:rgba(255,255,255,.04);min-width:0}
 .bt-fn{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* ---------- 推荐卡 ---------- */
@@ -898,7 +907,7 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
       <h2><svg class="i"><use href="#i-trending-up"/></svg> 推荐效果回测</h2>
       <button class="modal-close" onclick="closeBtModal()" aria-label="关闭">×</button>
     </div>
-    <div class="sub" id="btSub">用修复后的多因子逻辑选基，模拟从过去买入持有至今，看能否盈利、盈利多少（对比沪深300）。</div>
+    <div class="sub">模拟从过去买入持有至今，看能否盈利、盈利多少（对比沪深300）。可在弹窗内切换回测对象：推荐组合 / 你选的 N 只 / 我的持仓。</div>
     <div class="modal-body" id="btModalBody"></div>
   </div>
 </div>
@@ -1988,62 +1997,71 @@ function renderTrend(dates, portCum, benchCum, benchName){
 }
 
 // ---------------- 组合/推荐效果回测（独立弹窗） ----------------
-// 回测对象：mode=holdings → 我的持仓组合（按市值权重）；否则优先「你选出的组合」
-//（选入配资/一键配置建仓的基金），再退到「推荐组合」。多锚点(6/12/24月)买入持有至今，对比沪深300。
-// 后端结果缓存 12 小时，首次约 1 分钟。
+// 回测对象显式切换（不用先建仓）：reco=推荐组合 / picked=我选的N只 / holdings=我的持仓。
+// 多锚点(6/12/24月)买入持有至今，对比沪深300；后端结果缓存 12 小时，首次约 1 分钟。
+let __btMode="reco";
 async function loadBacktest(mode){
   const body=document.getElementById("btModalBody"); if(!body) return;
-  let codes=[], weights=null;
-  const sub=document.getElementById("btSub");
-  if(mode==="holdings"){
+  if(mode) __btMode=mode;
+  const pickLen=(window.__lastSetupCodes&&window.__lastSetupCodes.length)?window.__lastSetupCodes.length:
+                ((window.selFunds&&window.selFunds.size)?window.selFunds.size:0);
+  const hLen=(typeof holdings!=="undefined"?holdings.filter(x=>x&&/^\d{6}$/.test(String(x.code))).length:0);
+  const sw=`<div class="bt-switch">
+    <button class="${__btMode==="reco"?"on":""}" onclick="loadBacktest('reco')">推荐组合${window.__recoCount?`（${window.__recoCount}只）`:""}</button>
+    <button class="${__btMode==="picked"?"on":""}" onclick="loadBacktest('picked')">我选的${pickLen?`（${pickLen}只）`:""}</button>
+    <button class="${__btMode==="holdings"?"on":""}" onclick="loadBacktest('holdings')">我的持仓${hLen?`（${hLen}只）`:""}</button>
+  </div>`;
+  let codes=[], weights=null, subTxt="";
+  if(__btMode==="holdings"){
     const h=(typeof holdings!=="undefined"?holdings:[]).filter(x=>x&&/^\d{6}$/.test(String(x.code)));
-    if(!h.length){ body.innerHTML='<div class="empty">持仓里没有可回测的基金（需 6 位基金代码）。</div>'; if(sub) sub.innerHTML=""; return; }
+    if(!h.length){ body.innerHTML=sw+'<div class="bt-sub">持仓里没有可回测的基金（需 6 位基金代码），先去组合工作台上方添加。</div>'; return; }
     codes=h.map(x=>String(x.code));
     const ws=h.map(x=>Math.max(0,+x.value||0));
     const wsum=ws.reduce((a,b)=>a+b,0)||1;
     weights=ws.map(w=>+(w/wsum).toFixed(4));
-    if(sub) sub.innerHTML=`回测对象：<b>我的持仓组合</b>（${codes.length} 只，按当前市值权重加权）· 与沪深300对比；若持仓在锚点时尚未成立则不计入该周期。`;
+    subTxt=`我的持仓组合 · ${codes.length} 只 · 按当前市值权重加权`;
+  }else if(__btMode==="picked"){
+    codes=(window.__lastSetupCodes&&window.__lastSetupCodes.length)?[...window.__lastSetupCodes]:
+          ((window.selFunds&&window.selFunds.size)?[...window.selFunds.keys()]:[]);
+    if(!codes.length){ body.innerHTML=sw+'<div class="bt-sub">还没有选出的组合：在推荐弹窗里「一键配置建仓」，或点推荐卡片「选入配资」后，再来回测。</div>'; return; }
+    subTxt=`你选出的 ${codes.length} 只基金组合 · 等权`;
   }else{
-    if(window.selFunds && window.selFunds.size) codes=[...window.selFunds.keys()];
-    else if(window.__lastSetupCodes && window.__lastSetupCodes.length) codes=window.__lastSetupCodes;
-    if(sub) sub.innerHTML = codes.length
-      ? `回测对象：<b>你选出的 ${codes.length} 只基金组合</b>（等权买入持有至今）· 与沪深300对比`
-      : `回测对象：<b>推荐组合</b>（各品类按修复后逻辑选最优、按推荐配置加权持有至今）· 与沪深300对比；
-         也可以在推荐弹窗里「一键配置建仓」选好基金后，回测会自动跟随你选的组合。`;
+    subTxt=`推荐组合 · 各品类按修复后逻辑选最优、按推荐配置加权`;
   }
   const q=codes.length?("?codes="+codes.join(",")+(weights?"&weights="+weights.join(","):"")):"";
-  body.innerHTML='<div class="empty" style="text-align:left">⏳ 正在回测：模拟从过去买入持有至今…首次约需 1 分钟，之后 12 小时内秒出。</div>';
+  const sub=`<div class="bt-sub">回测对象：<b>${subTxt}</b> · 模拟买入持有至今，与沪深300对比${codes.length?"；若某基金在锚点日尚未成立则不计入该周期":""}</div>`;
+  body.innerHTML=sw+sub+'<div class="empty" style="text-align:left">⏳ 正在回测…首次约需 1 分钟，之后 12 小时内秒出。</div>';
   try{
     const d=await api("/api/recommend-backtest"+q, 180000).catch(e=>({ok:false,error:String(e)}));
-    if(!d.ok){ body.innerHTML='<div class="empty">回测失败：'+(d.error||"未知错误")+'</div>'; return; }
+    if(!d.ok){ body.innerHTML=sw+sub+'<div class="empty">回测失败：'+(d.error||"未知错误")+'</div>'; return; }
     const blocks=(d.results||[]).map(r=>{
       const pr=r.portRet, br=r.benchRet, ur=r.univRet;
-      const excess=(pr!=null&&br!=null)?(pr-br):null;
+      const excess=(pr!=null&&br!=null)?+(pr-br).toFixed(1):null;   // 统一一位小数，避免浮点尾巴
       const cls=v=>v==null?"var(--muted)":(v>=0?"var(--up)":"var(--down)");
       const eCls=excess==null?"var(--muted)":(excess>=0?"var(--up)":"var(--down)");
-      const pv=v=>v==null?"—":(v>=0?"+"+v+"%":v+"%");
+      const pv=v=>v==null?"—":((+v)>=0?"+":"")+(+v).toFixed(1)+"%";
       const chips=(r.picks||[]).map(p=>{
         const nm=p.code?(p.name||p.code):((p.asset||"")+"·"+(p.name||""));
         if(p.fwdRet==null) return `<div class="bt-f"><span class="bt-fn">${nm}</span><span class="muted" style="white-space:nowrap">无数据</span></div>`;
-        return `<div class="bt-f"><span class="bt-fn">${nm}</span><b style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"};white-space:nowrap">${p.fwdRet>=0?"+":""}${p.fwdRet}%</b></div>`;
+        return `<div class="bt-f"><span class="bt-fn">${nm}</span><b style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"};white-space:nowrap">${p.fwdRet>=0?"+":""}${(+p.fwdRet).toFixed(1)}%</b></div>`;
       }).join("");
       return `<div class="bt-block">
         <div class="bt-h">${r.label} <span class="muted" style="font-size:11px;font-weight:600">买入日 ${r.asof||"—"}</span></div>
-        <div class="bt-stats">
-          <div class="bt-stat"><div class="muted" style="font-size:10.5px">组合收益</div><b style="color:${cls(pr)};font-size:18px">${pv(pr)}</b></div>
-          <div class="bt-stat"><div class="muted" style="font-size:10.5px">沪深300</div><b style="color:${cls(br)};font-size:15px">${pv(br)}</b></div>
-          <div class="bt-stat"><div class="muted" style="font-size:10.5px">超额</div><b style="color:${eCls};font-size:15px">${excess==null?"—":(excess>=0?"+":"")+excess+"pp"}</b></div>
-          <div class="bt-stat"><div class="muted" style="font-size:10.5px">等权全宇宙</div><b style="color:${cls(ur)};font-size:15px">${pv(ur)}</b></div>
+        <div class="bt-kpis">
+          <div class="bt-kpi main"><div class="l">组合收益</div><div class="v" style="color:${cls(pr)}">${pv(pr)}</div></div>
+          <div class="bt-kpi"><div class="l">沪深300</div><div class="v" style="color:${cls(br)}">${pv(br)}</div></div>
+          <div class="bt-kpi"><div class="l">超额</div><div class="v" style="color:${eCls}">${excess==null?"—":(excess>=0?"+":"")+excess+"pp"}</div></div>
+          <div class="bt-kpi"><div class="l">等权全宇宙</div><div class="v" style="color:${cls(ur)}">${pv(ur)}</div></div>
         </div>
         <div class="bt-fs">${chips||'<span class="muted">—</span>'}</div>
       </div>`;
     }).join("");
-    body.innerHTML=`<div class="note" style="margin:6px 0 10px"><svg class="i"><use href="#i-trending-up"/></svg> <b>回测结果</b>：<span class="muted">${d.method||""} 生成于 ${d.generatedAt||"—"}</span></div>
+    body.innerHTML=sw+sub+`
       ${blocks}
-      <div class="note" style="margin-top:8px">买入价=买入日（或之前最近交易日）真实历史净值，卖出价=今日最新净值；全部来自天天基金真实数据，可在官网核对。仅验证历史样本，非收益承诺。</div>`;
-  }catch(e){ body.innerHTML='<div class="empty">回测失败：'+(e.message||e)+'</div>'; }
+      <div class="note" style="margin-top:8px">买入/卖出价均为累计净值（含分红再投资口径），全部来自天天基金真实数据，可在官网核对。仅验证历史样本，非收益承诺。生成于 ${d.generatedAt||"—"}。</div>`;
+  }catch(e){ body.innerHTML=sw+'<div class="empty">回测失败：'+(e.message||e)+'</div>'; }
 }
-function openBtModal(mode){ document.getElementById("btOverlay").classList.add("show"); loadBacktest(mode||"auto"); }
+function openBtModal(mode){ document.getElementById("btOverlay").classList.add("show"); loadBacktest(mode||"reco"); }
 function closeBtModal(){ document.getElementById("btOverlay").classList.remove("show"); }
 // 组合回测：回测「我的持仓」里的基金组合（按当前市值权重）
 function backtestHoldings(){ openBtModal("holdings"); }
