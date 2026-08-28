@@ -1661,7 +1661,18 @@ async function renderPlanSim(){
   const dca=Math.max(0,+sim.dca||0);
   const freq=(JSON.parse(localStorage.getItem("fp_dca")||"{}")).freq||"month";
   const pf=getPlanFunds();
-  const funds=pf.map(f=>({code:f.code,name:f.name,value:Math.max(1,+(f.weight||0.05)*10000)}));
+  // 若计划基金组合与实时持仓完全一致（同一批基金），计划概览/诊断统一用持仓的实际金额占比作为权重，
+  // 与「持仓分析」口径一致，消除“同基金不同数”。计划≠持仓时仍用计划自身仓位权重。
+  const sameSet=holdings.length && pf.length===holdings.length &&
+    pf.map(f=>f.code).slice().sort().join(",")===holdings.map(h=>h.code).slice().sort().join(",");
+  let funds;
+  if(sameSet){
+    const tot=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
+    const hmap={}; holdings.forEach(h=>hmap[h.code]=(+h.value||0)/tot);
+    funds=pf.map(f=>({code:f.code,name:f.name,value:Math.max(1,(hmap[f.code]||0.05)*10000)}));
+  } else {
+    funds=pf.map(f=>({code:f.code,name:f.name,value:Math.max(1,+(f.weight||0.05)*10000)}));
+  }
   // 参数编辑区 + 计划基金（可增删）
   const pe=document.getElementById("planSimParams");
   if(pe){
@@ -1717,8 +1728,19 @@ async function analyzePlan(){
   if(!pf.length){ box.innerHTML='<div class="empty">投资计划里还没有基金：去上方加入或点「加入投资计划」。</div>'; return; }
   box.innerHTML='<div class="empty">正在拉取计划基金历史净值、计算风险指标…</div>';
   const codes=pf.map(f=>f.code);
-  const wmap={}; pf.forEach(f=>wmap[f.code]=+f.weight||0);
-  const weights=codes.map(c=>wmap[c]);
+  // 若投资计划的基金组合与当前实时持仓完全一致（同一批基金），则用持仓的实际金额占比作为权重，
+  // 保证「计划诊断」与「持仓分析」对同样的基金给出完全一致的数据，消除“同基金不同数”的困惑。
+  const sameSet = holdings.length && codes.length===holdings.length &&
+                  codes.slice().sort().join(",")===holdings.map(h=>h.code).slice().sort().join(",");
+  let weights;
+  if(sameSet){
+    const tot=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
+    const hmap={}; holdings.forEach(h=>hmap[h.code]=(+h.value||0)/tot);
+    weights=codes.map(c=>hmap[c]!=null?hmap[c]:0);
+  } else {
+    const wmap={}; pf.forEach(f=>wmap[f.code]=+f.weight||0);
+    weights=codes.map(c=>wmap[c]);
+  }
   // 与「投资计划概览」共用同一套组合统计（portfolioStats），保证"概览年化"与"诊断年化"完全一致，不再自相矛盾
   const st=await portfolioStats(codes, weights);
   if(!st){ box.innerHTML='<div class="empty">部分计划基金历史不足（需近 4 年净值），无法计算风险指标。</div>'; return; }
@@ -2353,19 +2375,17 @@ async function calcPlanCum(dates){
     const tot=pf.reduce((s,f)=>s+(+f.weight||1),0)||1;
     const w=pf.map(f=>(+f.weight||1)/tot);
     const maps=pf.map(f=>{const m={};(window.__histCache[f.code]||[]).forEach(d=>{if(d&&d.date!=null)m[d.date]=d.nav;});return m;});
-    const last=pf.map(()=>null), base=pf.map(()=>null), out=[];
-    for(const dt of dates){
-      let acc=0, ok=0;
-      for(let i=0;i<pf.length;i++){
-        const v=maps[i][dt]; if(v!=null) last[i]=v;
-        if(last[i]!=null){
-          if(base[i]===null) base[i]=last[i];
-          if(base[i]>0){ acc += w[i]*(last[i]/base[i]-1); ok++; }
-        }
-      }
-      out.push(ok? +(acc*100).toFixed(2) : null);
-    }
-    return out.some(v=>v!=null)?out:null;
+    // 与「我的组合」portCum 完全一致的算法：每只基金构造与 dates 对齐（前向填充）的净值序列→日收益→
+    // 按权重合成组合日收益→链式累积。旧版「各基金累计收益加权求和」在长周期会把 92% 放大成 9216%（又乘了一次 100）。
+    // 这里直接返回小数（与 portCum 同口径），由 renderTrend 统一 ×100 显示。
+    const navs=pf.map(()=>[]);
+    for(let i=0;i<pf.length;i++){ let last=null; for(const dt of dates){ const v=maps[i][dt]; if(v!=null) last=v; navs[i].push(last); } }
+    if(navs.some(n=>n.some(v=>v==null))) return null;  // 计划基金在窗口内数据不全，不画计划线
+    const rets=navs.map(nav=>{ const r=[]; for(let t=1;t<nav.length;t++){ const a=nav[t-1], b=nav[t]; r.push((a>0&&b>0)?(b/a-1):0); } return r; });
+    // rets 为相邻交易日收益（长度比 dates 少 1），故 out 首点记为 0（累计起点），其余按权重合成日收益链式累积，长度与 dates 严格对齐
+    const out=[0]; let cum=1;
+    for(let t=1;t<dates.length;t++){ let s=0; for(let i=0;i<pf.length;i++) s+=w[i]*rets[i][t-1]; cum*=(1+s); out.push(+(cum-1).toFixed(6)); }
+    return out.length?out:null;
   }catch(e){ return null; }
 }
 function renderTrend(dates, portCum, benchCum, benchName, planCum){
