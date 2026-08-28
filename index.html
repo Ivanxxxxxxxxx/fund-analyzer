@@ -2171,7 +2171,9 @@ function pickBestN(list, n){
     else if(a==="海外(QDII)") pools.ov.push(f);
     else pools.ot.push(f);
   });
-  const byS=a=>a.sort((x,y)=>(y.score||0)-(x.score||0));
+  // 「推荐」级优先于综合分：避免把"综合分高但1年盈利概率≈0%"的谨慎基金（如高估黄金）优先选进组合
+  const rk=f=>f.verdict==="推荐"?2:(f.verdict==="谨慎关注"?1:0);
+  const byS=a=>a.sort((x,y)=> (rk(y)-rk(x)) || ((y.score||0)-(x.score||0)));
   byS(pools.eq); byS(pools.ov); byS(pools.ot);
   let eqSeats=Math.min(pools.eq.length, Math.max(1, Math.round(n*0.55)));
   let ovSeats=(n>=2&&pools.ov.length)?1:0;
