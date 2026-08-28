@@ -2450,12 +2450,16 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
     const rng=a=>{ if(!a) return 0; const v=a.filter(x=>x!=null&&isFinite(x)); if(!v.length) return 0; return Math.max(...v)-Math.min(...v); };
     const nn=v=>(v==null)?"—":((v>=0?"+":"")+v.toFixed(1)+"%");
     const pc=lastOf(portCum), bc=lastOf(benchCum), plc=lastOf(planCum);
+    // 年份/交易日数必须取自完整 dates（而非抽样后的 sDates），否则区间对、计数错，出现"三年区间却写近0.7年/183个交易日"的口径错位
+    const _d0=new Date(dates[0]), _d1=new Date(dates[dates.length-1]);
+    const _yrs=((_d1-_d0)/(365.25*86400000)).toFixed(1);
+    const _tdays=dates.length;
     const rP=rng(portCum), rPlan=rng(planCum), rB=rng(benchCum);
     // 终值接近平（<0.5%）→ 组合本身几乎无波动
     const flat=(pc!=null&&Math.abs(pc)<0.5);
     // 我的组合波动远小于投资计划（且计划确有走势）→ 提示组合偏稳健，非数据错误
     const relFlat=(rPlan>5 && rP < rPlan*0.25);
-    _dg.innerHTML=`近 ${(sDates.length/252).toFixed(1)} 年（${sDates[0]||"—"} ~ ${sDates[sDates.length-1]||"—"}，共 ${sDates.length} 个交易日）· 我的组合（实际持仓）累计 <b style="color:#f2c14e">${nn(pc)}</b>`
+    _dg.innerHTML=`近 ${_yrs} 年（${dates[0]||"—"} ~ ${dates[dates.length-1]||"—"}，共 ${_tdays} 个交易日）· 我的组合（实际持仓）累计 <b style="color:#f2c14e">${nn(pc)}</b>`
       + (plc!=null?` · 投资计划 <b style="color:#a78bfa">${nn(plc)}</b>`:"")
       + ` · ${benchName} <b style="color:#4da3ff">${nn(bc)}</b>`
       + (flat?`<br><span style="color:var(--warn)">我的组合波动极小（多为货币/短债类资产），曲线接近水平属正常；若持仓含权益基金却仍平线，请点「刷新」重拉净值。</span>`:"")
