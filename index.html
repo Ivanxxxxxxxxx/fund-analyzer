@@ -2110,7 +2110,7 @@ async function loadRecommend(){
       <div style="font-size:13px;font-weight:700;margin-bottom:6px"><svg class="i"><use href="#i-trending-up"/></svg> 推荐组合盈利预期（蒙特卡洛模拟，按推荐权重）</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">
         ${span("1月",rp.p1m,rp.exp1m)}${span("3月",rp.p3m,rp.exp3m)}${span("6月",rp.p6m,rp.exp6m)}${span("1年",rp.p12m,rp.exp12m)}
-        ${rp.sigma!=null?`<span>组合年化波动 <b style="color:${rp.sigma>0.25?"var(--warn)":"var(--text)"}">${(rp.sigma*100).toFixed(0)}%</b></span>`:""}
+        ${rp.sigma!=null?`<span>组合年化波动 <b style="color:${rp.sigma>0.25?"var(--warn)":"var(--text)"}">${(rp.sigma*100).toFixed(1)}%</b></span>`:""}
         ${rp.maxMdd!=null?`<span>历史最大回撤约 <b style="color:var(--warn)">-${(rp.maxMdd*100).toFixed(0)}%</b></span>`:""}
       </div>
       ${rp.low?`<div style="color:var(--warn);font-size:11px;margin-top:6px;font-weight:600">⚠️ 当前组合整体 1年盈利概率偏低（&lt;45%）：主要受高估值/偏高价位成分拖累。按买点纪律建议：不追高、分批/定投摊薄，或等回调后再布局。</div>`:""}
