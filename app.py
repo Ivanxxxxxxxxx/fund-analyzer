@@ -701,8 +701,11 @@ def _bench_daily_returns(days=730):
 
 def _index_valuation_percentile(secid, years=5):
     """指数估值分位：以近 N 年收盘价的百分位近似（海外节点取不到官方 PE 序列时的稳健代理）。
-    返回 0-100，越高越贵；样本不足返回 None。"""
-    rows = _get_index_kline(secid, max(60, int(years * 252)))
+    返回 0-100，越高越贵；样本不足返回 None。
+    用新浪 K 线（money.finance.sina.com.cn）：东财 push2his 已封锁 SCF 出口 IP，
+    原 _get_index_kline 在 SCF 上不可达会导致指数基金估值退化为自身净值分位、选基不一致。"""
+    s = _get_index_series(secid, max(60, int(years * 252)))
+    rows = s.get("values") or []
     if len(rows) < 60:
         return None
     cur = rows[-1]
@@ -1663,7 +1666,7 @@ def recommend_backtest():
             u, fac = best
             a, b = _nav_at(u["code"], asof_s), _nav_now(u["code"])
             fwd = (b / a - 1) if (a and b and a > 0) else None
-            picks.append({"asset": asset, "code": u["code"], "name": u["name"],
+            picks.append({"asset": asset, "code": u["code"], "name": fac.get("name") or u["name"],
                           "score": round(fac["composite"], 1),
                           "verdict": "",   # 下方按当次分布自适应校准
                           "valPct": fac.get("valPct"), "buySignal": _buy_signal_of(fac),
@@ -1697,6 +1700,95 @@ def recommend_backtest():
         })
     return {"ok": True, "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
             "method": "对近6/12/24个月锚点，用修复后的多因子逻辑（风险调整收益主导、去追涨、估值/均值回归买点）按资产类别各选最优基金、按推荐配置比例加权持有至今天，与沪深300、等权全宇宙对比。仅验证历史样本，非未来收益承诺。",
+            "results": results}
+
+
+def _fund_nav_at(code, asof_s):
+    """基金在 asof（含）之前最近一个交易日的净值（真实历史净值，用于回测买入价）。"""
+    try:
+        hist = get_history(code, 1400)
+        ds = [d for d in (hist.get("data") or []) if str(d.get("date"))[:10] <= asof_s]
+        return ds[-1]["nav"] if ds else None
+    except Exception:
+        return None
+
+
+def _fund_nav_now(code):
+    """基金最新净值（回测卖出价）。"""
+    try:
+        hist = get_history(code, 60)
+        ds = hist.get("data") or []
+        return ds[-1]["nav"] if ds else None
+    except Exception:
+        return None
+
+
+def _fund_name(code):
+    try:
+        f = get_fund(code)
+        return f.get("name") or code
+    except Exception:
+        return code
+
+
+def recommend_backtest_codes(codes, weights=None):
+    """按用户指定的基金组合回测：多锚点(6/12/24月)买入持有至今，等权或按权重加权，对比沪深300。
+    用于「推荐效果回测」跟随用户选出的 N 只组合。结果缓存 12h（按 codes 分key）。"""
+    _BUDGET = 70.0
+    _t0 = time.time()
+
+    def _left():
+        return _BUDGET - (time.time() - _t0)
+
+    codes = [c.strip() for c in codes if c.strip() and c.strip().isdigit() and len(c.strip()) == 6]
+    codes = list(dict.fromkeys(codes))
+    if not codes:
+        return {"ok": False, "error": "no valid codes", "results": []}
+    if weights:
+        try:
+            weights = [float(w) for w in weights]
+        except Exception:
+            weights = None
+    if not weights or len(weights) != len(codes):
+        weights = [1.0] * len(codes)
+    ws = sum(weights) or 1.0
+    weights = [w / ws for w in weights]
+    hs_series = cached("bk", "hs300_sina", _daily_ttl(), lambda: _get_index_series("1.000300", 1200))
+    results = []
+    for label, months in [("近6个月", 6), ("近12个月", 12), ("近24个月", 24)]:
+        if _left() <= 5:
+            results.append({"label": label, "asof": None, "error": "时间预算不足，已停止",
+                            "picks": [], "portRet": None, "benchRet": None, "univRet": None})
+            continue
+        asof = (datetime.date.today() - datetime.timedelta(days=int(round(months * 30.5))))
+        asof_s = asof.strftime("%Y-%m-%d")
+        bench_ret = None
+        dates, values = hs_series.get("dates") or [], hs_series.get("values") or []
+        if values:
+            idx = len(dates) - 1
+            for i, d in enumerate(dates):
+                if d >= asof_s:
+                    idx = i
+                    break
+            if values[idx] and values[idx] > 0:
+                bench_ret = values[-1] / values[idx] - 1
+        picks = []
+        port, tw = 0.0, 0.0
+        for code, w in zip(codes, weights):
+            na, nb = _fund_nav_at(code, asof_s), _fund_nav_now(code)
+            rt = (nb / na - 1) if (na and nb and na > 0) else None
+            if rt is not None:
+                port += w * rt
+                tw += w
+            picks.append({"code": code, "name": _fund_name(code), "weight": round(w, 3),
+                          "fwdRet": round(rt * 100, 1) if rt is not None else None,
+                          "note": None if (na and nb) else ("该基金当时可能尚未成立或无净值数据" if na is None else "净值数据不可得")})
+        results.append({"label": label, "asof": asof_s, "error": None, "picks": picks,
+                        "portRet": round((port / tw) * 100, 1) if tw > 0 else None,
+                        "benchRet": round(bench_ret * 100, 1) if bench_ret is not None else None,
+                        "univRet": None})
+    return {"ok": True, "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "method": "对指定基金组合在近6/12/24个月锚点买入持有至今（等权或按权重加权），对比沪深300。净值全部为真实历史净值，可在天天基金官网核对。",
             "results": results}
 
 
@@ -1961,13 +2053,17 @@ def _compute_factors(code, bench_rets=None, asof=None):
     sc_mom = clamp(50 + mom_val * 100 * 1.5)
     sc_long = clamp(50 + (r3y if r3y is not None else (r500 if r500 is not None else 0.0)) * 100 * 1.2)  # 长期稳健
     sc_val = clamp(100 - (vp if vp is not None else 50))
-    sc_sharpe = clamp(sharpe / 2.0 * 100)
-    sc_sortino = clamp(sortino / 2.0 * 100)
-    sc_calmar = clamp(calmar / 3.0 * 100)
-    sc_alpha = clamp(50 + alpha * 100 * 2)
-    sc_dd = clamp(50 + mdd * 100)          # 当前回撤越浅越好
-    sc_mdd = clamp(50 + maxMdd * 100)      # 历史最大回撤越浅越好
-    sc_ir = clamp(50 + ir * 50)
+    # 风险调整收益标尺校准（2026-08-28 诊断：原“夏普2.0/卡玛3.0才满分”的绝对标尺过严，
+    # 真实市场好基金夏普仅1.0~1.5，导致全市场分数系统性偏低、弱市下推荐观感差）。
+    # 校准后：夏普 0→40、1.0→75、1.5→92.5、2.0→100；索提诺同；卡玛 1.0→65、1.5→77.5；
+    # Alpha 0.1→65、0.2→80；回撤项给 55 中性底（浅回撤才加分、深回撤扣分但不归零）。
+    sc_sharpe = clamp(40 + sharpe * 35)
+    sc_sortino = clamp(40 + sortino * 35)
+    sc_calmar = clamp(40 + calmar * 25)
+    sc_alpha = clamp(50 + alpha * 150)
+    sc_dd = clamp(55 + mdd * 100)          # 当前回撤越浅越好
+    sc_mdd = clamp(55 + maxMdd * 100)      # 历史最大回撤越浅越好
+    sc_ir = clamp(55 + ir * 40)
     sc_avr = clamp(avr)
     # 费率（申购费率%）：越低越好（长期成本关键）
     fee = f.get("feeRate")
@@ -2626,8 +2722,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/recommend-backtest":
             # 回测较重，结果缓存 12h（数据日频，足够且避免每次点击都大扫描拖垮服务）
+            # 支持 ?codes=110011,163415 回测用户指定的组合；不传则回测推荐组合
             try:
-                data = cached("reco", "backtest", 43200, recommend_backtest)
+                codes = qs.get("codes", [""])[0]
+                codes = [c for c in codes.replace("，", ",").split(",") if c.strip()]
+                if codes:
+                    data = cached("reco", "btcodes:" + ",".join(sorted(set(codes))), 43200,
+                                  lambda: recommend_backtest_codes(codes, None))
+                else:
+                    data = cached("reco", "backtest", 43200, recommend_backtest)
             except Exception as e:
                 data = {"ok": False, "error": str(e), "results": []}
             self._send(200, json.dumps(data, ensure_ascii=False))
