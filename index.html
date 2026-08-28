@@ -1983,7 +1983,13 @@ async function analyze(){
     renderSugg({w,holdings,corrAvg,maxDD,sharpe,risk,divScore,corr,score});
     loadOptimize();
     renderSignals(computeSignals());
-    renderTrend(trendDates, portCum, benchCum, benchName, await calcPlanCum(trendDates));
+    // 若投资计划基金组合与实时持仓完全一致（同一批基金），计划线直接复用持仓线本身——
+    // 彻底杜绝"同基金却算出不同累计收益"的算法口径差异（之前 calcPlanCum 与 portCum 日收益计算方式不同导致偏离 ~3 个百分点）。
+    const _pf=getPlanFunds();
+    const _sameSet = _pf.length && _pf.length===holdings.length &&
+                     _pf.map(f=>f.code).slice().sort().join(",")===holdings.map(h=>h.code).slice().sort().join(",");
+    const _planCum = _sameSet ? portCum : await calcPlanCum(dates);
+    renderTrend(trendDates, portCum, benchCum, benchName, _planCum);
     setDataStamp();
     window.__score=score; window.__risk=risk;
     updateSummaries();
@@ -2387,16 +2393,18 @@ async function calcPlanCum(dates){
       w=pf.map(f=>(+f.weight||1)/tot);
     }
     const maps=pf.map(f=>{const m={};(window.__histCache[f.code]||[]).forEach(d=>{if(d&&d.date!=null)m[d.date]=d.nav;});return m;});
-    // 与「我的组合」portCum 完全一致的算法：每只基金构造与 dates 对齐（前向填充）的净值序列→日收益→
-    // 按权重合成组合日收益→链式累积。旧版「各基金累计收益加权求和」在长周期会把 92% 放大成 9216%（又乘了一次 100）。
-    // 这里直接返回小数（与 portCum 同口径），由 renderTrend 统一 ×100 显示。
+    // 与「我的组合」portCum 完全逐行一致的算法：在传入的完整 dates 上前向填充→dailyReturns→
+    // 尾部对齐(L)合成组合日收益 pr→链式累积。此前"裸算日收益+头对齐索引+独立日期基准"三重偏差导致同基金仍偏离 ~3 个百分点。
     const navs=pf.map(()=>[]);
     for(let i=0;i<pf.length;i++){ let last=null; for(const dt of dates){ const v=maps[i][dt]; if(v!=null) last=v; navs[i].push(last); } }
     if(navs.some(n=>n.some(v=>v==null))) return null;  // 计划基金在窗口内数据不全，不画计划线
-    const rets=navs.map(nav=>{ const r=[]; for(let t=1;t<nav.length;t++){ const a=nav[t-1], b=nav[t]; r.push((a>0&&b>0)?(b/a-1):0); } return r; });
-    // rets 为相邻交易日收益（长度比 dates 少 1），故 out 首点记为 0（累计起点），其余按权重合成日收益链式累积，长度与 dates 严格对齐
-    const out=[0]; let cum=1;
-    for(let t=1;t<dates.length;t++){ let s=0; for(let i=0;i<pf.length;i++) s+=w[i]*rets[i][t-1]; cum*=(1+s); out.push(+(cum-1).toFixed(6)); }
+    const rets=navs.map(nav=>dailyReturns(nav));
+    const L=Math.min(...rets.map(r=>r.length));
+    if(L<2) return null;
+    const pr=[];
+    for(let t=0;t<L;t++){ let s=0; for(let i=0;i<pf.length;i++) s+=w[i]*rets[i][rets[i].length-L+t]; pr.push(s); }
+    const out=[]; let cum=1;
+    for(const r of pr){ cum*=(1+r); out.push(cum-1); }
     return out.length?out:null;
   }catch(e){ return null; }
 }
