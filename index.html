@@ -1446,8 +1446,8 @@ async function renderOverviewTo(box, canvasId, opt){
     ${metricsRow}
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px">
       ${stat(pLabel, yuan(P), opt.pSub||"")}
-      ${stat(freqLabel+"定投", rawAmt>0?yuan(rawAmt):"—", rawAmt>0?("每期 "+yuan(rawAmt)+" · 共 "+dcaPeriods(months)+" 期 · 折合每月 "+yuan(A)):"未设置定投")}
-      ${stat("总成本", yuan(totalCost), P+" + "+A+"×"+months)}
+      ${stat(freqLabel+"定投", rawAmt>0?yuan(rawAmt):"—", rawAmt>0?("每期 "+yuan(rawAmt)+" · 共 "+dcaPeriods(months)+" 期 · 累计投入 "+yuan(rawAmt*dcaPeriods(months))):"未设置定投")}
+      ${stat("总成本", yuan(totalCost), "本金 "+yuan(P)+" + 定投累计 "+yuan(Math.round(A*months)))}
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px">
       ${stat("理想总金额", yuan(idealEnd), "无波动复利", "#f2c14e", "#f2c14e")}
