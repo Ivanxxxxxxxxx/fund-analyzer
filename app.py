@@ -1240,9 +1240,20 @@ def recommend_portfolio():
         except Exception:
             rows = list(_FALLBACK_SPECIAL.get(key, []))
         if need_age:
-            rows = [r for r in rows if _est_years(r[3]) >= 2.0]
-        rows.sort(key=lambda r: r[2], reverse=True)
-        head = rows[:topn * 2]  # 候选池放大，最终由综合分定 top3，缓解纯按近1年涨幅追涨
+            rows = [r for r in rows if _est_years(r[3]) >= 3.0]   # 只评成立≥3年（经历牛熊、数据可靠）
+        # 去追涨：不再按“近1年涨幅”排序截断候选（那会只挑近期冠军、系统性追高）。
+        # 改为在收益分布上“等距分层抽样”，低/中/高收益基金都进候选池，最终由多因子综合分择优。
+        rows.sort(key=lambda r: r[2])   # 升序，便于按收益分层
+        n_rows = len(rows)
+        POOL = topn * 6                  # 每类候选池放大到 topn*6（约 18~90），预算内评分、综合分定 top3
+        head = []
+        if n_rows:
+            step = max(1.0, n_rows / float(POOL))
+            seen = set()
+            for i in range(POOL):
+                r = rows[min(n_rows - 1, int(i * step))]
+                if r[0] not in seen:
+                    seen.add(r[0]); head.append(r)
         for code, name, y1, ed in head:
             candidates.append((cat_label, asset, code, name))
         if not head:
@@ -1363,14 +1374,23 @@ def recommend_portfolio():
             return "黄金配置 %s：对冲汇率与通胀、与股债低相关，提升组合韧性。" % wpct
         return "%s 配置 %s。" % (asset, wpct)
 
+    # 阈值自适应校准（P2-H）：综合分阈值随当次评分分布浮动，
+    # 避免熊市全盘“暂不推荐”（工具失去指导意义）、牛市水分虚高（无脑全推）。
+    # 推荐 = 显著高于当次评分中位；谨慎 = 略高于中位。
+    _all_comp = [fac["composite"] for _, _, fac in scored]
+    _comp_med = _median(_all_comp) or 50.0
+    TH_RECO = max(56.0, _comp_med + 8.0)
+    TH_WATCH = max(42.0, _comp_med + 1.0)
+
     by_cat = {}
     for cat_label, asset, fac in scored:
         by_cat.setdefault(cat_label, []).append((asset, fac))
     funds = []
     cat_reasons = {}
     def _prob12(fac):
-        """单只基金 1 年盈利概率（对数收益正态近似 Φ(√252·μ/σ)）。"""
-        mu = fac.get("mu"); sigma = fac.get("sigma")
+        """单只基金 1 年盈利概率：以均值回归框架下的预期年化收益 μE（非历史漂移 μ）为均值，
+        避免“过去涨得多→盈利概率高”的外推偏差（均值回归：估值低→预期收益高）。"""
+        mu = fac.get("muE"); sigma = fac.get("sigma")
         if mu is None or not sigma or sigma <= 0:
             return None
         return 0.5 * (1 + _erf(_sqrt(252.0) * mu / sigma / _sqrt(2.0)))
@@ -1404,7 +1424,7 @@ def recommend_portfolio():
             cat_reasons[cat_label] += "（已剔除 %d 只近 3 年收益为负/盈利概率低的候选）" % len(skipped)
         for idx, (asset, fac) in enumerate(top):
             per = w * (fac["composite"] / s)  # 权重按综合分归一化，评分高的拿更多，而非机械均分
-            verdict = "推荐" if fac["composite"] >= 68 else ("谨慎关注" if fac["composite"] >= 50 else "暂不推荐")
+            verdict = "推荐" if fac["composite"] >= TH_RECO else ("谨慎关注" if fac["composite"] >= TH_WATCH else "暂不推荐")
             rank = idx + 1
             reasons = []
             # 1) 为什么是这一只：同类排名 + 风险调整后表现
@@ -1442,18 +1462,57 @@ def recommend_portfolio():
             if fac.get("age") is not None: qual.append("成立 %s 年" % fac["age"])
             if fac.get("tenure") is not None: qual.append("经理任职 %s 年" % fac["tenure"])
             if qual: reasons.append("质地：%s。" % "、".join(qual))
+            # 买点纪律（P0-D）：结合估值分位/价位分位与回撤，给出明确买入建议，而非只罗列指标
+            vp_now = fac.get("valPct")
+            if vp_now is not None:
+                if vp_now < 30:
+                    buySignal = "低估布局"; buy_txt = "估值分位 %s%% 偏低，处于较好布局窗口，建议分批建仓、不空仓。" % vp_now
+                elif vp_now > 70:
+                    buySignal = "偏高谨慎"; buy_txt = "估值分位 %s%% 偏高，不建议一次性追高，建议定投摊薄或等回调。" % vp_now
+                else:
+                    buySignal = "中性持有"; buy_txt = "估值分位 %s%% 中性，可正常定投、逢调仓再平衡。" % vp_now
+            else:
+                if fac["mdd"] < -0.20:
+                    buySignal = "回撤布局"; buy_txt = "近期回撤 %s，处相对低位，可逢低分批布局。" % _s(fac["mdd"])
+                elif fac["z"] > 1.2:
+                    buySignal = "偏高谨慎"; buy_txt = "价位处近1年偏高位（Z=%.1f），建议定投进入、不追高。" % fac["z"]
+                else:
+                    buySignal = "中性持有"; buy_txt = "价位中性，可正常定投。"
+            reasons.append("【买点】" + buy_txt)
             funds.append({"category": cat_label, "asset": asset, "code": fac["code"], "name": fac["name"],
                           "type": fac["type"], "score": fac["composite"], "verdict": verdict,
                           "weight": round(per, 4), "valPct": fac["valPct"], "reasons": reasons,
                           "peerRank": rank, "peerN": peer_n, "prob12": _prob12(fac),
-                          "mu": fac.get("mu"), "sigma": fac.get("sigma")})
+                          "benchSecid": fac.get("benchSecid"), "buySignal": buySignal,
+                          "mu": fac.get("mu"), "muE": fac.get("muE"), "sigma": fac.get("sigma")})
     funds.sort(key=lambda x: (x["asset"], -x["score"]))
+
+    # === 跨类相关性去重（P1-F）：避免推荐两只同涨同跌的基金（如两只纳斯达克/QDII、两只沪深300）===
+    # 仅对“能匹配基准指数 secid”的权益类基金去重（同风格只留综合分最高的一只）；
+    # 无基准匹配的主动基金不做此去重（否则会误伤大量不同风格的主动基金）。
+    _EQ_A = {"股票型", "混合型", "指数型", "海外(QDII)"}
+    _style_best = {}
+    _style_drop = {}
+    _no_style = []
+    for fd in funds:
+        sk = fd.get("benchSecid")
+        if sk and fd["asset"] in _EQ_A:
+            cur = _style_best.get(sk)
+            if cur is None or fd["score"] > cur["score"]:
+                _style_best[sk] = fd
+        else:
+            _no_style.append(fd)
+    funds = list(_style_best.values()) + _no_style
+    funds.sort(key=lambda x: (x["asset"], -x["score"]))
+    if _style_drop:
+        _dn = "、".join("%s" % v for v in _style_drop.values())
+        note = (note + "（已对同风格高相关基金去重，剔除 %s，避免组合内同涨同跌）" % _dn)
 
     # === 推荐组合级盈利预期（蒙特卡洛对数近似，按推荐权重加权，独立假设） ===
     recoProb = None
     if funds:
         wsum = sum(x["weight"] for x in funds) or 1.0
-        mu_p = sum(x["weight"] * (x.get("mu") or 0.0) for x in funds) / wsum
+        mu_p = sum(x["weight"] * (x.get("muE") or x.get("mu") or 0.0) for x in funds) / wsum
         var_p = sum((x["weight"] / wsum) ** 2 * ((x.get("sigma") or 0.0) ** 2) for x in funds)
         sigma_p = _sqrt(var_p) if var_p > 0 else 0.0
         _e = __import__("math").exp
@@ -1477,6 +1536,168 @@ def recommend_portfolio():
             "recoProb": recoProb,
             "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
 
+
+
+def _buy_signal_of(fac):
+    """买点信号（与 recommend_portfolio 内逻辑一致）：估值低→低估布局；高→偏高谨慎；
+    无估值(主动)→看回撤/价位分位。供回测展示。"""
+    vp = fac.get("valPct")
+    if vp is not None:
+        if vp < 30:
+            return "低估布局"
+        if vp > 70:
+            return "偏高谨慎"
+        return "中性持有"
+    if (fac.get("mdd") or 0) < -0.20:
+        return "回撤布局"
+    if (fac.get("z") or 0) > 1.2:
+        return "偏高谨慎"
+    return "中性持有"
+
+
+def _reco_universe():
+    """回测稳定候选宇宙：用内置头部基金清单（长期成立、数据可靠），不依赖实时榜单，
+    保证回测可复现、可跨节点运行；覆盖股/混/指/债/QDII/黄金/货币各大类。"""
+    out = []
+    for cat, lst in _FALLBACK_SPECIAL.items():
+        for code, name, y1, ed in lst:
+            out.append({"code": code, "name": name, "estab": ed})
+    return out
+
+
+def recommend_backtest():
+    """推荐效果回测（验证推荐逻辑是否“有用”）——忠实复现产品逻辑：
+    对多个历史锚点(近6/12/24个月)，用【修复后的同一套多因子逻辑】在锚点时点，
+    按资产类别各选综合分最优的基金，再按推荐配置比例加权构建组合并持有至今天，
+    计算组合收益，与沪深300、等权全宇宙收益对比。结果缓存 12h（计算较重），首次可能稍慢。"""
+    _BUDGET = 95.0
+    _t0 = time.time()
+
+    def _left():
+        return _BUDGET - (time.time() - _t0)
+
+    # 资产默认配置（与 recommend_portfolio 均衡默认一致）：权益占大头，黄金/货币仅小仓
+    ALLOC = {"股票型": 0.30, "混合型": 0.12, "指数型": 0.13, "海外(QDII)": 0.15,
+             "债券型": 0.20, "黄金": 0.05, "货币型": 0.05}
+    _CAT_ASSET = {"gp": "股票型", "hh": "混合型", "zs": "指数型", "zq": "债券型",
+                  "qdii": "海外(QDII)", "gold": "黄金", "money": "货币型"}
+    cat_universe = {}
+    for cat, lst in _FALLBACK_SPECIAL.items():
+        asset = _CAT_ASSET.get(cat)
+        cat_universe.setdefault(asset, []).extend(
+            [{"code": c, "name": n, "estab": e} for c, n, y1, e in lst])
+
+    hs_series = cached("bk", "hs300_sina", _daily_ttl(), lambda: _get_index_series("1.000300", 1200))
+    anchors = [("近6个月", 6), ("近12个月", 12), ("近24个月", 24)]
+    results = []
+    import concurrent.futures as _cf
+
+    def _nav_at(code, asof_s):
+        try:
+            hist = get_history(code, 1400)
+            ds = [d for d in (hist.get("data") or []) if str(d.get("date"))[:10] <= asof_s]
+            return ds[-1]["nav"] if ds else None
+        except Exception:
+            return None
+
+    def _nav_now(code):
+        try:
+            hist = get_history(code, 60)
+            ds = hist.get("data") or []
+            return ds[-1]["nav"] if ds else None
+        except Exception:
+            return None
+
+    for label, months in anchors:
+        if _left() <= 5:
+            results.append({"label": label, "asof": None, "error": "时间预算不足，已停止",
+                            "picks": [], "portRet": None, "benchRet": None, "univRet": None})
+            continue
+        asof = (datetime.date.today() - datetime.timedelta(days=int(round(months * 30.5))))
+        asof_s = asof.strftime("%Y-%m-%d")
+        # 基准沪深300 在该锚点的 forward 收益
+        bench_ret = None
+        dates, values = hs_series.get("dates") or [], hs_series.get("values") or []
+        if values:
+            idx = len(dates) - 1
+            for i, d in enumerate(dates):
+                if d >= asof_s:
+                    idx = i
+                    break
+            if values[idx] and values[idx] > 0:
+                bench_ret = values[-1] / values[idx] - 1
+        # 锚点时的基准日收益（用于 Beta/Alpha 对齐，截断到 asof）
+        bench_full = cached("bench", "hs300d_bt", _daily_ttl(), lambda: _bench_daily_returns(1400))
+        bench_asof = None
+        if bench_full.get("dates"):
+            bi = len(bench_full["dates"])
+            for i, d in enumerate(bench_full["dates"]):
+                if d >= asof_s:
+                    bi = i
+                    break
+            bench_asof = {"dates": bench_full["dates"][:bi], "rets": bench_full["rets"][:max(0, bi - 1)]}
+        # 每个资产类别：在 asof 时点用修复后逻辑选综合分最优的 1 只
+        picks = []
+        for asset, alw in ALLOC.items():
+            cands = cat_universe.get(asset, [])
+            if not cands:
+                continue
+            best = None
+            try:
+                with _cf.ThreadPoolExecutor(max_workers=4) as ex:
+                    futs = {ex.submit(_compute_factors, u["code"], bench_asof, asof_s): u for u in cands}
+                    for fut in _cf.as_completed(futs):
+                        if _left() <= 0:
+                            break
+                        u = futs[fut]
+                        try:
+                            fac = fut.result()
+                        except Exception:
+                            fac = None
+                        if fac and (best is None or fac["composite"] > best[1]["composite"]):
+                            best = (u, fac)
+            except Exception:
+                pass
+            if not best:
+                continue
+            u, fac = best
+            a, b = _nav_at(u["code"], asof_s), _nav_now(u["code"])
+            fwd = (b / a - 1) if (a and b and a > 0) else None
+            picks.append({"asset": asset, "code": u["code"], "name": u["name"],
+                          "score": round(fac["composite"], 1),
+                          "verdict": "",   # 下方按当次分布自适应校准
+                          "valPct": fac.get("valPct"), "buySignal": _buy_signal_of(fac),
+                          "weight": alw, "fwdRet": (round(fwd * 100, 1) if fwd is not None else None)})
+        # 阈值自适应（与主推荐一致）：基于各品类最优分的分布
+        _pm = _median([p["score"] for p in picks]) or 50.0
+        _tr = max(56.0, _pm + 8.0); _tw = max(42.0, _pm + 1.0)
+        for p in picks:
+            p["verdict"] = "推荐" if p["score"] >= _tr else ("谨慎" if p["score"] >= _tw else "观望")
+        # 组合收益：按推荐配置比例加权（仅含成功取到净值的类别）；fwdRet 为百分数，先转回小数
+        tot_w, acc = 0.0, 0.0
+        for p in picks:
+            if p["fwdRet"] is not None:
+                acc += p["weight"] * (p["fwdRet"] / 100.0)
+                tot_w += p["weight"]
+        port_ret = (acc / tot_w) if tot_w > 0 else None
+        # 等权全宇宙 forward 收益（对照基准）
+        ur = []
+        for cat, lst in _FALLBACK_SPECIAL.items():
+            for code, name, y1, ed in lst:
+                a, b = _nav_at(code, asof_s), _nav_now(code)
+                if a and b and a > 0:
+                    ur.append(b / a - 1)
+        univ_ret = (sum(ur) / len(ur)) if ur else None
+        results.append({
+            "label": label, "asof": asof_s, "error": None,
+            "picks": picks,
+            "portRet": round(port_ret * 100, 1) if port_ret is not None else None,
+            "benchRet": round(bench_ret * 100, 1) if bench_ret is not None else None,
+            "univRet": round(univ_ret * 100, 1) if univ_ret is not None else None,
+        })
+    return {"ok": True, "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "method": "对近6/12/24个月锚点，用修复后的多因子逻辑（风险调整收益主导、去追涨、估值/均值回归买点）按资产类别各选最优基金、按推荐配置比例加权持有至今天，与沪深300、等权全宇宙对比。仅验证历史样本，非未来收益承诺。",
+            "results": results}
 
 
 def _fund_bench_secid(name, ftype):
@@ -1552,9 +1773,9 @@ def _get_basic_meta(code):
     return cached("meta", code, _daily_ttl(), lambda: _fetch_basic_meta(code))
 
 
-def _compute_factors(code, bench_rets=None):
+def _compute_factors(code, bench_rets=None, asof=None):
     """多因子计算：收益/风险/风险调整收益/Alpha-Beta/卡玛/信息比率/估值分位/东财五维/经理任职。
-    各因子归一化为 0-100 贡献后加权得到 composite。"""
+    各因子归一化为 0-100 贡献后加权得到 composite。asof(YYYY-MM-DD) 用于回测：净值历史截断到该时点。"""
     f = get_fund(code)
     if not f.get("ok") or not f.get("name"):
         return None
@@ -1574,8 +1795,10 @@ def _compute_factors(code, bench_rets=None):
                 "m": 0.00025, "s": 0.0006, "mu": 0.00025, "sigma": 0.0006,
                 "sc": {"fee": 90.0, "scale": 60.0, "inst": 50.0, "age": 80.0,
                        "tenure": 60.0, "sortino": 60.0, "mdd": 95.0, "long": 60.0}}
-    hist = get_history(code, 730)
+    hist = get_history(code, 1200 if asof else 730)
     data = hist.get("data") or []
+    if asof:
+        data = [d for d in data if str(d.get("date"))[:10] <= asof]   # 回测：只看到 asof 及之前的数据
     if len(data) < 60:
         return None
     closes = [d["nav"] for d in data]
@@ -1674,7 +1897,11 @@ def _compute_factors(code, bench_rets=None):
     avr = pe.get("avr") or 0.0
     dims = pe.get("dims") or {}
 
-    # 估值分位（固收/货币类不适用估值分位，置空避免误导）
+    # 估值分位 / 买点分位（科学口径，避免“系统性假性偏贵”）：
+    #  · 指数基金、名称能匹配基准指数的主动基金 → 用基准指数价格分位（真实估值，越高越贵）
+    #  · 真正无统一估值口径的主动基金 → 不再用“自身净值分位”伪装估值（净值长期上行会恒显贵、
+    #    系统性低估主动基金）；估值置空，改由风险调整收益/经理超额/回撤买点判断
+    #  · 海外基准指数（纳指/标普）日线在本节点不可达 → 估值诚实置空，QDII 不按估值择时
     ftype = f.get("type", "") or ""
     secid = _fund_bench_secid(f.get("name", ""), ftype)
     if "债券" in ftype or "货币" in ftype:
@@ -1687,12 +1914,28 @@ def _compute_factors(code, bench_rets=None):
                         lambda s=secid: _index_valuation_percentile(s, 5))
         except Exception:
             vp = None
-        if vp is None:  # 海外节点基准指数日线不可达 → 退化为自身净值分位代理
-            vp = round(sum(1 for x in closes if x <= closes[-1]) / len(closes) * 100, 1)
-            val_basis = "自身净值分位代理（基准指数海外不可达）"
+        if vp is None:
+            if secid in ("100.IXIC", "100.SPX"):
+                # 海外基准指数日线不可达：估值不可得，诚实置空，不伪装
+                vp = None
+                val_basis = "海外基准指数日线不可达·估值暂不可得（QDII 以风险调整+分散价值评估）"
+            else:
+                # 国内基准指数日线不可达：退化为价位分位代理并明确标注
+                vp = round(sum(1 for x in closes if x <= closes[-1]) / len(closes) * 100, 1)
+                val_basis = "价位分位代理（基准指数日线不可达·相对自身近3年）"
     else:
-        vp = round(sum(1 for x in closes if x <= closes[-1]) / len(closes) * 100, 1)
-        val_basis = "自身净值近3年分位（主动股基估值代理）"
+        # 真正无统一估值口径的主动基金：不伪装估值，避免系统性假性偏贵
+        vp = None
+        val_basis = "主动基金无统一估值口径·以风险调整收益+经理超额为买入依据"
+
+    # 预期年化对数收益（均值回归框架，替代“历史涨→未来涨”的外推偏差）：
+    #  · 有真实估值分位 → 估值越低（分位低）预期未来收益越高（价值回归）
+    #  · 无估值(主动) → 历史漂移保守折半，不对过去冠军盲目外推
+    if vp is not None:
+        muE = 0.14 * (0.5 - vp / 100.0)      # 估值20%→+0.042 / 50%→0 / 80%→-0.042
+    else:
+        muE = 0.5 * mu
+    muE = max(-0.30, min(0.30, muE))
 
     # 基金经理任职年限（sdate 或 workTime 两种格式兼容）
     managers = f.get("managers") or []
@@ -1750,9 +1993,12 @@ def _compute_factors(code, bench_rets=None):
     # 经理任职年限：≥5 年满分（经历牛熊周期的经验价值）
     sc_tenure = clamp((tenure if tenure is not None else 2.0) / 5.0 * 100)
 
-    w = {"avr": 0.12, "mom": 0.12, "long": 0.05, "val": 0.09, "sharpe": 0.06,
-         "sortino": 0.08, "calmar": 0.06, "alpha": 0.07, "dd": 0.04, "mdd": 0.04,
-         "ir": 0.04, "fee": 0.07, "scale": 0.05, "age": 0.04, "inst": 0.03, "tenure": 0.04}
+    # 权重（风险调整收益与长期稳健为主导，动量显著下调，避免“追涨”）：
+    # 夏普/索提诺/卡玛/Alpha 合计 0.40，长期 0.06，动量仅 0.06；
+    # 估值 0.09 仅对指数/基准匹配基金有效；质地(费率/规模/年限/经理/机构)合计 0.20。
+    w = {"avr": 0.10, "mom": 0.06, "long": 0.06, "val": 0.09, "sharpe": 0.10,
+         "sortino": 0.11, "calmar": 0.09, "alpha": 0.10, "dd": 0.04, "mdd": 0.05,
+         "ir": 0.05, "fee": 0.04, "scale": 0.04, "age": 0.03, "inst": 0.02, "tenure": 0.02}
     composite = (sc_avr * w["avr"] + sc_mom * w["mom"] + sc_long * w["long"]
                  + sc_val * w["val"] + sc_sharpe * w["sharpe"] + sc_sortino * w["sortino"]
                  + sc_calmar * w["calmar"] + sc_alpha * w["alpha"] + sc_dd * w["dd"]
@@ -1768,9 +2014,10 @@ def _compute_factors(code, bench_rets=None):
             "m": m, "s": s, "mu": mu, "sigma": sigma,
             "beta": beta, "alpha": alpha, "ir": ir, "calmar": calmar,
             "avr": avr, "dims": dims,
-            "valPct": vp, "valBasis": val_basis,
+            "valPct": vp, "valBasis": val_basis, "benchSecid": secid,
             "managers": managers, "tenure": tenure,
             "fee": fee, "scale": scale, "instPct": inst, "age": age_years, "r3y": r3y, "r2y": r2y,
+            "muE": round(muE, 4),
             "sc": {"mom": sc_mom, "long": sc_long, "val": sc_val, "sharpe": sc_sharpe,
                    "sortino": sc_sortino, "calmar": sc_calmar, "alpha": sc_alpha, "dd": sc_dd,
                    "mdd": sc_mdd, "ir": sc_ir, "avr": sc_avr, "fee": sc_fee, "scale": sc_scale,
@@ -2375,6 +2622,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data = cached("reco", "dyn", 1800, recommend_portfolio)
             except Exception as e:
                 data = {"ok": False, "error": str(e), "funds": [], "note": "推荐计算异常，请稍后重试。"}
+            self._send(200, json.dumps(data, ensure_ascii=False))
+            return
+        if path == "/api/recommend-backtest":
+            # 回测较重，结果缓存 12h（数据日频，足够且避免每次点击都大扫描拖垮服务）
+            try:
+                data = cached("reco", "backtest", 43200, recommend_backtest)
+            except Exception as e:
+                data = {"ok": False, "error": str(e), "results": []}
             self._send(200, json.dumps(data, ensure_ascii=False))
             return
         if path.startswith("/api/advise/"):
