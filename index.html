@@ -177,6 +177,14 @@ table.plan th{color:var(--muted);font-weight:600}
 .g-action .gbar{background:#22c58b}
 .g-data .gbar{background:#8b7cf6}
 .g-ref .gbar{background:#9896a6}
+/* 回测弹窗卡片式布局 */
+.bt-block{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0;background:rgba(255,255,255,.02)}
+.bt-h{font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px}
+.bt-stats{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px}
+.bt-stat{display:flex;flex-direction:column;gap:2px}
+.bt-fs{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px 12px}
+.bt-f{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:5px 9px;border-radius:8px;background:rgba(255,255,255,.04);min-width:0}
+.bt-fn{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* ---------- 推荐卡 ---------- */
 .reco-cat{margin:10px 0 4px}
 .reco-cat-h{font-size:13px;font-weight:700;color:var(--text);margin:16px 0 4px;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
@@ -1997,27 +2005,30 @@ async function loadBacktest(){
   try{
     const d=await api("/api/recommend-backtest"+q, 180000).catch(e=>({ok:false,error:String(e)}));
     if(!d.ok){ body.innerHTML='<div class="empty">回测失败：'+(d.error||"未知错误")+'</div>'; return; }
-    const rows=(d.results||[]).map(r=>{
+    const blocks=(d.results||[]).map(r=>{
       const pr=r.portRet, br=r.benchRet, ur=r.univRet;
       const excess=(pr!=null&&br!=null)?(pr-br):null;
       const cls=v=>v==null?"var(--muted)":(v>=0?"var(--up)":"var(--down)");
       const eCls=excess==null?"var(--muted)":(excess>=0?"var(--up)":"var(--down)");
-      const pickTxt=(r.picks||[]).map(p=>
-        p.code
-          ? `<span style="white-space:nowrap">${p.name?p.name:p.code} ${p.fwdRet!=null?`<b style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"}">${p.fwdRet>=0?"+":""}${p.fwdRet}%</b>`:"<span class='muted'>(无数据)</span>"}</span>`
-          : `<span style="white-space:nowrap">${p.asset} <b>${p.name}</b> ${p.fwdRet!=null?`<b style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"}">${p.fwdRet>=0?"+":""}${p.fwdRet}%</b>`:""}</span>`
-      ).join(" · ")||"—";
-      return `<tr>
-        <td>${r.label}<br><span class="muted" style="font-size:11px">买入日 ${r.asof||"—"}</span></td>
-        <td class="num" style="color:${cls(pr)};font-weight:700">${pr!=null?(pr>=0?"+":"")+pr+"%":"—"}</td>
-        <td class="num" style="color:${cls(br)}">${br!=null?(br>=0?"+":"")+br+"%":"—"}</td>
-        <td class="num" style="color:${eCls};font-weight:700">${excess!=null?(excess>=0?"+":"")+excess+"pp":"—"}</td>
-        <td class="num" style="color:${cls(ur)}">${ur!=null?(ur>=0?"+":"")+ur+"%":"—"}</td>
-        <td style="font-size:11.5px;line-height:1.6;max-width:330px">${pickTxt}</td>
-      </tr>`;
+      const pv=v=>v==null?"—":(v>=0?"+"+v+"%":v+"%");
+      const chips=(r.picks||[]).map(p=>{
+        const nm=p.code?(p.name||p.code):((p.asset||"")+"·"+(p.name||""));
+        if(p.fwdRet==null) return `<div class="bt-f"><span class="bt-fn">${nm}</span><span class="muted" style="white-space:nowrap">无数据</span></div>`;
+        return `<div class="bt-f"><span class="bt-fn">${nm}</span><b style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"};white-space:nowrap">${p.fwdRet>=0?"+":""}${p.fwdRet}%</b></div>`;
+      }).join("");
+      return `<div class="bt-block">
+        <div class="bt-h">${r.label} <span class="muted" style="font-size:11px;font-weight:600">买入日 ${r.asof||"—"}</span></div>
+        <div class="bt-stats">
+          <div class="bt-stat"><div class="muted" style="font-size:10.5px">组合收益</div><b style="color:${cls(pr)};font-size:18px">${pv(pr)}</b></div>
+          <div class="bt-stat"><div class="muted" style="font-size:10.5px">沪深300</div><b style="color:${cls(br)};font-size:15px">${pv(br)}</b></div>
+          <div class="bt-stat"><div class="muted" style="font-size:10.5px">超额</div><b style="color:${eCls};font-size:15px">${excess==null?"—":(excess>=0?"+":"")+excess+"pp"}</b></div>
+          <div class="bt-stat"><div class="muted" style="font-size:10.5px">等权全宇宙</div><b style="color:${cls(ur)};font-size:15px">${pv(ur)}</b></div>
+        </div>
+        <div class="bt-fs">${chips||'<span class="muted">—</span>'}</div>
+      </div>`;
     }).join("");
-    body.innerHTML=`<div class="note" style="margin:10px 0 6px"><svg class="i"><use href="#i-trending-up"/></svg> <b>回测结果</b>：<span class="muted">${d.method||""} 生成于 ${d.generatedAt||"—"}</span></div>
-      <div class="table-scroll"><table><thead><tr><th>持有周期</th><th class="num">组合收益</th><th class="num">沪深300</th><th class="num">超额</th><th class="num">等权全宇宙</th><th>回测基金（持有收益）</th></tr></thead><tbody>${rows}</tbody></table></div>
+    body.innerHTML=`<div class="note" style="margin:6px 0 10px"><svg class="i"><use href="#i-trending-up"/></svg> <b>回测结果</b>：<span class="muted">${d.method||""} 生成于 ${d.generatedAt||"—"}</span></div>
+      ${blocks}
       <div class="note" style="margin-top:8px">买入价=买入日（或之前最近交易日）真实历史净值，卖出价=今日最新净值；全部来自天天基金真实数据，可在官网核对。仅验证历史样本，非收益承诺。</div>`;
   }catch(e){ body.innerHTML='<div class="empty">回测失败：'+(e.message||e)+'</div>'; }
 }
@@ -2088,6 +2099,7 @@ async function loadRecommend(){
         ${span("1月",rp.p1m,rp.exp1m)}${span("3月",rp.p3m,rp.exp3m)}${span("6月",rp.p6m,rp.exp6m)}${span("1年",rp.p12m,rp.exp12m)}
         ${rp.sigma!=null?`<span>组合年化波动 <b style="color:${rp.sigma>0.25?"var(--warn)":"var(--text)"}">${(rp.sigma*100).toFixed(0)}%</b></span>`:""}
       </div>
+      ${rp.low?`<div style="color:var(--warn);font-size:11px;margin-top:6px;font-weight:600">⚠️ 当前组合整体 1年盈利概率偏低（&lt;45%）：主要受高估值/偏高价位成分拖累。按买点纪律建议：不追高、分批/定投摊薄，或等回调后再布局。</div>`:""}
       <div class="muted" style="font-size:10.5px;margin-top:4px">盈利概率：≥60% 绿（较稳）/ 45-60% 橙（中性）/ &lt;45% 红（谨慎）；预期收益：红涨绿跌（A股习惯）。按近 3 年历史波动假设模拟，非收益承诺。<b style="color:var(--warn)">基金有风险：年化波动反映净值涨跌幅度，权益组合可能单年浮亏 20%+，请用闲钱、按仓位纪律分批买入。</b></div>
     </div>`;
   }
