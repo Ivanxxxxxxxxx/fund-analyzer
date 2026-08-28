@@ -2072,20 +2072,24 @@ async function analyze(){
     // 原来是 rets[i][t] 头部对齐——A 基金 729 天、B 基金 300 天时会把 A 的早期和 B 的近期混在一起，时间错位。
     for(let t=0;t<L;t++){ let r=0; for(let i=0;i<holdings.length;i++) r+=w[i]*rets[i][rets[i].length-L+t]; pr.push(r); }
 
-    // 基准对比（沪深300）与组合累计收益曲线
-    let benchName="沪深300", benchCum=null, portCum=null, trendDates=null;
+    // 趋势窗口：取各序列最后 L 个交易日；组合累计 / 基准累计 / 诊断行标注的「交易日数」全部基于同一窗口
+    let trendDates=dates.slice(dates.length-L);
+    let benchName="沪深300", benchCum=null, portCum=null;
+    // 组合累计收益（净值前向填充→日收益→链式累积）
+    { let cum=1; portCum=[]; for(const r of pr){ cum*=(1+r); portCum.push(cum-1); } }
+    // 基准对比（沪深300）：直接在 trendDates 上对齐指数点位，保证基准窗口 == 诊断行标注的交易日数
+    // （杜绝「标 729 天却用 30 天窗口去算」的错位——之前基准是先在全量 dates 上对齐再 slice，理论上等价，
+    //  但一旦 dates 与趋势窗口长度因特殊持仓出现偏差就会错位；现强制三者同源）
     try{
       const b=await api("/api/index/000300").catch(()=>({ok:false}));
       if(b && b.values && b.values.length){
-        const bm={}; b.dates.forEach((d,i)=>bm[d]=b.values[i]);
-        let lastV=null; const bmArr=dates.map(d=>{ if(bm[d]!=null) lastV=bm[d]; return lastV; });
-        const slice=bmArr.slice(bmArr.length-L);
-        let base=null; for(const v of slice){ if(v!=null){base=v;break;} }
-        if(base) benchCum=slice.map(v=> v==null?null:(v/base-1));
+        const idxMap={}; b.dates.forEach((d,i)=>idxMap[d]=b.values[i]);
+        let lastV=null; const aligned=trendDates.map(d=>{ if(idxMap[d]!=null) lastV=idxMap[d]; return lastV; });
+        let base=null; for(const v of aligned){ if(v!=null){base=v;break;} }
+        if(base) benchCum=aligned.map(v=> v==null?null:(v/base-1));
         benchName=b.name||"沪深300";
       }
     }catch(e){}
-    { let cum=1; portCum=[]; for(const r of pr){ cum*=(1+r); portCum.push(cum-1); } trendDates=dates.slice(dates.length-L); }
     if(benchCum){ const s=benchCum.findIndex(v=>v!=null); if(s>0){ benchCum=benchCum.slice(s); portCum=portCum.slice(s); trendDates=trendDates.slice(s); } }
 
     const mean=pr.reduce((a,b)=>a+b,0)/L;
