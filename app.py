@@ -1220,19 +1220,14 @@ def _build_reco_candidates(max_per_cat=None, time_left=None):
             fallback_cats.append(cat_label)
         if need_age:
             rows = [r for r in rows if _est_years(r[3]) >= 3.0]   # 只评成立≥3年（经历牛熊、数据可靠）
-        # 去追涨：不按“近1年涨幅”排序截断候选，改为在收益分布上等距分层抽样，
-        # 低/中/高收益基金都进候选池，最终由多因子综合分择优。
-        rows.sort(key=lambda r: r[2])
-        n_rows = len(rows)
-        POOL = max_per_cat if max_per_cat else topn * 6
-        head = []
-        if n_rows:
-            step = max(1.0, n_rows / float(POOL))
-            seen = set()
-            for i in range(POOL):
-                r = rows[min(n_rows - 1, int(i * step))]
-                if r[0] not in seen:
-                    seen.add(r[0]); head.append(r)
+        # 候选池 = 涨幅榜前列（同类收益前列）：直接取榜单前 POOL 只。
+        # 原来"收益分布等距分层抽样"会把同类垫底基金也抽进候选（如近1年同类后12%的债券），
+        # 弱市下垫底基金评分"相对高"被评推荐级 → 推荐同类垫底基金（用户多次实锤"推荐垃圾"）。
+        # 去追涨由多因子的估值分位/均值回归(muE)/盈利概率硬门槛负责，不需要抽差基金来防追涨。
+        rows.sort(key=lambda r: r[2], reverse=True)   # 按近1年收益降序（榜单前列=同类收益前列）
+        POOL = max_per_cat if max_per_cat else topn
+        head = rows[:POOL]
+        # 兼容：若 rows 为空（网络故障已回退内置名单），保留内置名单原顺序
         for code, name, y1, ed in head:
             candidates.append((cat_label, asset, code, name))
         if not head:
@@ -1849,6 +1844,12 @@ def recommend_backtest_codes(codes, weights=None):
     ws = sum(weights) or 1.0
     weights = [w / ws for w in weights]
     hs_series = cached("bk", "hs300_sina", _daily_ttl(), lambda: _get_index_series("1.000300", 1200))
+    # 随机选基对照（验证选基逻辑是否真的优于随机，而非幸存者偏差/未来函数）：
+    # 从同一候选宇宙随机取相同数量基金 20 次，平均/90分位持有收益与用户组合对比。
+    import random as _rnd
+    _rnd.seed(20260828)
+    _cand, _, _ = _build_reco_candidates(max_per_cat=6)
+    _univ = [c for _cl, _a, c, _n in _cand]
     results = []
     for label, months in [("近6个月", 6), ("近12个月", 12), ("近24个月", 24)]:
         if _left() <= 5:
@@ -1887,12 +1888,30 @@ def recommend_backtest_codes(codes, weights=None):
             picks.append({"code": code, "name": _fund_name(code), "weight": round(w, 3),
                           "fwdRet": round(rt * 100, 1) if rt is not None else None,
                           "note": _note})
+        # 随机选基对照：同一候选宇宙随机取同数量基金 20 次
+        _rr = []
+        for _i in range(20):
+            _s = _rnd.sample(_univ, min(len(_univ), len(codes)))
+            _vals = []
+            for _c in _s:
+                _na, _nb = _fund_nav_at(_c, asof_s), _fund_nav_now(_c)
+                if _na and _nb and _na > 0:
+                    _vals.append(_nb / _na - 1)
+                elif _is_money(_c):
+                    _days = max(1.0, (datetime.date.today() - asof).days)
+                    _vals.append((1.0 + 0.017) ** (_days / 365.0) - 1.0)
+            if _vals:
+                _rr.append(sum(_vals) / len(_vals) * 100)
+        _rand_avg = round(sum(_rr) / len(_rr), 1) if _rr else None
+        _rr_s = sorted(_rr)
+        _rand_p90 = round(_rr_s[min(len(_rr_s) - 1, int(len(_rr_s) * 0.9) - 1)], 1) if _rr else None
         results.append({"label": label, "asof": asof_s, "error": None, "picks": picks,
                         "portRet": round((port / tw) * 100, 1) if tw > 0 else None,
                         "benchRet": round(bench_ret * 100, 1) if bench_ret is not None else None,
-                        "univRet": None})
+                        "univRet": None,
+                        "randRet": _rand_avg, "randP90": _rand_p90})
     return {"ok": True, "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "method": "对指定基金组合在近6/12/24个月锚点买入持有至今（等权或按权重加权），对比沪深300。净值全部为真实历史净值，可在天天基金官网核对。",
+            "method": "对指定基金组合在近6/12/24个月锚点买入持有至今（等权或按权重加权），对比沪深300；并附「随机选基对照」（同一候选宇宙随机选 20 次，均值/90分位）验证选基逻辑是否优于随机。净值全部为真实历史净值，可在天天基金官网核对。",
             "results": results}
 
 
@@ -1975,11 +1994,13 @@ def _compute_factors(code, bench_rets=None, asof=None):
     f = get_fund(code)
     if not f.get("ok") or not f.get("name"):
         return None
-    # 货币基金：净值恒稳、历史接口仅 20 条，无法走多因子；作为现金管理工具给稳健基准分
+    # 货币基金：净值恒稳、历史接口仅 20 条，无法走多因子；作为现金管理工具给"中性"基准分。
+    # 注意：不给高分（原 70 会把货币评成最高、锚点时刻挤掉真正的强势基金，导致回测选一堆货币）。
+    # 57 分=中性偏下：只在"市场无其他值得买的基金"时兜底出现，绝不与进攻型基金抢推荐席。
     if "货币" in (f.get("type") or ""):
         return {"code": code, "name": f["name"], "type": f.get("type", "货币型"),
                 "nav": f.get("nav"), "navDate": f.get("navDate"),
-                "composite": 70, "r20": 0.0017, "r60": 0.005, "r120": 0.01, "r250": 0.02,
+                "composite": 57, "r20": 0.0017, "r60": 0.005, "r120": 0.01, "r250": 0.02,
                 "sharpe": 1.5, "mdd": -0.001, "ann": 0.02, "z": 0.0,
                 "valPct": None, "valBasis": "不适用（固收／货币类）",
                 "avr": None, "dims": {}, "vol": 0.0, "calmar": 0.0,
