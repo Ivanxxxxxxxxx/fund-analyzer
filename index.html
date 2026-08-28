@@ -918,6 +918,27 @@ const cls = n => n>0?"up":(n<0?"down":"muted");
 
 let holdings = loadHoldings();
 let donutChart = null;
+// 智能推荐目标（轻量持久化，供「实时操作信号」交叉验证；刷新后依然生效，避免信号"失忆"又矛盾）
+window.__recoTargets = {};
+function saveRecoPersist(){
+  try{
+    const funds={};
+    const src = window.__recoFunds || {};
+    Object.values(src).forEach(f=>{ if(f&&f.code) funds[f.code]={score:f.score, weight:f.weight, verdict:f.verdict, asset:(f.category||f.asset), generatedAt:Date.now()}; });
+    localStorage.setItem("fp_reco", JSON.stringify({funds, alloc:window.__recoAlloc||{}, at:Date.now()}));
+  }catch(e){}
+}
+function loadRecoPersist(){
+  try{
+    const raw=localStorage.getItem("fp_reco"); if(!raw) return;
+    const o=JSON.parse(raw);
+    if(o.funds) window.__recoTargets=o.funds;
+    if(o.alloc && (!window.__recoAlloc || !Object.keys(window.__recoAlloc).length)) window.__recoAlloc=o.alloc;
+  }catch(e){}
+}
+// 取某基金的推荐记录：优先实时生成的（本会话刚点过「生成推荐」），否则用持久化的目标
+function getReco(code){ return (window.__recoFunds&&window.__recoFunds[code]) || (window.__recoTargets&&window.__recoTargets[code]) || null; }
+loadRecoPersist();
 
 function loadHoldings(){ try{return JSON.parse(localStorage.getItem("fp_holdings")||"[]")}catch(e){return[]} }
 function saveHoldings(){ localStorage.setItem("fp_holdings", JSON.stringify(holdings)) }
@@ -1820,7 +1841,50 @@ function computeSignals(){
     } else {
       action="hold"; reason=`估值与仓位均中性（Z=${z.toFixed(1)}、占比 ${(wt*100).toFixed(0)}%），继续持仓观察。`;
     }
-    rows.push({h,wt,dd,z,chg,action,reason});
+    // ===== 交叉验证：操作信号 vs 智能推荐（消除"刚让建仓又让减仓"的矛盾）=====
+    // 战术信号只看短线价格位置；若该基金是推荐成分，需与"推荐目标"对齐后再下结论。
+    let xv="none";
+    const reco=getReco(h.code);
+    if(reco){
+      const tw = (typeof reco.weight==="number")?reco.weight:null;
+      const score = reco.score!=null?reco.score:60;
+      const twTxt = tw!=null?(tw*100).toFixed(0)+"%":"目标";
+      const overweightHard = wt>0.45;
+      const overweightTarget = (tw!=null) && (wt - tw > 0.08);
+      if(action==="close"){
+        // 推荐成分不应被"强平"：未超目标则维持观察，超目标则降为减仓(再平衡)
+        if(!overweightHard && !overweightTarget){
+          action="hold";
+          reason=`已与智能推荐交叉验证：该基金为推荐成分（综合分${score}、目标占比${twTxt}），当前占比${(wt*100).toFixed(0)}%未超目标；虽有深度回撤，但属推荐策略内持仓，维持观察、不强行平仓，如需调仓请手动操作。`;
+          xv="suppressed";
+        } else {
+          action="reduce";
+          reason=`（已交叉验证：推荐成分，减仓为回归目标占比 ${twTxt} 的再平衡，非否定推荐）长期深度回撤 ${(dd*100).toFixed(0)}% 且超目标占比，建议减仓置换。`;
+          xv="rebalance";
+        }
+      } else if(action==="reduce"){
+        if(!overweightHard && !overweightTarget){
+          // 纯短线偏高/单日大涨触发的卖出 = 与"推荐建仓"矛盾 → 降级为持仓并说明
+          action="hold";
+          reason=`已与智能推荐交叉验证：该基金为推荐成分（综合分${score}、目标占比${twTxt}），当前占比${(wt*100).toFixed(0)}%未超目标，短期偏高属上升趋势正常波动，维持持仓；如需止盈请手动操作。`;
+          xv="suppressed";
+        } else {
+          reason += `（已交叉验证：推荐成分，此处减仓为回归目标占比 ${twTxt} 的再平衡，非否定推荐）`;
+          xv="rebalance";
+        }
+      } else if(action==="add"){
+        const atOrAboveTarget = (tw!=null) && (wt >= tw - 0.01);
+        if(atOrAboveTarget){
+          action="hold";
+          reason=`已与智能推荐交叉验证：该基金为推荐成分（目标占比${twTxt}%），当前占比${(wt*100).toFixed(0)}%已达目标，无需再加仓，维持持仓。`;
+          xv="suppressed";
+        } else {
+          reason += `（向推荐目标占比 ${twTxt} 靠拢）`;
+          xv="aligned";
+        }
+      }
+    }
+    rows.push({h,wt,dd,z,chg,action,reason,xv,reco:!!reco});
   });
   return rows;
 }
@@ -1838,7 +1902,18 @@ function renderSignals(rows){
      <span class="sig sig-close">平仓 ${cnt.close}</span>
      <span class="sig sig-hold">持仓 ${cnt.hold}</span>
    </div>`;
-  let html=sum+`<div class="table-scroll"><table><thead><tr><th>基金</th><th class="num">最新净值</th><th class="num">日涨跌</th><th>操作信号</th><th>建议理由</th><th class="num">参考占比</th></tr></thead><tbody>`;
+  // 交叉验证汇总：让用户直接看到工具已消除"建仓又减仓"的口径矛盾
+  const recoRows = rows.filter(r=>r.reco);
+  const sup = rows.filter(r=>r.xv==="suppressed").length;
+  const reb = rows.filter(r=>r.xv==="rebalance").length;
+  const ali = rows.filter(r=>r.xv==="aligned").length;
+  let xvBanner = "";
+  if(recoRows.length){
+    xvBanner = `<div style="margin:0 0 12px;padding:10px 12px;border:1px solid rgba(242,193,78,.45);border-radius:10px;background:rgba(242,193,78,.08);font-size:12.5px;line-height:1.65">
+      <b style="color:var(--gold)">✔ 多方交叉验证已启用</b>：对 ${recoRows.length} 只「智能推荐」成分基金，操作信号已与推荐目标对齐——
+      ${sup>0?`<b style="color:var(--good)">${sup}</b> 条与推荐矛盾的短线卖出信号已抑制为持仓； `:""}${reb>0?`<b style="color:var(--warn)">${reb}</b> 条超目标占比的减仓保留为再平衡； `:""}${ali>0?`<b style="color:var(--gold)">${ali}</b> 条低位加仓对齐目标； `:""}${(sup+reb+ali)===0?"当前持仓与推荐目标一致，无需调整；":""}推荐定目标、信号查偏离，二者不再冲突。</div>`;
+  }
+  let html=sum+xvBanner+`<div class="table-scroll"><table><thead><tr><th>基金</th><th class="num">最新净值</th><th class="num">日涨跌</th><th>操作信号</th><th>建议理由</th><th class="num">参考占比</th></tr></thead><tbody>`;
   rows.forEach(r=>{
     const lbl=label[r.action];
     const canAct = r.action!=="hold";   // 加仓/减仓/平仓 → 可点按钮；继续持仓保持纯文本
@@ -1855,7 +1930,7 @@ function renderSignals(rows){
     </tr>`;
   });
   html+=`</tbody></table></div>
-    <div class="note">操作信号针对<b>现有持仓</b>的占比与净值位置（Z 值/回撤/当日涨跌）生成；<b>大类配置目标</b>请参考「智能推荐」比例（按市场温度）。两者口径互补：推荐定目标、信号查偏离，执行后再平衡即可。交易时段每 2 分钟自动刷新；仅作参考，不构成投资意见。</div>`;
+    <div class="note">操作信号针对<b>现有持仓</b>的占比与净值位置（Z 值/回撤/当日涨跌）生成；<b>大类配置目标</b>参考「智能推荐」比例（按市场温度）。<b>二者已做交叉验证</b>：推荐成分基金的纯短线卖出信号会自动对齐目标——只有占比超目标 / 超 45% 上限才保留减仓（并标注为「回归目标的再平衡」，非否定推荐），由此避免「刚让建仓又让减仓」的口径矛盾。交易时段每 2 分钟自动刷新；仅作参考，不构成投资意见。</div>`;
   box.innerHTML=html;
 }
 
@@ -2006,6 +2081,7 @@ async function loadRecommend(){
     openRecoModal();
   }
   window.__recoCount = d.funds.length; updateSummaries();
+  saveRecoPersist();   // 持久化推荐目标，供操作信号交叉验证（即使刷新也不矛盾）
 }
 
 // 一键配置最优基金：从推荐结果按综合分最优选 N 只（同类≤2），分配本金建仓，并记录每月定投计划
