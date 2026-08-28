@@ -2042,7 +2042,7 @@ async function loadBacktest(mode){
       const pv=v=>v==null?"—":((+v)>=0?"+":"")+(+v).toFixed(1)+"%";
       const chips=(r.picks||[]).map(p=>{
         const nm=p.code?(p.name||p.code):((p.asset||"")+"·"+(p.name||""));
-        if(p.fwdRet==null) return `<div class="bt-f"><span class="bt-fn">${nm}</span><span class="muted" style="white-space:nowrap">无数据</span></div>`;
+        if(p.fwdRet==null) return `<div class="bt-f"><span class="bt-fn">${nm}</span><span class="muted" style="white-space:nowrap">${p.note||"无数据"}</span></div>`;
         return `<div class="bt-f"><span class="bt-fn">${nm}</span><b style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"};white-space:nowrap">${p.fwdRet>=0?"+":""}${(+p.fwdRet).toFixed(1)}%</b></div>`;
       }).join("");
       return `<div class="bt-block">
@@ -2192,36 +2192,40 @@ async function loadRecommend(){
 }
 
 // 选 N 只最优组合：按「资产类别分散 + 类内综合分择优」，支持任意 N（1~10）。
-// 规则：A股权益（股/混/指）约占 55% 席位（至少1、不超过池容量），海外(QDII) 有则留1席，
-// 其余给债券/黄金/货币；名额不满时用剩余高分基金补足。避免选出一把同涨同跌的基金。
+// 关键纪律（2026-08-28 修复）：
+//  ① **只从「推荐」级基金中选**——弱市下 A股权益普遍为"谨慎关注"（近12月多亏损），
+//     若硬凑 N 只权益会选出亏损组合；推荐级不足 N 只时【少选】并提示，绝不硬凑谨慎级。
+//  ② 压舱石优先债券；黄金至多 1 只、货币至多 1 只（现金不需分散，避免选成"3只货币"）。
+// 席位：A股权益（股/混/指）约占 55%、海外(QDII) 有则留1席，其余债券优先补。
 function pickBestN(list, n){
+  const recs=list.filter(f=>f.verdict==="推荐");
+  if(!recs.length) return [];
   const EQ=["股票型","混合型","指数型"];
-  const pools={eq:[],ov:[],ot:[]};
-  list.forEach(f=>{
+  const pools={eq:[],ov:[],bond:[],gold:[],money:[]};
+  recs.forEach(f=>{
     const a=f.asset||f.category||"";
     if(EQ.indexOf(a)>=0) pools.eq.push(f);
     else if(a==="海外(QDII)") pools.ov.push(f);
-    else pools.ot.push(f);
+    else if(a==="债券型") pools.bond.push(f);
+    else if(a==="黄金") pools.gold.push(f);
+    else pools.money.push(f);
   });
-  // 「推荐」级优先于综合分：避免把"综合分高但1年盈利概率≈0%"的谨慎基金（如高估黄金）优先选进组合
-  const rk=f=>f.verdict==="推荐"?2:(f.verdict==="谨慎关注"?1:0);
-  const byS=a=>a.sort((x,y)=> (rk(y)-rk(x)) || ((y.score||0)-(x.score||0)));
-  byS(pools.eq); byS(pools.ov); byS(pools.ot);
-  let eqSeats=Math.min(pools.eq.length, Math.max(1, Math.round(n*0.55)));
-  let ovSeats=(n>=2&&pools.ov.length)?1:0;
-  if(eqSeats+ovSeats>n){ eqSeats=Math.max(1,n-ovSeats); }
-  let otSeats=Math.min(pools.ot.length, Math.max(0,n-eqSeats-ovSeats));
-  if(eqSeats+ovSeats+otSeats<n){   // 名额未满（某类池空）→ 权益优先补，再债券/黄金/货币
-    const fill=n-eqSeats-ovSeats-otSeats;
-    eqSeats+=Math.min(pools.eq.length-eqSeats, fill);
-    otSeats=Math.min(pools.ot.length, otSeats+(n-eqSeats-ovSeats-otSeats));
-  }
+  const byS=a=>a.sort((x,y)=>(y.score||0)-(x.score||0));
+  byS(pools.eq); byS(pools.ov); byS(pools.bond); byS(pools.gold); byS(pools.money);
+  const want=Math.min(n, recs.length);   // 推荐级不足 → 少选
+  let eqSeats=Math.min(pools.eq.length, Math.max(1, Math.round(want*0.55)));
+  let ovSeats=(want>=2&&pools.ov.length)?1:0;
+  if(eqSeats+ovSeats>want){ eqSeats=Math.max(1,want-ovSeats); }
   const picked=[];
-  const take=(pool,k)=>{ for(let i=0;i<pool.length&&k>0;i++){ if(picked.indexOf(pool[i])<0){ picked.push(pool[i]); k--; } } };
-  take(pools.eq,eqSeats); take(pools.ov,ovSeats); take(pools.ot,otSeats);
-  if(picked.length<n){   // 兜底：剩余高分补足
-    const rest=[...list].filter(f=>picked.indexOf(f)<0).sort((x,y)=>(y.score||0)-(x.score||0));
-    for(const f of rest){ if(picked.length>=n) break; picked.push(f); }
+  const take=(pool,k)=>{ let t=0; for(let i=0;i<pool.length&&t<k;i++){ if(picked.indexOf(pool[i])<0){ picked.push(pool[i]); t++; } } return t; };
+  take(pools.eq,eqSeats); take(pools.ov,ovSeats);
+  let rem=want-picked.length;
+  rem-=take(pools.bond,rem);           // 债券做压舱石，优先补满
+  if(rem>0) rem-=take(pools.gold,1);   // 黄金至多 1 只
+  if(rem>0) rem-=take(pools.money,1);  // 货币至多 1 只
+  if(rem>0){                           // 仍未满：推荐级内其余高分补足
+    const rest=recs.filter(f=>picked.indexOf(f)<0).sort((x,y)=>(y.score||0)-(x.score||0));
+    for(const f of rest){ if(picked.length>=want) break; picked.push(f); }
   }
   return picked;
 }
@@ -2249,10 +2253,11 @@ async function quickSetup(nIn, principalIn, dcaIn, monthsIn, freqIn){
   const freq=(freqIn&&FREQ[freqIn])?freqIn:"month";
   const months=Math.max(1,Math.min(360, +(monthsIn!==undefined?monthsIn:60)||60));
   if(principal<=0){ toast("请输入本金金额"); return; }
-  // 最优组合：类别分散（权益为主+海外/债券各1席）+ 类内综合分择优
+  // 最优组合：只从「推荐」级中选（类别分散+综合分择优）；弱市下推荐级不足时少选，绝不硬凑亏损的谨慎级
   const picked=pickBestN(list, n);
   window.__lastSetupCodes=picked.map(f=>f.code);   // 供「推荐效果回测」跟随你选的组合
-  if(!picked.length){ toast("推荐结果为空，无法配置"); return; }
+  if(!picked.length){ toast("当前市场环境下没有达到「推荐」标准的基金，暂不建议一键建仓；可等信号转好或手动选基金"); return; }
+  if(picked.length<n){ toast("当前市场弱：达到「推荐」标准的基金仅 "+picked.length+" 只（A股权益多评级「谨慎关注」、近12月表现差），已按 "+picked.length+" 只稳健组合配置，避免硬凑亏损标的"); }
   // 按综合分归一化分配本金（评分高的多配）
   const tot=picked.reduce((s,f)=>s+(f.score||0),0)||1;
   let amts=picked.map(f=>principal*Math.max(0,(f.score||0))/tot);
