@@ -1762,8 +1762,19 @@ def recommend_backtest():
             "results": results}
 
 
+def _is_money(code):
+    """货币基金：收益按万份收益日结、无适用累计净值，不参与回测。"""
+    try:
+        return "货币" in (get_fund(code).get("type") or "")
+    except Exception:
+        return False
+
+
 def _fund_nav_at(code, asof_s):
-    """基金在 asof（含）之前最近一个交易日的累计净值（复权含分红，回测买入价=总收益口径）。"""
+    """基金在 asof（含）之前最近一个交易日的累计净值（复权含分红，回测买入价=总收益口径）。
+    货币基金无适用净值 → None（不参与回测）。"""
+    if _is_money(code):
+        return None
     try:
         ds = [d for d in get_adj_series(code) if str(d.get("date"))[:10] <= asof_s]
         return ds[-1]["nav"] if ds else None
@@ -1772,7 +1783,9 @@ def _fund_nav_at(code, asof_s):
 
 
 def _fund_nav_now(code):
-    """基金最新累计净值（复权含分红，回测卖出价=总收益口径）。"""
+    """基金最新累计净值（复权含分红，回测卖出价=总收益口径）。货币基金 → None。"""
+    if _is_money(code):
+        return None
     try:
         ds = get_adj_series(code)
         return ds[-1]["nav"] if ds else None
@@ -1839,7 +1852,7 @@ def recommend_backtest_codes(codes, weights=None):
                 tw += w
             picks.append({"code": code, "name": _fund_name(code), "weight": round(w, 3),
                           "fwdRet": round(rt * 100, 1) if rt is not None else None,
-                          "note": None if (na and nb) else ("该基金当时可能尚未成立或无净值数据" if na is None else "净值数据不可得")})
+                          "note": None if (na and nb) else ("货币基金不参与回测" if _is_money(code) else ("该基金当时可能尚未成立或无净值数据" if na is None else "净值数据不可得"))})
         results.append({"label": label, "asof": asof_s, "error": None, "picks": picks,
                         "portRet": round((port / tw) * 100, 1) if tw > 0 else None,
                         "benchRet": round(bench_ret * 100, 1) if bench_ret is not None else None,
