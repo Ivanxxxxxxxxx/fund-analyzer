@@ -1872,12 +1872,21 @@ def recommend_backtest_codes(codes, weights=None):
         for code, w in zip(codes, weights):
             na, nb = _fund_nav_at(code, asof_s), _fund_nav_now(code)
             rt = (nb / na - 1) if (na and nb and na > 0) else None
+            _note = None
+            if rt is None and _is_money(code):
+                # 货币基金无历史净值接口：按 7 日年化近似（1.7%/年，按月复利）估算区间收益，
+                # 让防守组合（债券+货币）回测结果真实（货币是弱市真正不亏的类现金资产）
+                _days = max(1.0, (datetime.date.today() - asof).days)
+                rt = (1.0 + 0.017) ** (_days / 365.0) - 1.0
+                _note = "货币基金按年化约 1.7% 估算（无历史净值接口）"
             if rt is not None:
                 port += w * rt
                 tw += w
+            if _note is None:
+                _note = None if (na and nb) else ("该基金当时可能尚未成立或无净值数据" if na is None else "净值数据不可得")
             picks.append({"code": code, "name": _fund_name(code), "weight": round(w, 3),
                           "fwdRet": round(rt * 100, 1) if rt is not None else None,
-                          "note": None if (na and nb) else ("货币基金不参与回测" if _is_money(code) else ("该基金当时可能尚未成立或无净值数据" if na is None else "净值数据不可得"))})
+                          "note": _note})
         results.append({"label": label, "asof": asof_s, "error": None, "picks": picks,
                         "portRet": round((port / tw) * 100, 1) if tw > 0 else None,
                         "benchRet": round(bench_ret * 100, 1) if bench_ret is not None else None,
