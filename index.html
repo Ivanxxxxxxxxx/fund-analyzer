@@ -1317,7 +1317,7 @@ function saveDcaAmt(){
 // 用 __histCache 复用历史净值；结果按"持仓组合+日期"缓存到 localStorage（当天有效），避免每次刷新重拉
 // 统一组合收益统计：给定 codes + 权重，返回年化/波动/回撤/夏普/相关性/健康分。
 // 缓存 key 含【权重】，解决"计划与实盘同批基金时，计划概览复用实盘缓存→概览 10% ≠ 诊断 23.5%"的矛盾。
-const FP_HIST_DAYS=1460;   // 历史窗口：4 年，让长期持有的组合线反映真实走势（原 730 天会截断多年涨幅）
+const FP_HIST_DAYS=730;   // 历史窗口：2 年（用户要求改回 730 天）
 async function portfolioStats(codes, weights){
   if(!codes || !codes.length) return null;
   const wsum=(weights||[]).reduce((a,b)=>a+b,0)||1;
@@ -1590,7 +1590,7 @@ async function resetPlanWeights(){
   if(!window.__histCache) window.__histCache={};
   for(const f of manual){
     if(!window.__histCache[f.code]){
-      const r=await api("/api/history/"+f.code+"?days=1460").catch(()=>({data:[]}));
+      const r=await api("/api/history/"+f.code+"?days=730").catch(()=>({data:[]}));
       window.__histCache[f.code]=r.data||[];
     }
   }
@@ -1903,7 +1903,7 @@ async function analyze(){
     for(const h of holdings){
       const cached=window.__histCache[h.code];
       if(cached && cached.length>=20){ h.history=cached; continue; }   // 缓存有效才复用，避免脏空缓存把曲线压平
-      const r=await api("/api/history/"+h.code+"?days=1460").catch(()=>({data:[]}));
+      const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]}));
       h.history=r.data||[]; window.__histCache[h.code]=h.history;
     }
     const miss=holdings.filter(h=>!h.history||h.history.length<20);
@@ -2374,7 +2374,7 @@ async function calcPlanCum(dates){
     if(!window.__histCache) window.__histCache={};
     for(const f of pf){
       if(!window.__histCache[f.code]){
-        const r=await api("/api/history/"+f.code+"?days=1460").catch(()=>({data:[]}));
+        const r=await api("/api/history/"+f.code+"?days=730").catch(()=>({data:[]}));
         window.__histCache[f.code]=r.data||[];
       }
     }
