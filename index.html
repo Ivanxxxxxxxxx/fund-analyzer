@@ -2074,7 +2074,7 @@ async function loadBacktest(mode){
     }).join("");
     body.innerHTML=sw+sub+`
       ${blocks}
-      <div class="note" style="margin-top:8px">买入/卖出价均为累计净值（含分红再投资口径），全部来自天天基金真实数据，可在官网核对。仅验证历史样本，非收益承诺。生成于 ${d.generatedAt||"—"}。</div>`;
+      <div class="note" style="margin-top:8px">买入/卖出价均为累计净值（含分红再投资口径），全部来自天天基金真实数据，可在官网核对；<b>货币基金按年化约 1.7% 估算</b>（无历史净值接口）。注意：债市也会调整——中长久期纯债在利率上行期半年回撤 2~4% 属正常，含股票的二级债回撤更大；真正类现金防守是货币/短债。仅验证历史样本，非收益承诺。生成于 ${d.generatedAt||"—"}。</div>`;
   }catch(e){ body.innerHTML=sw+'<div class="empty">回测失败：'+(e.message||e)+'</div>'; }
 }
 function openBtModal(mode){ document.getElementById("btOverlay").classList.add("show"); loadBacktest(mode||"reco"); }
@@ -2235,8 +2235,15 @@ function buildCombo(list, alloc, n){
     else if(a==="黄金") pools.gold.push(f);
     else pools.money.push(f);
   });
-  const byS=a=>a.sort((x,y)=>(y.score||0)-(x.score||0));
-  byS(pools.eq);byS(pools.ov);byS(pools.bond);byS(pools.gold);byS(pools.money);
+  const byS=a=>a.sort((x,y)=>(y.score||0)-(y.score||0));
+  // 债券池拆为「防守债」（低回撤）与「含权债」（高回撤二级债/转债，风险≈权益，不占防守席位）
+  const DEF_MDD=-0.15;
+  pools.bondEq = pools.bond.filter(f=> f.maxMdd!=null && f.maxMdd < DEF_MDD);
+  pools.bond   = pools.bond.filter(f=> !(f.maxMdd!=null && f.maxMdd < DEF_MDD));
+  // 防守债按「低回撤优先」排序：score + 300×maxMdd（maxMdd 为负），回撤大的排后
+  const bondSort=a=>a.sort((x,y)=>
+    ((y.score||0)+300*((y.maxMdd!=null?y.maxMdd:-0.1))) - ((x.score||0)+300*((x.maxMdd!=null?x.maxMdd:-0.1))));
+  bondSort(pools.bond); byS(pools.bondEq); byS(pools.eq);byS(pools.ov);byS(pools.gold);byS(pools.money);
   const want=Math.min(n, recs.length);
   // alloc（市场温度驱动的大类配置）→ 席位权重；混合/指数归入权益=alloc 股票型
   const a=alloc||{};
@@ -2261,7 +2268,8 @@ function buildCombo(list, alloc, n){
   take("eq",seats.eq); take("ov",seats.ov); take("bond",seats.bond); take("gold",seats.gold); take("money",seats.money);
   if(picked.length<want){                        // 推荐级仍不足：少选（绝不硬凑谨慎级），空缺用剩余推荐级补
     const rest=recs.filter(f=>picked.indexOf(f)<0);
-    const rk2=f=>{ const aa=f.asset||f.category||""; return EQ.indexOf(aa)>=0?0:(aa==="债券型"?4:(aa==="货币型"?3:(aa==="黄金"?2:1))); };
+    const rk2=f=>{ const aa=f.asset||f.category||""; const isBondEq=(aa==="债券型")&&(f.maxMdd!=null&&f.maxMdd<DEF_MDD);
+      return EQ.indexOf(aa)>=0?0:(isBondEq?1:(aa==="债券型"?4:(aa==="货币型"?3:(aa==="黄金"?2:1)))); };
     rest.sort((x,y)=> (rk2(y)-rk2(x)) || ((y.score||0)-(x.score||0)));
     for(const f of rest){ if(picked.length>=want) break; picked.push(f); }
   }
