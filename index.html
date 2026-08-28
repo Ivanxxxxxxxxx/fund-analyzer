@@ -647,10 +647,12 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     <div class="card">
       <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-sparkles"/></svg></span>智能配置推荐（结合当前市场环境）
         <span style="margin-left:auto" class="row">
+          <button class="btn-ghost btn-sm" onclick="loadBacktest()" title="用修复后的多因子逻辑在 6/12/24 个月前选基、模拟持有至今，验证推荐是否真的有用">📈 推荐效果回测</button>
           <button class="btn-primary btn-sm" onclick="loadRecommend()">🔄 生成推荐</button>
         </span>
       </h3>
       <div id="recoBox"><div class="empty">点击「生成推荐」，工具将抓取沪深300等指数判断市场温度，给出股/债/货/QDII 配置比例与精选基金。生成后弹窗内可一键配置建仓。</div></div>
+      <div id="btBox"></div>
     </div>
 
     <!-- 单基金买入诊断 -->
@@ -1965,6 +1967,38 @@ function renderTrend(dates, portCum, benchCum, benchName){
   });
 }
 
+// ---------------- 推荐效果回测：验证推荐逻辑是否“有用” ----------------
+// 用修复后的多因子逻辑分别在 6/12/24 个月前按资产类别选基、按推荐配置加权持有至今，
+// 与沪深300、等权全宇宙对比；结果后端缓存 12 小时，首次约 1-2 分钟。
+async function loadBacktest(){
+  const box=document.getElementById("btBox");
+  if(!box) return;
+  box.innerHTML='<div class="empty" style="text-align:left">⏳ 正在回测：用修复后的多因子逻辑（风险调整收益主导、去追涨、估值/均值回归买点）分别在 6/12/24 个月前选基并模拟持有至今…首次约需 1-2 分钟，之后 12 小时内秒出。</div>';
+  try{
+    const d=await api("/api/recommend-backtest", 180000).catch(e=>({ok:false,error:String(e)}));
+    if(!d.ok){ box.innerHTML='<div class="empty">回测失败：'+(d.error||"未知错误")+'</div>'; return; }
+    const rows=(d.results||[]).map(r=>{
+      const pr=r.portRet, br=r.benchRet, ur=r.univRet;
+      const excess=(pr!=null&&br!=null)?(pr-br):null;
+      const cls=v=>v==null?"var(--muted)":(v>=0?"var(--up)":"var(--down)");
+      const eCls=excess==null?"var(--muted)":(excess>=0?"var(--up)":"var(--down)");
+      const pickTxt=(r.picks||[]).map(p=>
+        `<span style="white-space:nowrap">${p.asset} <b>${p.name}</b> ${p.fwdRet!=null?`(<span style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"}">${p.fwdRet>=0?"+":""}${p.fwdRet}%</span>)`:""}</span>`
+      ).join(" · ")||"—";
+      return `<tr>
+        <td>${r.label}<br><span class="muted" style="font-size:11px">锚点 ${r.asof||"—"}</span></td>
+        <td class="num" style="color:${cls(pr)};font-weight:700">${pr!=null?(pr>=0?"+":"")+pr+"%":"—"}</td>
+        <td class="num" style="color:${cls(br)}">${br!=null?(br>=0?"+":"")+br+"%":"—"}</td>
+        <td class="num" style="color:${eCls};font-weight:700">${excess!=null?(excess>=0?"+":"")+excess+"pp":"—"}</td>
+        <td class="num" style="color:${cls(ur)}">${ur!=null?(ur>=0?"+":"")+ur+"%":"—"}</td>
+        <td style="font-size:11.5px;line-height:1.6;max-width:320px">${pickTxt}</td>
+      </tr>`;
+    }).join("");
+    box.innerHTML=`<div class="note" style="margin:10px 0 6px"><svg class="i"><use href="#i-trending-up"/></svg> <b>推荐效果回测</b>：<span class="muted">${d.method||""} 生成于 ${d.generatedAt||"—"}</span></div>
+      <div class="table-scroll"><table><thead><tr><th>持有周期</th><th class="num">按推荐配置组合收益</th><th class="num">沪深300</th><th class="num">超额</th><th class="num">等权全宇宙</th><th>当时精选基金（类别·前瞻收益）</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }catch(e){ box.innerHTML='<div class="empty">回测失败：'+(e.message||e)+'</div>'; }
+}
+
 // ---------------- 智能配置推荐 ----------------
 async function loadRecommend(){
   const box=document.getElementById("recoBox");
@@ -2006,7 +2040,8 @@ async function loadRecommend(){
       return `<div class="reco-fund" onclick="addByCode('${f.code}')" title="点击加入组合">
         <div class="rf-head"><span class="rf-code">${f.code}</span><span class="rf-name">${f.name}</span>${peerTxt}
           <button class="rf-sel" id="sel-${f.code}" onclick="event.stopPropagation();toggleSel('${f.code}')">选入配资</button>
-          <span class="badge" style="color:${vc};border-color:${vc}">${f.verdict}</span></div>
+          <span class="badge" style="color:${vc};border-color:${vc}">${f.verdict}</span>
+          ${f.buySignal?`<span class="badge" style="color:${f.buySignal==="低估布局"||f.buySignal==="回撤布局"?"var(--good)":(f.buySignal==="偏高谨慎"?"var(--warn)":"var(--muted)")};border-color:${f.buySignal==="低估布局"||f.buySignal==="回撤布局"?"var(--good)":(f.buySignal==="偏高谨慎"?"var(--warn)":"var(--muted)")}">${f.buySignal}</span>`:""}</div>
         <div class="rf-meta"><span>综合评分 ${f.score}</span><span>建议配置 ${(f.weight*100).toFixed(0)}%</span><span>估值 ${valTxt}</span>
           <span>1年盈利 <b style="color:${f.prob12==null?"var(--muted)":(f.prob12>=0.6?"#34d399":f.prob12>=0.45?"#f0a23a":"#fb7185")}">${f.prob12==null?"—":(f.prob12*100).toFixed(0)+"%"}</b></span></div>
         <ul class="rf-reasons">${rsnList}</ul></div>`;
