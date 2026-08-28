@@ -205,6 +205,18 @@ table.plan th{color:var(--muted);font-weight:600}
 .ov-p-row label{color:var(--muted);font-size:11px;font-weight:600}
 .ov-p-row input,.ov-p-row select{width:auto;max-width:110px;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:13px;font-weight:600}
 .ov-p-row select{max-width:130px}
+/* 决策区排版：推荐(主) + 诊断(次) 非等宽主次结构，窄屏自动单列 */
+.decision-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:12px;align-items:start}
+@media(max-width:1080px){ .decision-grid{grid-template-columns:1fr} }
+/* 诊断卡输入行：窄列内自动换行，不挤成一团 */
+.add-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.add-bar .add-input-wrap{flex:1 1 200px;min-width:0}
+/* 投资计划：计划基金 chips（可增删） */
+.pf-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.pf-chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;background:rgba(232,179,57,.10);border:1px solid rgba(232,179,57,.32);border-radius:999px;padding:3px 4px 3px 10px;color:var(--text);max-width:100%}
+.pf-chip .pf-w{color:var(--gold);font-weight:700}
+.pf-chip b{cursor:pointer;color:var(--muted);font-weight:700;padding:0 5px;border-radius:999px}
+.pf-chip b:hover{color:#fb7185;background:rgba(251,113,133,.14)}
 .bt-win{margin-top:8px;font-size:12px;background:rgba(52,211,153,.06);border:1px dashed rgba(52,211,153,.3);border-radius:8px;padding:7px 10px}
 /* ---------- 推荐卡 ---------- */
 .reco-cat{margin:10px 0 4px}
@@ -611,6 +623,7 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     <div id="trendCanvasWrap" class="trend-wrap" style="display:none"><canvas id="trendCanvas"></canvas>
       <div style="display:flex;gap:18px;justify-content:center;margin-top:6px;font-size:12.5px;color:#f1f0ea">
         <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f2c14e;vertical-align:middle;margin-right:5px"></span>我的组合</span>
+        <span id="legendPlan" style="display:none"><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#a78bfa;vertical-align:middle;margin-right:5px"></span>投资计划</span>
         <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#4da3ff;vertical-align:middle;margin-right:5px"></span>沪深300</span>
       </div>
     </div>
@@ -679,8 +692,8 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
   <section class="view fold open" id="view-tools" data-key="tools">
   <div class="view-h"><span class="vt"><svg class="i"><use href="#i-compass"/></svg> 智能决策</span><span class="vs" id="sumTools">配置推荐 · 买入诊断</span><span class="vline"></span></div>
 <div class="fold-b"><div><div class="fold-inner">
-<!-- 智能工具区：推荐 + 诊断 并排 -->
-  <div class="grid cols-2">
+<!-- 智能工具区：推荐（主，更宽）+ 诊断（次）；窄屏自动单列 -->
+  <div class="decision-grid">
     <!-- 智能配置推荐 -->
     <div class="card">
       <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-sparkles"/></svg></span>智能配置推荐（结合当前市场环境）
@@ -1445,7 +1458,48 @@ async function renderPlanOverview(){
   });
 }
 
-// ② 智能决策「投资计划概览」：计划基金/本金/定投/期限都可改，走势随计划联动
+// ② 智能决策「投资计划概览」：计划基金可手动增删，本金/定投/期限可改，走势随计划联动
+// 计划基金来源优先级：手动添加的(fp_sim_funds) > 一键配置选出的 > 选入配资的 > 推荐级组合
+function getPlanFunds(){
+  const manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
+  if(manual.length) return manual;
+  const rf=Object.values(window.__recoFunds||{});
+  let codes=[];
+  if(window.__lastSetupCodes&&window.__lastSetupCodes.length) codes=[...window.__lastSetupCodes];
+  else if(typeof selFunds!=="undefined"&&selFunds&&selFunds.size) codes=[...selFunds.keys()];
+  else codes=rf.filter(f=>f.verdict==="推荐").map(f=>f.code);
+  return codes.map(c=>{const f=rf.find(x=>x.code===c); return {code:c,name:f?f.name:c,weight:(f&&f.weight)||0.05};});
+}
+function isPlanManual(){ return (JSON.parse(localStorage.getItem("fp_sim_funds")||"[]")).length>0; }
+async function addPlanFund(){
+  const el=document.getElementById("planFundInput"); if(!el) return;
+  const code=(el.value||"").trim();
+  if(!/^\d{6}$/.test(code)){ toast("请输入 6 位基金代码"); return; }
+  let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
+  if(manual.find(f=>f.code===code)){ toast("计划里已经有这只基金了"); return; }
+  const f=await api("/api/fund/"+code).catch(()=>({}));
+  if(!f.ok||!f.name){ toast("未找到基金："+code); return; }
+  // 未手动设置过 → 先把当前自动来源固化进手动列表，再加入新的（避免"加了1只只剩1只"）
+  if(!manual.length) manual=getPlanFunds();
+  manual.push({code:code, name:f.name, weight:1});
+  const tot=manual.reduce((s,x)=>s+(+x.weight||1),0)||1;
+  manual=manual.map(x=>({code:x.code, name:x.name, weight:+((+x.weight||1)/tot).toFixed(4)}));
+  localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
+  el.value=""; renderPlanSim(); toast("已加入投资计划："+f.name);
+}
+function delPlanFund(code){
+  let manual=JSON.parse(localStorage.getItem("fp_sim_funds")||"[]");
+  if(!manual.length) manual=getPlanFunds();
+  manual=manual.filter(f=>f.code!==code);
+  const tot=manual.reduce((s,x)=>s+(+x.weight||1),0)||1;
+  manual=manual.map(x=>({code:x.code, name:x.name, weight:+((+x.weight||1)/tot).toFixed(4)}));
+  localStorage.setItem("fp_sim_funds", JSON.stringify(manual));
+  renderPlanSim();
+}
+function clearPlanFunds(){
+  localStorage.removeItem("fp_sim_funds");
+  renderPlanSim(); toast("已清空计划基金，改为自动来源（一键配置 / 推荐组合）");
+}
 async function renderPlanSim(){
   const box=document.getElementById("planSimBox"); if(!box) return;
   const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
@@ -1453,23 +1507,25 @@ async function renderPlanSim(){
   const months=Math.max(1,Math.min(360,+sim.months||60));
   const dca=Math.max(0,+sim.dca||0);
   const freq=(JSON.parse(localStorage.getItem("fp_dca")||"{}")).freq||"month";
-  // 计划基金：优先「一键配置建仓」选出的组合 → 其次我选入配资的 → 再其次推荐级组合
-  const rf=Object.values(window.__recoFunds||{});
-  let codes=[];
-  if(window.__lastSetupCodes&&window.__lastSetupCodes.length) codes=[...window.__lastSetupCodes];
-  else if(typeof selFunds!=="undefined"&&selFunds&&selFunds.size) codes=[...selFunds.keys()];
-  else codes=rf.filter(f=>f.verdict==="推荐").map(f=>f.code);
-  const funds=codes.map(c=>{const f=rf.find(x=>x.code===c); return {code:c,name:f?f.name:c,value:Math.max(1,+(f&&f.weight||0.05)*10000)};});
-  // 参数编辑区
+  const pf=getPlanFunds();
+  const funds=pf.map(f=>({code:f.code,name:f.name,value:Math.max(1,+(f.weight||0.05)*10000)}));
+  // 参数编辑区 + 计划基金（可增删）
   const pe=document.getElementById("planSimParams");
   if(pe){
-    const cnt=funds.length;
+    const chips=pf.length?pf.map(f=>`<span class="pf-chip">${f.name||f.code}<span class="pf-w">${Math.round((+f.weight||0)*100)}%</span><b onclick="delPlanFund('${f.code}')" title="从计划移除">✕</b></span>`).join(""):'<span class="muted" style="font-size:11px">暂无</span>';
     pe.innerHTML=`<div class="ov-p-row">
       <label>计划本金 ¥</label><input id="simP" class="num" type="number" min="0" step="1000" value="${P}" onchange="savePlanSim()">
       <label>${FREQ[freq].label}定投 ¥</label><input id="simD" class="num" type="number" min="0" step="100" value="${dca}" onchange="savePlanSim()">
       <label>持有</label><input id="simY" class="num" type="number" min="1" max="360" value="${months}" onchange="savePlanSim()"><span class="muted">个月</span>
-      <span class="muted" style="font-size:11px">计划基金：${cnt?cnt+" 只（"+(funds.map(f=>f.name||f.code).slice(0,3).join("、"))+(cnt>3?" 等":"")+"）":"未选择——去「生成推荐 → 一键配置」选定基金后自动带入"}</span>
-    </div>`;
+    </div>
+    <div class="ov-p-row" style="margin-top:7px">
+      <label>计划基金</label>
+      <input id="planFundInput" class="num" type="text" placeholder="输入基金代码加入计划" style="max-width:180px" onkeydown="if(event.key==='Enter')addPlanFund()">
+      <button class="btn-ghost btn-sm" onclick="addPlanFund()">+ 加入</button>
+      <button class="btn-ghost btn-sm" onclick="clearPlanFunds()">清空</button>
+      <span class="muted" style="font-size:11px">${isPlanManual()?"手动设置":"自动（一键配置/推荐）"}</span>
+    </div>
+    <div class="pf-chips">${chips}</div>`;
   }
   await renderOverviewTo(box,"planSimCanvas",{
     funds:funds, P:P, A:dca, months:months,
@@ -1684,7 +1740,7 @@ async function analyze(){
     renderSugg({w,holdings,corrAvg,maxDD,sharpe,risk,divScore,corr,score});
     loadOptimize();
     renderSignals(computeSignals());
-    renderTrend(trendDates, portCum, benchCum, benchName);
+    renderTrend(trendDates, portCum, benchCum, benchName, await calcPlanCum(trendDates));
     setDataStamp();
     window.__score=score; window.__risk=risk;
     updateSummaries();
@@ -2061,13 +2117,49 @@ function renderSignals(rows){
 // ---------------- 组合走势折线图 ----------------
 let trendChart=null;
 let advCharts={};
-function renderTrend(dates, portCum, benchCum, benchName){
+// 投资计划组合的累计收益序列（与走势图 dates 轴对齐）：各基金自首个有效净值起算累计收益，按计划权重加权
+async function calcPlanCum(dates){
+  try{
+    const pf=(typeof getPlanFunds==="function")?getPlanFunds():[];
+    if(!pf.length||!dates||!dates.length) return null;
+    if(!window.__histCache) window.__histCache={};
+    for(const f of pf){
+      if(!window.__histCache[f.code]){
+        const r=await api("/api/history/"+f.code+"?days=730").catch(()=>({data:[]}));
+        window.__histCache[f.code]=r.data||[];
+      }
+    }
+    const tot=pf.reduce((s,f)=>s+(+f.weight||1),0)||1;
+    const w=pf.map(f=>(+f.weight||1)/tot);
+    const maps=pf.map(f=>{const m={};(window.__histCache[f.code]||[]).forEach(d=>{if(d&&d.date!=null)m[d.date]=d.nav;});return m;});
+    const last=pf.map(()=>null), base=pf.map(()=>null), out=[];
+    for(const dt of dates){
+      let acc=0, ok=0;
+      for(let i=0;i<pf.length;i++){
+        const v=maps[i][dt]; if(v!=null) last[i]=v;
+        if(last[i]!=null){
+          if(base[i]===null) base[i]=last[i];
+          if(base[i]>0){ acc += w[i]*(last[i]/base[i]-1); ok++; }
+        }
+      }
+      out.push(ok? +(acc*100).toFixed(2) : null);
+    }
+    return out.some(v=>v!=null)?out:null;
+  }catch(e){ return null; }
+}
+function renderTrend(dates, portCum, benchCum, benchName, planCum){
   const box=document.getElementById("trendBox");
   const wrap=document.getElementById("trendCanvasWrap");
   if(!portCum || !portCum.length){ box.innerHTML='<div class="empty">暂无可绘制数据。</div>'; wrap.style.display="none"; return; }
   box.innerHTML=""; wrap.style.display="block";
+  const _lp=document.getElementById("legendPlan");
+  if(_lp) _lp.style.display=(planCum&&planCum.some(v=>v!=null))?"inline-flex":"none";
   const ds=[{label:"我的组合",data:portCum.map(v=>+(v*100).toFixed(2)),borderColor:"#f2c14e",
     backgroundColor:"rgba(242,193,78,.12)",fill:true,tension:.25,pointRadius:0}];
+  // 投资计划组合（决策区设定的计划基金）：紫色虚线，与"我的实际持仓"对比看计划是否更优
+  if(planCum && planCum.some(v=>v!=null))
+    ds.push({label:"投资计划",data:planCum.map(v=>v==null?null:+(v*100).toFixed(2)),
+      borderColor:"#a78bfa",borderDash:[6,4],borderWidth:2,backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0});
   if(benchCum && benchCum.some(v=>v!=null))
     ds.push({label:benchName,data:benchCum.map(v=>v==null?null:+(v*100).toFixed(2)),
       borderColor:"#4da3ff",backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0});
