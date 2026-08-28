@@ -53,6 +53,9 @@ body{
 .nav{
   width:var(--nav-w);flex:none;padding:14px 10px;display:flex;flex-direction:column;gap:6px;
   border-right:1px solid var(--line);background:rgba(13,13,16,.5);
+  /* 侧边栏常驻：页面下滑时工具栏固定在左侧，不用滑回顶部再切换 */
+  position:sticky;top:0;align-self:flex-start;height:calc(100vh - var(--tb-h));
+  overflow-y:auto;z-index:30;backdrop-filter:blur(8px);
 }
 .nav-item{
   display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 4px;border-radius:12px;
@@ -631,10 +634,11 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     </div>
     <div id="trendBox"><div class="empty">点击「开始分析」后展示组合 vs 沪深300 的累计收益曲线。</div></div>
     <div id="trendCanvasWrap" class="trend-wrap" style="display:none"><canvas id="trendCanvas"></canvas>
-      <div style="display:flex;gap:18px;justify-content:center;margin-top:6px;font-size:12.5px;color:#f1f0ea">
-        <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f2c14e;vertical-align:middle;margin-right:5px"></span>我的组合</span>
-        <span id="legendPlan" style="display:none"><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#a78bfa;vertical-align:middle;margin-right:5px"></span>投资计划</span>
-        <span><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#4da3ff;vertical-align:middle;margin-right:5px"></span>沪深300</span>
+      <div id="trendDiag" style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center;line-height:1.7"></div>
+      <div id="trendLegend" style="display:flex;gap:14px 18px;justify-content:center;flex-wrap:wrap;margin-top:4px;font-size:12px;color:#f1f0ea;line-height:1.7">
+        <span id="legendCombo"><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#f2c14e;vertical-align:middle;margin-right:6px"></i><b id="legendComboTxt">我的组合</b></span>
+        <span id="legendPlan" style="display:none"><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#a78bfa;vertical-align:middle;margin-right:6px"></i><b id="legendPlanTxt">投资计划</b></span>
+        <span id="legendBench"><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#4da3ff;vertical-align:middle;margin-right:6px"></i><b id="legendBenchTxt">沪深300</b></span>
       </div>
     </div>
   </div>
@@ -1650,6 +1654,78 @@ async function renderPlanSim(){
     sourceTxt:"按<b>投资计划</b>选定组合", chartKey:"planSimChart",
     emptyTxt:"还没有计划基金：先点「生成推荐 → 一键配置建仓」，计划概览会自动带入你选定的基金组合。"
   });
+  // 「计划组合诊断」：分析投资计划里的基金组合（与持仓分析同源算法），点按钮才拉历史净值，避免每次渲染都请求
+  box.insertAdjacentHTML("beforeend", `<div class="plan-analysis" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
+      <div class="ov-h" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+        <svg class="i"><use href="#i-bar-chart"/></svg><b>计划组合诊断</b>
+        <button class="btn-ghost btn-sm" onclick="analyzePlan()">🔍 分析计划组合</button>
+        <span class="muted" style="font-size:11px">基于计划基金历史净值，与持仓分析同源算法</span>
+      </div>
+      <div id="planAnalysisBox"><div class="empty" style="font-size:12px">点「分析计划组合」查看该计划的风险 / 波动 / 相关性 / 健康分诊断</div></div>
+    </div>`);
+}
+async function analyzePlan(){
+  const box=document.getElementById("planAnalysisBox"); if(!box) return;
+  const pf=getPlanFunds();
+  if(!pf.length){ box.innerHTML='<div class="empty">投资计划里还没有基金：去上方加入或点「加入投资计划」。</div>'; return; }
+  box.innerHTML='<div class="empty">正在拉取计划基金历史净值、计算风险指标…</div>';
+  const codes=pf.map(f=>f.code);
+  const wmap={}; pf.forEach(f=>wmap[f.code]=+f.weight||0);
+  const weights=codes.map(c=>wmap[c]);
+  if(!window.__histCache) window.__histCache={};
+  for(const c of codes){ if(window.__histCache[c]) continue; const r=await api("/api/history/"+c+"?days=730").catch(()=>({data:[]})); window.__histCache[c]=r.data||[]; }
+  const hist=codes.map(c=>window.__histCache[c]||[]);
+  if(hist.some(h=>!h||h.length<20)){ box.innerHTML='<div class="empty">部分计划基金历史不足 20 个交易日，无法计算风险指标。</div>'; return; }
+  const allDates=new Set(); codes.forEach((c,i)=>hist[i].forEach(d=>allDates.add(d.date)));
+  const dates=[...allDates].sort();
+  const series=hist.map(h=>{ const m={}; h.forEach(d=>m[d.date]=d.nav); const arr=[]; let last=null; dates.forEach(dt=>{ if(m[dt]!=null) last=m[dt]; arr.push(last); }); return arr; });
+  const rets=series.map(dailyReturns);
+  const wsum=(weights.reduce((a,b)=>a+b,0))||1; const W=weights.map(x=>x/wsum);
+  const L=Math.min(...rets.map(r=>r.length));
+  const pr=[]; for(let t=0;t<L;t++){ let r=0; for(let i=0;i<codes.length;i++) r+=W[i]*rets[i][rets[i].length-L+t]; pr.push(r); }
+  const mean=pr.reduce((a,b)=>a+b,0)/L;
+  const variance=pr.reduce((a,b)=>a+(b-mean)**2,0)/(L-1);
+  const volDaily=Math.sqrt(variance);
+  const annVol=volDaily*Math.sqrt(252);
+  const growth=pr.reduce((acc,r)=>acc*(1+r),1);
+  const annRet=Math.pow(growth,252/L)-1;
+  const rf=0.02, sharpe=annVol>0?(annRet-rf)/annVol:0;
+  let peak=1,maxDD=0; pr.forEach(r=>{ const v=peak*(1+r); if(v>peak)peak=v; const dd=v/peak-1; if(dd<maxDD)maxDD=dd; });
+  const N=codes.length; const corr=[]; for(let i=0;i<N;i++){corr[i]=[];for(let j=0;j<N;j++)corr[i][j]=i===j?1:pearson(rets[i].slice(0,L),rets[j].slice(0,L));}
+  let offSum=0,offCnt=0; for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){offSum+=corr[i][j];offCnt++;}
+  const corrAvg=offCnt?offSum/offCnt:0;
+  const hhi=W.reduce((s,x)=>s+x*x,0); const divScore=Math.max(0,Math.min(100,(1-hhi)*100));
+  const sharpeScore=Math.max(0,Math.min(100,sharpe/2*100));
+  const corrScore=Math.max(0,Math.min(100,(1-corrAvg)*100));
+  const score=Math.round(0.35*divScore+0.35*sharpeScore+0.30*corrScore);
+  let risk="",rc="";
+  if(annVol<0.08){risk="低";rc="good";} else if(annVol<0.15){risk="中低";rc="good";}
+  else if(annVol<0.25){risk="中";rc="warn";} else if(annVol<0.35){risk="中高";rc="bad";}
+  else {risk="高";rc="bad";}
+  const col=v=>v>=0?'var(--up)':'var(--down)';
+  const lvlColor=v=>v<0.1?'var(--good)':v<0.2?'var(--warn)':'var(--bad)';
+  const card=(label,value,color,hint)=>`<div class="kpi"><span class="label">${label}</span><span class="value" style="color:${color||'var(--text)'}">${value}</span>${hint?`<span class="hint">${hint}</span>`:''}</div>`;
+  const years=(L/252).toFixed(1);
+  box.innerHTML=`
+    <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr));margin-top:10px">
+      ${card('年化收益率', (annRet>=0?'+':'')+(annRet*100).toFixed(1)+'%', col(annRet), '基于近'+years+'年')}
+      ${card('年化波动率', (annVol*100).toFixed(1)+'%', lvlColor(annVol), annVol<0.1?'低波动':annVol<0.2?'中等波动':'高波动')}
+      ${card('历史最大回撤', (maxDD*100).toFixed(1)+'%', 'var(--down)', '越长越难回本')}
+      ${card('夏普比率', sharpe.toFixed(2), sharpe>=1?'var(--good)':sharpe>=0.5?'var(--warn)':'var(--bad)', sharpe>=1?'优秀':sharpe>=0.5?'良好':'偏弱')}
+      ${card('组合风险', risk, 'var(--'+rc+')', '按年化波动划分')}
+      ${card('平均相关性', corrAvg.toFixed(2), corrAvg>0.7?'var(--bad)':'var(--good)', corrAvg>0.7?'基金太雷同':'分散良好')}
+      ${card('分散度', divScore.toFixed(0), divScore>60?'var(--good)':'var(--warn)', '1-赫芬达尔')}
+      ${card('组合健康分', score, score>=70?'var(--good)':score>=50?'var(--warn)':'var(--bad)', '综合评分')}
+    </div>
+    <div class="note" style="margin-top:8px">诊断：${planDiag(annRet,annVol,maxDD,corrAvg,score,rc)}</div>`;
+}
+function planDiag(annRet,annVol,maxDD,corrAvg,score,rc){
+  const parts=[];
+  parts.push('该计划组合历史年化'+(annRet>=0?'正收益 '+ (annRet*100).toFixed(1) +'%':'亏损 '+(annRet*100).toFixed(1)+'%')+'，波动 '+ (annVol*100).toFixed(1) +'%，属'+rc+'风险');
+  parts.push(corrAvg>0.7?('基金间相关性偏高（'+corrAvg.toFixed(2)+'），分散效果有限，建议增配低相关资产'):('基金相关性适中（'+corrAvg.toFixed(2)+'），分散配置合理'));
+  if(maxDD<-0.3) parts.push('最大回撤达 '+(maxDD*100).toFixed(0)+'%，需评估自身承受能力');
+  parts.push(score>=70?'综合健康分较高，可重点考虑':score>=50?'综合健康分中等，可优化':'综合健康分偏低，建议调整权重或替换弱基');
+  return parts.join('；')+'。';
 }
 function savePlanSim(){
   const P=Math.max(0,+document.getElementById("simP").value||0);
@@ -2278,6 +2354,25 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
   const sArr=a=>pick.map(i=>a[i]);
   const _lp=document.getElementById("legendPlan");
   if(_lp) _lp.style.display=(planCum&&planCum.some(v=>v!=null))?"inline-flex":"none";
+  // 用底部 HTML 图例替代 Chart.js 内部图例：避免超长「终值」文字在窄容器被挤出、并挤占曲线区
+  const lastOf=a=>{ if(!a) return null; for(let i=a.length-1;i>=0;i--){ const v=a[i]; if(v!=null&&isFinite(v)) return v; } return null; };
+  const _pc=lastOf(portCum), _bc=lastOf(benchCum), _plc=lastOf(planCum);
+  const fmtPct=v=>v==null?"":("（终值 "+(v>=0?"+":"")+v.toFixed(1)+"%）");
+  const _ct=document.getElementById("legendComboTxt"); if(_ct) _ct.textContent="我的组合"+fmtPct(_pc);
+  const _bt=document.getElementById("legendBenchTxt"); if(_bt) _bt.textContent=benchName+fmtPct(_bc);
+  const _pt=document.getElementById("legendPlanTxt"); if(_pt) _pt.textContent="投资计划"+fmtPct(_plc);
+  // 诊断行：数据点数/区间/各方累计收益——曲线若显"平"，可据此判断是数据不足还是组合本身波动小
+  const _dg=document.getElementById("trendDiag");
+  if(_dg){
+    const lastOf=a=>{ if(!a) return null; for(let i=a.length-1;i>=0;i--){ const v=a[i]; if(v!=null&&isFinite(v)) return v; } return null; };
+    const nn=v=>(v==null)?"—":((v>=0?"+":"")+v.toFixed(1)+"%");
+    const pc=lastOf(portCum), bc=lastOf(benchCum), plc=lastOf(planCum);
+    const flat=(pc!=null&&Math.abs(pc)<0.5);
+    _dg.innerHTML=`数据 ${sDates.length} 个交易日（${sDates[0]||"—"} ~ ${sDates[sDates.length-1]||"—"}）· 我的组合累计 <b style="color:#f2c14e">${nn(pc)}</b>`
+      + (plc!=null?` · 投资计划 <b style="color:#a78bfa">${nn(plc)}</b>`:"")
+      + ` · ${benchName} <b style="color:#4da3ff">${nn(bc)}</b>`
+      + (flat?`<br><span style="color:var(--warn)">组合波动极小（多为货币/短债类资产），曲线接近水平属正常；若持仓含权益基金却仍为平线，请点「刷新」重拉净值。</span>`:"");
+  }
   // 双 Y 轴：组合/计划用左轴、沪深300 用右轴——否则组合涨 200%+ 时基准的 20% 波动会被压成一条贴底直线
   const ds=[{label:"我的组合",data:sArr(portCum.map(v=>+(v*100).toFixed(2))),borderColor:"#f2c14e",
     backgroundColor:"rgba(242,193,78,.12)",fill:true,tension:.25,pointRadius:0,yAxisID:"y"}];
@@ -2293,13 +2388,7 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
     type:"line",
     data:{labels:sDates,datasets:ds},
     options:{maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
-      plugins:{legend:{labels:{color:"#f1f0ea",
-          generateLabels:chart=>chart.data.datasets.map((d,i)=>{
-            const last=d.data[d.data.length-1];
-            return {text:d.label+(last!=null?"（终值 "+(last>=0?"+":"")+last+"%）":""),
-              fillStyle:d.borderColor,strokeStyle:d.borderColor,lineWidth:2,fontColor:"#f1f0ea",
-              hidden:!chart.isDatasetVisible(i),index:i};
-          })}},
+      plugins:{legend:{display:false},
         tooltip:{callbacks:{label:c=>c.dataset.label+": "+(c.parsed.y==null?"—":(c.parsed.y>=0?"+":"")+c.parsed.y+"%")}}},
       scales:{x:{ticks:{color:"#9896a6",maxTicksLimit:8},grid:{color:"rgba(255,255,255,.05)"}},
         y:{position:"left",ticks:{color:"#f2c14e",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,.05)"}},
@@ -2314,12 +2403,11 @@ let __btMode="reco";
 async function loadBacktest(mode){
   const body=document.getElementById("btModalBody"); if(!body) return;
   if(mode) __btMode=mode;
-  const pickLen=(window.__lastSetupCodes&&window.__lastSetupCodes.length)?window.__lastSetupCodes.length:
-                ((window.selFunds&&window.selFunds.size)?window.selFunds.size:0);
+  const planLen=(typeof getPlanFunds==="function")?getPlanFunds().length:0;
   const hLen=(typeof holdings!=="undefined"?holdings.filter(x=>x&&/^\d{6}$/.test(String(x.code))).length:0);
   const sw=`<div class="bt-switch">
     <button class="${__btMode==="reco"?"on":""}" onclick="loadBacktest('reco')">推荐组合${window.__recoCount?`（${window.__recoCount}只）`:""}</button>
-    <button class="${__btMode==="picked"?"on":""}" onclick="loadBacktest('picked')">我选的${pickLen?`（${pickLen}只）`:""}</button>
+    <button class="${__btMode==="picked"?"on":""}" onclick="loadBacktest('picked')">投资计划${planLen?`（${planLen}只）`:""}</button>
     <button class="${__btMode==="holdings"?"on":""}" onclick="loadBacktest('holdings')">我的持仓${hLen?`（${hLen}只）`:""}</button>
   </div>`;
   let codes=[], weights=null, subTxt="";
@@ -2332,11 +2420,11 @@ async function loadBacktest(mode){
     weights=ws.map(w=>+(w/wsum).toFixed(4));
     subTxt=`我的持仓组合 · ${codes.length} 只 · 按当前市值权重加权`;
   }else if(__btMode==="picked"){
-    codes=(window.__lastSetupCodes&&window.__lastSetupCodes.length)?[...window.__lastSetupCodes]:
-          ((window.selFunds&&window.selFunds.size)?[...window.selFunds.keys()]:[]);
-    if(!codes.length){ body.innerHTML=sw+'<div class="bt-sub">还没有选出的组合：在推荐弹窗里「一键配置建仓」，或点推荐卡片「选入配资」后，再来回测。</div>'; return; }
+    // 「投资计划」= 决策区投资计划的基金组合（计划改了，回测跟着变）
+    codes=(typeof getPlanFunds==="function")?getPlanFunds().map(f=>f.code):[];
+    if(!codes.length){ body.innerHTML=sw+'<div class="bt-sub">投资计划里还没有基金：去「决策 → 投资计划概览」加入基金（或生成推荐后点「加入投资计划」）再来回测。</div>'; return; }
     const nonRec=codes.filter(c=>{const f=window.__recoFunds&&window.__recoFunds[c]; return f&&f.verdict&&f.verdict!=="推荐";});
-    subTxt=`你选出的 ${codes.length} 只基金组合 · 等权`+(nonRec.length?` · ⚠️ 含 ${nonRec.length} 只未达推荐标准的基金（过去表现可能不佳）`:"");
+    subTxt=`投资计划 · ${codes.length} 只基金组合 · 等权`+(nonRec.length?` · ⚠️ 含 ${nonRec.length} 只未达推荐标准的基金（过去表现可能不佳）`:"");
   }else{   // reco：推荐组合 = 当前「推荐」级基金（与一键配置 buildCombo 同源，宁缺毋滥）
     const recs=Object.values(window.__recoFunds||{}).filter(f=>f.verdict==="推荐");
     if(!recs.length){
