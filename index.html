@@ -631,6 +631,7 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-briefcase"/></svg></span>持仓明细（市值 / 占比 / 成本 / 盈亏）
       <span style="margin-left:auto" class="row">
         <span class="pill" id="dataStamp" style="border-color:rgba(52,211,153,.35);color:#7fe3a8">数据更新：—</span>
+        <button class="btn-ghost btn-sm" onclick="backtestHoldings()" title="模拟从过去买入你当前持仓组合（按市值权重）持有至今，对比沪深300"><svg class="i"><use href="#i-trending-up"/></svg> 组合回测</button>
         <button class="btn-ghost btn-sm" onclick="exportJSON()"><svg class="i"><use href="#i-download"/></svg> 导出</button>
         <button class="btn-ghost btn-sm" onclick="importJSON()"><svg class="i"><use href="#i-upload"/></svg> 导入</button>
         <button class="btn-ghost btn-sm" onclick="fillSample()"><svg class="i"><use href="#i-wand"/></svg> 示例</button>
@@ -1986,21 +1987,31 @@ function renderTrend(dates, portCum, benchCum, benchName){
   });
 }
 
-// ---------------- 推荐效果回测（独立弹窗） ----------------
-// 回测对象：优先「你选出的组合」（选入配资/一键配置建仓的基金），否则回测「推荐组合」
-//（各品类按修复后逻辑选最优、按推荐配置加权）。多锚点(6/12/24月)买入持有至今，对比沪深300。
+// ---------------- 组合/推荐效果回测（独立弹窗） ----------------
+// 回测对象：mode=holdings → 我的持仓组合（按市值权重）；否则优先「你选出的组合」
+//（选入配资/一键配置建仓的基金），再退到「推荐组合」。多锚点(6/12/24月)买入持有至今，对比沪深300。
 // 后端结果缓存 12 小时，首次约 1 分钟。
-async function loadBacktest(){
+async function loadBacktest(mode){
   const body=document.getElementById("btModalBody"); if(!body) return;
-  let codes=[];
-  if(window.selFunds && window.selFunds.size) codes=[...window.selFunds.keys()];
-  else if(window.__lastSetupCodes && window.__lastSetupCodes.length) codes=window.__lastSetupCodes;
+  let codes=[], weights=null;
   const sub=document.getElementById("btSub");
-  if(sub) sub.innerHTML = codes.length
-    ? `回测对象：<b>你选出的 ${codes.length} 只基金组合</b>（等权买入持有至今）· 与沪深300对比`
-    : `回测对象：<b>推荐组合</b>（各品类按修复后逻辑选最优、按推荐配置加权持有至今）· 与沪深300对比；
-       也可以在推荐弹窗里「一键配置建仓」选好基金后，回测会自动跟随你选的组合。`;
-  const q=codes.length?("?codes="+codes.join(",")):"";
+  if(mode==="holdings"){
+    const h=(typeof holdings!=="undefined"?holdings:[]).filter(x=>x&&/^\d{6}$/.test(String(x.code)));
+    if(!h.length){ body.innerHTML='<div class="empty">持仓里没有可回测的基金（需 6 位基金代码）。</div>'; if(sub) sub.innerHTML=""; return; }
+    codes=h.map(x=>String(x.code));
+    const ws=h.map(x=>Math.max(0,+x.value||0));
+    const wsum=ws.reduce((a,b)=>a+b,0)||1;
+    weights=ws.map(w=>+(w/wsum).toFixed(4));
+    if(sub) sub.innerHTML=`回测对象：<b>我的持仓组合</b>（${codes.length} 只，按当前市值权重加权）· 与沪深300对比；若持仓在锚点时尚未成立则不计入该周期。`;
+  }else{
+    if(window.selFunds && window.selFunds.size) codes=[...window.selFunds.keys()];
+    else if(window.__lastSetupCodes && window.__lastSetupCodes.length) codes=window.__lastSetupCodes;
+    if(sub) sub.innerHTML = codes.length
+      ? `回测对象：<b>你选出的 ${codes.length} 只基金组合</b>（等权买入持有至今）· 与沪深300对比`
+      : `回测对象：<b>推荐组合</b>（各品类按修复后逻辑选最优、按推荐配置加权持有至今）· 与沪深300对比；
+         也可以在推荐弹窗里「一键配置建仓」选好基金后，回测会自动跟随你选的组合。`;
+  }
+  const q=codes.length?("?codes="+codes.join(",")+(weights?"&weights="+weights.join(","):"")):"";
   body.innerHTML='<div class="empty" style="text-align:left">⏳ 正在回测：模拟从过去买入持有至今…首次约需 1 分钟，之后 12 小时内秒出。</div>';
   try{
     const d=await api("/api/recommend-backtest"+q, 180000).catch(e=>({ok:false,error:String(e)}));
@@ -2032,8 +2043,10 @@ async function loadBacktest(){
       <div class="note" style="margin-top:8px">买入价=买入日（或之前最近交易日）真实历史净值，卖出价=今日最新净值；全部来自天天基金真实数据，可在官网核对。仅验证历史样本，非收益承诺。</div>`;
   }catch(e){ body.innerHTML='<div class="empty">回测失败：'+(e.message||e)+'</div>'; }
 }
-function openBtModal(){ document.getElementById("btOverlay").classList.add("show"); loadBacktest(); }
+function openBtModal(mode){ document.getElementById("btOverlay").classList.add("show"); loadBacktest(mode||"auto"); }
 function closeBtModal(){ document.getElementById("btOverlay").classList.remove("show"); }
+// 组合回测：回测「我的持仓」里的基金组合（按当前市值权重）
+function backtestHoldings(){ openBtModal("holdings"); }
 
 // ---------------- 智能配置推荐 ----------------
 async function loadRecommend(){
