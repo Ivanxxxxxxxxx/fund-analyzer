@@ -2154,9 +2154,9 @@ async function loadRecommend(){
       <span class="muted" style="font-size:11px;font-weight:600">按「类别分散 + 综合分择优」选最优 N 只组合（A股权益为主 + 海外/债券分散），支持定投（日/周/月/年）</span>
     </div>
     <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
-      <div><div class="muted" style="font-size:11px;margin-bottom:4px">选几只（1-10）</div>
-        <select id="setupN2" style="width:84px;padding:8px 8px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px;font-weight:600">
-          ${Array.from({length:10},(_,i)=>`<option value="${i+1}" ${i+1===5?"selected":""}>${i+1} 只</option>`).join("")}
+      <div><div class="muted" style="font-size:11px;margin-bottom:4px">选几只（1-20，按市场自动配比）</div>
+        <select id="setupN2" onchange="updateComboPreview()" style="width:96px;padding:8px 8px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px;font-weight:600">
+          ${Array.from({length:20},(_,i)=>`<option value="${i+1}" ${i+1===5?"selected":""}>${i+1} 只</option>`).join("")}
         </select></div>
       <div><div class="muted" style="font-size:11px;margin-bottom:4px">本金（¥）</div>
         <input id="setupP2" type="number" value="100000" min="0" step="1000" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
@@ -2169,7 +2169,8 @@ async function loadRecommend(){
       <button class="btn-primary" onclick="quickSetupFromModal()" style="padding:9px 16px">⚡ 一键配置建仓</button>
       <button class="btn-ghost btn-sm" onclick="openAllocateFromReco()" style="padding:9px 16px">⚡ 一键配资（自选方案）</button>
     </div>
-    <div class="muted" style="font-size:11px;margin-top:6px">选基金：点下方基金卡片「选入配资」加入自选，然后点「一键配资」生成方案；或直接「一键配置建仓」自动按推荐选基。建仓后组合工作台「投资概览」将按本金/定投/持有时间实时生成复利曲线。</div>
+    <div id="comboPrev" class="note" style="margin-top:8px;padding:8px 10px;font-size:11.5px"></div>
+    <div class="muted" style="font-size:11px;margin-top:4px">组合按市场温度自动配比（弱市→债券/货币防守、牛市→权益进攻）；只从「推荐」级选，绝不硬凑近期表现差的谨慎级基金。</div>
   </div>`;
   // === 卡片 recoBox 改为简短摘要，完整内容塞进弹窗 ===
   const summaryHtml = `<div class="empty" style="text-align:left;padding:18px 14px">
@@ -2186,20 +2187,19 @@ async function loadRecommend(){
   if(mbody){
     mbody.innerHTML = `${setupHtml}${dynBanner}${warnBanner}<div class="note" style="margin-bottom:10px"><svg class="i"><use href="#i-bar-chart"/></svg> <b>市场环境：</b>${regimeTxt}</div>${probHtml}<div style="font-size:13px;font-weight:600;margin:6px 0">建议资产配置比例</div>${allocHtml}${valHtml}<div class="note" style="margin:12px 0">${d.note||""}</div><div style="font-size:13px;font-weight:600;margin:6px 0">各品类动态精选基金（实时榜单+多因子，点击直接加入组合）</div><div style="margin-top:8px">${fundHtml}</div><div class="note">以上为结合市场温度与估值的参考配置，非投资建议；具体基金请以实时净值为准。</div>`;
     openRecoModal();
+    updateComboPreview();   // 展示当前数量下将构建的组合（构成+平均盈利概率）
   }
   window.__recoCount = d.funds.length; updateSummaries();
   saveRecoPersist();   // 持久化推荐目标，供操作信号交叉验证（即使刷新也不矛盾）
 }
 
-// 选 N 只最优组合：按「资产类别分散 + 类内综合分择优」，支持任意 N（1~10）。
-// 关键纪律（2026-08-28 修复）：
-//  ① **只从「推荐」级基金中选**——弱市下 A股权益普遍为"谨慎关注"（近12月多亏损），
-//     若硬凑 N 只权益会选出亏损组合；推荐级不足 N 只时【少选】并提示，绝不硬凑谨慎级。
-//  ② 压舱石优先债券；黄金至多 1 只、货币至多 1 只（现金不需分散，避免选成"3只货币"）。
-// 席位：A股权益（股/混/指）约占 55%、海外(QDII) 有则留1席，其余债券优先补。
-function pickBestN(list, n){
+// 选 N 只最优组合（底层通用逻辑，任意 N=1~20，不再按 3/4/5 写死）：
+// 席位分配由「市场温度 → 大类配置 alloc」驱动——熊市 alloc 自动降权益 → 组合自动防守；
+// 牛市 alloc 加权益 → 组合自动进攻。只从「推荐」级基金中选，绝不硬凑"谨慎级"（弱市下
+// 谨慎级权益近12月多亏损，硬凑=坑用户）。推荐级不足 N 只 → 少选并明确提示。
+function buildCombo(list, alloc, n){
   const recs=list.filter(f=>f.verdict==="推荐");
-  if(!recs.length) return [];
+  if(!recs.length) return {picked:[], note:"当前市场环境下没有达到「推荐」标准的基金，暂不建议一键建仓；可等信号转好或手动选基金"};
   const EQ=["股票型","混合型","指数型"];
   const pools={eq:[],ov:[],bond:[],gold:[],money:[]};
   recs.forEach(f=>{
@@ -2211,23 +2211,55 @@ function pickBestN(list, n){
     else pools.money.push(f);
   });
   const byS=a=>a.sort((x,y)=>(y.score||0)-(x.score||0));
-  byS(pools.eq); byS(pools.ov); byS(pools.bond); byS(pools.gold); byS(pools.money);
-  const want=Math.min(n, recs.length);   // 推荐级不足 → 少选
-  let eqSeats=Math.min(pools.eq.length, Math.max(1, Math.round(want*0.55)));
-  let ovSeats=(want>=2&&pools.ov.length)?1:0;
-  if(eqSeats+ovSeats>want){ eqSeats=Math.max(1,want-ovSeats); }
+  byS(pools.eq);byS(pools.ov);byS(pools.bond);byS(pools.gold);byS(pools.money);
+  const want=Math.min(n, recs.length);
+  // alloc（市场温度驱动的大类配置）→ 席位权重；混合/指数归入权益=alloc 股票型
+  const a=alloc||{};
+  const w={eq:(a["股票型"]||0.35)+(a["混合型"]||0)+(a["指数型"]||0),
+           ov:a["海外(QDII)"]||0.15, bond:a["债券型"]||0.30, gold:a["黄金"]||0.05, money:a["货币型"]||0.12};
+  const tot=Math.max(1e-9, w.eq+w.ov+w.bond+w.gold+w.money);
+  const seats={eq:0,ov:0,bond:0,gold:0,money:0};
+  let used=0;
+  for(const k of Object.keys(seats)){            // 先按比例向下取整
+    const s=Math.floor(want*w[k]/tot);
+    seats[k]=Math.min(pools[k].length, s); used+=seats[k];
+  }
+  let rem=want-used;
+  const order=["eq","ov","bond","gold","money"].sort((x,y)=>w[y]-w[x]);
+  for(const k of order){                         // 余数按配置权重从大到小补
+    if(rem<=0) break;
+    const add=Math.min(pools[k].length-seats[k], rem);
+    seats[k]+=add; rem-=add;
+  }
   const picked=[];
-  const take=(pool,k)=>{ let t=0; for(let i=0;i<pool.length&&t<k;i++){ if(picked.indexOf(pool[i])<0){ picked.push(pool[i]); t++; } } return t; };
-  take(pools.eq,eqSeats); take(pools.ov,ovSeats);
-  let rem=want-picked.length;
-  rem-=take(pools.bond,rem);           // 债券做压舱石，优先补满
-  if(rem>0) rem-=take(pools.gold,1);   // 黄金至多 1 只
-  if(rem>0) rem-=take(pools.money,1);  // 货币至多 1 只
-  if(rem>0){                           // 仍未满：推荐级内其余高分补足
-    const rest=recs.filter(f=>picked.indexOf(f)<0).sort((x,y)=>(y.score||0)-(x.score||0));
+  const take=(k,cnt)=>{ for(let i=0;i<pools[k].length&&cnt>0;i++){ if(picked.indexOf(pools[k][i])<0){ picked.push(pools[k][i]); cnt--; } } };
+  take("eq",seats.eq); take("ov",seats.ov); take("bond",seats.bond); take("gold",seats.gold); take("money",seats.money);
+  if(picked.length<want){                        // 推荐级仍不足：少选（绝不硬凑谨慎级），空缺用剩余推荐级补
+    const rest=recs.filter(f=>picked.indexOf(f)<0);
+    const rk2=f=>{ const aa=f.asset||f.category||""; return EQ.indexOf(aa)>=0?0:(aa==="债券型"?4:(aa==="货币型"?3:(aa==="黄金"?2:1))); };
+    rest.sort((x,y)=> (rk2(y)-rk2(x)) || ((y.score||0)-(x.score||0)));
     for(const f of rest){ if(picked.length>=want) break; picked.push(f); }
   }
-  return picked;
+  const eqCnt=picked.filter(f=>EQ.indexOf((f.asset||f.category||""))>=0).length;
+  const note = picked.length<n
+    ? `当前市场下达到「推荐」标准的基金仅 ${picked.length} 只（A股权益多属「谨慎关注」、近12月表现差），已按 ${picked.length} 只稳健组合配置，避免硬凑亏损标的`
+    : "";
+  return {picked, note, eqCnt, w, want};
+}
+
+// 组合构成实时预览：按当前选择的基金数量，展示将构建的组合（构成+平均1年盈利概率+提示）
+function updateComboPreview(){
+  const pv=document.getElementById("comboPrev"); if(!pv) return;
+  const nEl=document.getElementById("setupN2"); if(!nEl) return;
+  const n=Math.max(1,Math.min(20,+nEl.value||5));
+  const combo=buildCombo(Object.values(window.__recoFunds||{}), window.__recoAlloc||{}, n);
+  if(!combo.picked.length){ pv.innerHTML='<span style="color:var(--warn)">⚠️ '+ (combo.note||"暂无推荐级基金") +'</span>'; return; }
+  const probs=combo.picked.map(f=>f.prob12).filter(p=>p!=null&&p>0);
+  const avg=probs.length?Math.round(probs.reduce((a,b)=>a+b,0)/probs.length*100):null;
+  const eqPct=combo.picked.length?Math.round(combo.eqCnt/combo.picked.length*100):0;
+  pv.innerHTML=`将构建：<b>${comboDesc(combo.picked)}</b>（权益 ${eqPct}%）`+
+    (avg!=null?` · 组合平均 1年盈利概率 <b style="color:${avg>=60?"#34d399":(avg>=45?"#f0a23a":"#fb7185")}">${avg}%</b>`:"")+
+    (combo.note?`<br><span style="color:var(--warn)">⚠️ ${combo.note}</span>`:"");
 }
 
 // 组合构成说明：如 "5 只组合 = A股权益 3只 + 海外QDII 1只 + 债券/黄金/货币 1只"
@@ -2247,17 +2279,17 @@ function comboDesc(picked){
 async function quickSetup(nIn, principalIn, dcaIn, monthsIn, freqIn){
   const list=Object.values(window.__recoFunds||{});
   if(!list.length){ toast("请先点「生成推荐」，再一键配置"); return; }
-  const n=Math.max(1,Math.min(10, +(nIn!==undefined?nIn:3)||3));
+  const n=Math.max(1,Math.min(20, +(nIn!==undefined?nIn:3)||3));
   const principal=Math.max(0, +(principalIn!==undefined?principalIn:0)||0);
   const dca=Math.max(0, +(dcaIn!==undefined?dcaIn:0)||0);
   const freq=(freqIn&&FREQ[freqIn])?freqIn:"month";
   const months=Math.max(1,Math.min(360, +(monthsIn!==undefined?monthsIn:60)||60));
   if(principal<=0){ toast("请输入本金金额"); return; }
-  // 最优组合：只从「推荐」级中选（类别分散+综合分择优）；弱市下推荐级不足时少选，绝不硬凑亏损的谨慎级
-  const picked=pickBestN(list, n);
+  // 最优组合（底层通用）：由市场温度→大类配置 alloc 驱动席位，只从「推荐」级选，任意 N 通用
+  const combo=buildCombo(list, window.__recoAlloc||{}, n);
+  const picked=combo.picked;
   window.__lastSetupCodes=picked.map(f=>f.code);   // 供「推荐效果回测」跟随你选的组合
-  if(!picked.length){ toast("当前市场环境下没有达到「推荐」标准的基金，暂不建议一键建仓；可等信号转好或手动选基金"); return; }
-  if(picked.length<n){ toast("当前市场弱：达到「推荐」标准的基金仅 "+picked.length+" 只（A股权益多评级「谨慎关注」、近12月表现差），已按 "+picked.length+" 只稳健组合配置，避免硬凑亏损标的"); }
+  if(!picked.length){ toast(combo.note||"暂无符合条件的基金，暂不建议一键建仓；可等信号转好或手动选基金"); return; }
   // 按综合分归一化分配本金（评分高的多配）
   const tot=picked.reduce((s,f)=>s+(f.score||0),0)||1;
   let amts=picked.map(f=>principal*Math.max(0,(f.score||0))/tot);
@@ -2291,7 +2323,13 @@ async function quickSetup(nIn, principalIn, dcaIn, monthsIn, freqIn){
   localStorage.setItem("fp_plan", JSON.stringify({principal, months, at:Date.now()}));
   if(window.renderPlanOverview) renderPlanOverview();
   saveHoldings(); renderHoldings(); setDataStamp();
-  toast("已按推荐配置 "+added+" 只、建仓 "+yuan(sum)+"（"+comboDesc(picked)+"）"+(dca>0?"，"+FREQ[freq].label+"定投 "+yuan(dca):""));
+  // 组合平均 1 年盈利概率（基于推荐时的 prob12，均值回归口径）
+  const probs=picked.map(f=>f.prob12).filter(p=>p!=null&&p>0);
+  const avgProb=probs.length?Math.round(probs.reduce((a,b)=>a+b,0)/probs.length*100):null;
+  let msg="已按推荐配置 "+added+" 只、建仓 "+yuan(sum)+"（"+comboDesc(picked)+"）";
+  if(combo.note) msg="⚠️ "+combo.note+"，已按 "+added+" 只稳健建仓 "+yuan(sum)+"（"+comboDesc(picked)+"）";
+  if(avgProb!=null) msg+=" · 组合平均 1年盈利概率 "+avgProb+"%";
+  toast(msg+(dca>0?"，"+FREQ[freq].label+"定投 "+yuan(dca):""));
   setFold("portfolio", true); setFold("tools", false);
   if(window.analyze) analyze();
   // 弹窗内建仓：自动关闭弹窗，回到组合页
