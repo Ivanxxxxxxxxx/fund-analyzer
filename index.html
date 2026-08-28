@@ -2111,6 +2111,7 @@ async function loadRecommend(){
       <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">
         ${span("1月",rp.p1m,rp.exp1m)}${span("3月",rp.p3m,rp.exp3m)}${span("6月",rp.p6m,rp.exp6m)}${span("1年",rp.p12m,rp.exp12m)}
         ${rp.sigma!=null?`<span>组合年化波动 <b style="color:${rp.sigma>0.25?"var(--warn)":"var(--text)"}">${(rp.sigma*100).toFixed(0)}%</b></span>`:""}
+        ${rp.maxMdd!=null?`<span>历史最大回撤约 <b style="color:var(--warn)">-${(rp.maxMdd*100).toFixed(0)}%</b></span>`:""}
       </div>
       ${rp.low?`<div style="color:var(--warn);font-size:11px;margin-top:6px;font-weight:600">⚠️ 当前组合整体 1年盈利概率偏低（&lt;45%）：主要受高估值/偏高价位成分拖累。按买点纪律建议：不追高、分批/定投摊薄，或等回调后再布局。</div>`:""}
       <div class="muted" style="font-size:10.5px;margin-top:4px">盈利概率：≥60% 绿（较稳）/ 45-60% 橙（中性）/ &lt;45% 红（谨慎）；预期收益：红涨绿跌（A股习惯）。按近 3 年历史波动假设模拟，非收益承诺。<b style="color:var(--warn)">基金有风险：年化波动反映净值涨跌幅度，权益组合可能单年浮亏 20%+，请用闲钱、按仓位纪律分批买入。</b></div>
@@ -2735,9 +2736,11 @@ async function runAdvise(){
       ${card(TLAB("年化波动","vol"),pct(d.vol),vg.color,vg.label)}
       ${card(TLAB("最大回撤","mdd"),pct(d.mdd),"var(--down)")}
       ${card(TLAB("夏普比率","sharpe"),FMT(d.sharpe.toFixed(2)),sharpeColor)}
-      ${card(TLAB("Beta(对沪深300)","beta"),FMT(d.beta.toFixed(2)),d.beta>1.1?"var(--warn)":d.beta<0.9?"var(--good)":"var(--text)",d.beta>1.1?"高弹性":d.beta<0.9?"防御":"同步")}
-      ${card(TLAB("年化Alpha","alpha"),pct(d.alpha),upDown(d.alpha),"超越市场的主动收益")}
-      ${card(TLAB("信息比率IR","ir"),FMT(d.ir.toFixed(2)),"var(--text)")}
+      ${d.beta==null
+        ? card(TLAB("基准适配","beta"),"—","var(--muted)","非 A 股权益类，不与沪深300比较")
+        : card(TLAB("Beta(对沪深300)","beta"),FMT(d.beta.toFixed(2)),d.beta>1.1?"var(--warn)":d.beta<0.9?"var(--good)":"var(--text)",d.beta>1.1?"高弹性":d.beta<0.9?"防御":"同步")}
+      ${d.alpha==null?card(TLAB("年化Alpha","alpha"),"—","var(--muted)","基准不适用"):card(TLAB("年化Alpha","alpha"),pct(d.alpha),upDown(d.alpha),"超越市场的主动收益")}
+      ${d.ir==null?card(TLAB("信息比率IR","ir"),"—","var(--muted)","基准不适用"):card(TLAB("信息比率IR","ir"),FMT(d.ir.toFixed(2)),"var(--text)")}
       ${card(TLAB("卡玛比率","calmar"),FMT(d.calmar.toFixed(2)),"var(--text)","年化收益/回撤")}
       ${card(TLAB("东财五维","avr"),d.avr?d.avr.toFixed(0):"—","var(--text)",dims)}
       ${card(TLAB("估值分位","valPct"),d.valPct==null?"—":d.valPct+"%","var(--text)",d.valBasis||"")}
