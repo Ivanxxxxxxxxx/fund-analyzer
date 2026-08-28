@@ -1315,49 +1315,64 @@ function saveDcaAmt(){
 
 // 组合历史收益统计：按【实际持仓】市值加权计算年化收益/年化波动（一键配置选的 N 只基金）
 // 用 __histCache 复用历史净值；结果按"持仓组合+日期"缓存到 localStorage（当天有效），避免每次刷新重拉
-async function calcPortfolioStats(list){
-  const funds=list||holdings;
-  if(!funds.length) return null;
-  const codes=funds.map(h=>h.code).join(",");
-  const today=new Date().toDateString();
-  // v2：缓存结构含 maxDD/sharpe（v1 只有 ann/vol），换 key 避免读到旧结构
-  const ck="fp_stats2:"+codes+":"+today;
-  const cached=JSON.parse(localStorage.getItem(ck)||"null");
+// 统一组合收益统计：给定 codes + 权重，返回年化/波动/回撤/夏普/相关性/健康分。
+// 缓存 key 含【权重】，解决"计划与实盘同批基金时，计划概览复用实盘缓存→概览 10% ≠ 诊断 23.5%"的矛盾。
+const FP_HIST_DAYS=1460;   // 历史窗口：4 年，让长期持有的组合线反映真实走势（原 730 天会截断多年涨幅）
+async function portfolioStats(codes, weights){
+  if(!codes || !codes.length) return null;
+  const wsum=(weights||[]).reduce((a,b)=>a+b,0)||1;
+  const W=(weights&&weights.length===codes.length)?codes.map((_,i)=>(+weights[i]||0)/wsum):codes.map(()=>1/codes.length);
+  const key="fp_stats3:"+codes.join(",")+":"+W.map(x=>x.toFixed(4)).join(",")+":"+new Date().toDateString();
+  const cached=JSON.parse(localStorage.getItem(key)||"null");
   if(cached && cached.ann!=null) return cached;
   if(!window.__histCache) window.__histCache={};
-  const missing=funds.filter(h=>!window.__histCache[h.code]);
-  for(const h of missing){
-    const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]}));
-    window.__histCache[h.code]=r.data||[];
+  for(const c of codes){
+    if(window.__histCache[c] && window.__histCache[c].length>=20) continue;
+    const r=await api("/api/history/"+c+"?days="+FP_HIST_DAYS).catch(()=>({data:[]}));
+    window.__histCache[c]=r.data||[];
   }
-  const allDates=new Set();
-  funds.forEach(h=>(window.__histCache[h.code]||[]).forEach(d=>{ if(d&&d.date) allDates.add(d.date); }));
+  const hist=codes.map(c=>window.__histCache[c]||[]);
+  if(hist.some(h=>!h||h.length<20)) return null;
+  const allDates=new Set(); codes.forEach((c,i)=>hist[i].forEach(d=>{ if(d&&d.date) allDates.add(d.date); }));
   const dates=[...allDates].sort();
-  const series=funds.map(h=>{
-    const m={}; (window.__histCache[h.code]||[]).forEach(d=>{ if(d&&d.date!=null) m[d.date]=d.nav; });
-    const arr=[]; let last=null;
-    dates.forEach(dt=>{ if(m[dt]!=null) last=m[dt]; arr.push(last); });
-    return arr;
-  });
-  const rets=series.map(s=>{ const r=[]; for(let i=1;i<s.length;i++){ const a=s[i-1],b=s[i]; if(a>0&&isFinite(b)){ const x=(b-a)/a; if(Math.abs(x)<0.5) r.push(x); } } return r; });
-  const total=funds.reduce((s,h)=>s+(+h.value||0),0)||1;
-  const w=funds.map(h=>(+h.value||0)/total);
+  const series=hist.map(h=>{ const m={}; h.forEach(d=>{ if(d&&d.date!=null) m[d.date]=d.nav; }); const arr=[]; let last=null; dates.forEach(dt=>{ if(m[dt]!=null) last=m[dt]; arr.push(last); }); return arr; });
+  const rets=series.map(dailyReturns);
   const L=Math.min(...rets.map(r=>r.length));
   if(L<60) return null;
   const pr=[];
-  for(let t=0;t<L;t++){ let s=0; for(let i=0;i<funds.length;i++) s+=w[i]*rets[i][rets[i].length-L+t]; pr.push(s); }
+  for(let t=0;t<L;t++){ let s=0; for(let i=0;i<codes.length;i++) s+=W[i]*rets[i][rets[i].length-L+t]; pr.push(s); }
   const mean=pr.reduce((a,b)=>a+b,0)/L;
   const variance=pr.reduce((a,b)=>a+(b-mean)**2,0)/(L-1);
   const vol=Math.sqrt(variance)*Math.sqrt(252);
   const growth=pr.reduce((acc,r)=>acc*(1+r),1);
   const ann=Math.pow(growth,252/L)-1;
-  // 最大回撤（按组合累计净值曲线）与夏普比率（无风险利率 2%）
-  let peak=-Infinity, maxDD=0, cum=1;
-  for(const r of pr){ cum*=(1+r); if(cum>peak) peak=cum; const dd=cum/peak-1; if(dd<maxDD) maxDD=dd; }
-  const sharpe=(vol>0)?((ann-0.02)/vol):0;
-  const out={ann, vol, maxDD, sharpe};
-  try{ localStorage.setItem(ck, JSON.stringify(out)); }catch(e){}
+  let peak=1,maxDD=0; pr.forEach(r=>{ const v=peak*(1+r); if(v>peak)peak=v; const dd=v/peak-1; if(dd<maxDD)maxDD=dd; });
+  const rf=0.02, sharpe=vol>0?(ann-rf)/vol:0;
+  const N=codes.length; const corr=[];
+  for(let i=0;i<N;i++){ corr[i]=[]; for(let j=0;j<N;j++) corr[i][j]= i===j?1:pearson(rets[i].slice(0,L),rets[j].slice(0,L)); }
+  let offSum=0,offCnt=0; for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){offSum+=corr[i][j];offCnt++;}
+  const corrAvg=offCnt?offSum/offCnt:0;
+  const hhi=W.reduce((s,x)=>s+x*x,0); const divScore=Math.max(0,Math.min(100,(1-hhi)*100));
+  const sharpeScore=Math.max(0,Math.min(100,sharpe/2*100));
+  const corrScore=Math.max(0,Math.min(100,(1-corrAvg)*100));
+  const score=Math.round(0.35*divScore+0.35*sharpeScore+0.30*corrScore);
+  let risk="",rc="";
+  if(vol<0.08){risk="低";rc="good";} else if(vol<0.15){risk="中低";rc="good";}
+  else if(vol<0.25){risk="中";rc="warn";} else if(vol<0.35){risk="中高";rc="bad";}
+  else {risk="高";rc="bad";}
+  const out={ann,vol,maxDD,sharpe,years:(L/252),corrAvg,score,risk,rc};
+  try{ localStorage.setItem(key, JSON.stringify(out)); }catch(e){}
   return out;
+}
+// 兼容旧调用：传入 [{code,value}] 列表，按市值权重统计（实盘持仓概览 / 计划概览共用）
+async function calcPortfolioStats(list){
+  const funds=list||holdings;
+  if(!funds.length) return null;
+  const codes=funds.map(h=>h.code);
+  const weights=funds.map(h=>+h.value||0);
+  const st=await portfolioStats(codes, weights);
+  if(!st) return null;
+  return {ann:st.ann, vol:st.vol, maxDD:st.maxDD, sharpe:st.sharpe};
 }
 
 // 投资概览（通用组件）：按传入的基金组合 + 本金/定投/期限 计算预期并绘制复利曲线。
@@ -1378,8 +1393,9 @@ async function renderOverviewTo(box, canvasId, opt){
   const stats=await calcPortfolioStats(funds);
   let r=null, vol=null;
   if(stats){ r=stats.ann; vol=stats.vol; }
-  else if(window.__annRet!=null && isFinite(window.__annRet)){ r=window.__annRet; vol=window.__annVol||0.15; }
-  else if(window.__recoProb && window.__recoProb.exp12m!=null && isFinite(window.__recoProb.exp12m)){ r=window.__recoProb.exp12m; vol=0.15; }
+  // 仅实盘持仓概览可在缺数据时回退到已分析的实盘年化；计划概览必须用自己的组合统计，绝不用实盘数字冒充
+  else if(!opt.isPlan && window.__annRet!=null && isFinite(window.__annRet)){ r=window.__annRet; vol=window.__annVol||0.15; }
+  else if(!opt.isPlan && window.__recoProb && window.__recoProb.exp12m!=null && isFinite(window.__recoProb.exp12m)){ r=window.__recoProb.exp12m; vol=0.15; }
   if(r==null || !isFinite(r)) r=0.06;
   if(vol==null || !isFinite(vol) || vol<=0) vol=0.15;
   r=Math.max(-0.4, Math.min(0.4, r));
@@ -1445,7 +1461,7 @@ async function renderOverviewTo(box, canvasId, opt){
       ${stat("悲观预期收益", fmtGain(p5Gain), "5% 分位最差情景", gainCol(p5Gain))}
     </div>
     <div style="position:relative;height:240px"><canvas id="${canvasId}"></canvas></div>
-    <div class="note" style="font-size:11px;margin-top:8px">年化收益 ${(r*100).toFixed(1)}% · 波动 ${(vol*100).toFixed(0)}% —— ${sourceTxt} 按 <b>${funds.length} 只基金</b>的历史净值（市值加权）实时计算${stats?"，每只基金近 2 年数据":""}；理想=无波动复利、中位=50%分位、悲观/乐观=5%/95% 分位。模拟基于历史假设，非收益承诺。</div>`;
+    <div class="note" style="font-size:11px;margin-top:8px">年化收益 ${(r*100).toFixed(1)}% · 波动 ${(vol*100).toFixed(0)}% —— ${sourceTxt} 按 <b>${funds.length} 只基金</b>的历史净值（市值加权）实时计算${stats?"，每只基金近 4 年数据":""}；理想=无波动复利、中位=50%分位、悲观/乐观=5%/95% 分位。模拟基于历史假设，非收益承诺。</div>`;
   if(window[ck]) window[ck].destroy();
   const cv=document.getElementById(canvasId); if(!cv) return;
   window.__planChart=null;   // 供 switchView 在隐藏视图创建后 resize 恢复尺寸
@@ -1574,7 +1590,7 @@ async function resetPlanWeights(){
   if(!window.__histCache) window.__histCache={};
   for(const f of manual){
     if(!window.__histCache[f.code]){
-      const r=await api("/api/history/"+f.code+"?days=730").catch(()=>({data:[]}));
+      const r=await api("/api/history/"+f.code+"?days=1460").catch(()=>({data:[]}));
       window.__histCache[f.code]=r.data||[];
     }
   }
@@ -1682,7 +1698,7 @@ async function renderPlanSim(){
     funds:funds, P:P, A:dca, months:months,
     freqLabel:FREQ[freq].label, rawAmt:dca,
     pLabel:"计划本金", pSub:"可随时修改",
-    sourceTxt:"按<b>投资计划</b>选定组合", chartKey:"planSimChart",
+    sourceTxt:"按<b>投资计划</b>选定组合", chartKey:"planSimChart", isPlan:true,
     emptyTxt:"还没有计划基金：先点「生成推荐 → 一键配置建仓」，计划概览会自动带入你选定的基金组合。"
   });
   // 「计划组合诊断」：分析投资计划里的基金组合（与持仓分析同源算法），点按钮才拉历史净值，避免每次渲染都请求
@@ -1703,40 +1719,17 @@ async function analyzePlan(){
   const codes=pf.map(f=>f.code);
   const wmap={}; pf.forEach(f=>wmap[f.code]=+f.weight||0);
   const weights=codes.map(c=>wmap[c]);
-  if(!window.__histCache) window.__histCache={};
-  for(const c of codes){ if(window.__histCache[c]) continue; const r=await api("/api/history/"+c+"?days=730").catch(()=>({data:[]})); window.__histCache[c]=r.data||[]; }
-  const hist=codes.map(c=>window.__histCache[c]||[]);
-  if(hist.some(h=>!h||h.length<20)){ box.innerHTML='<div class="empty">部分计划基金历史不足 20 个交易日，无法计算风险指标。</div>'; return; }
-  const allDates=new Set(); codes.forEach((c,i)=>hist[i].forEach(d=>allDates.add(d.date)));
-  const dates=[...allDates].sort();
-  const series=hist.map(h=>{ const m={}; h.forEach(d=>m[d.date]=d.nav); const arr=[]; let last=null; dates.forEach(dt=>{ if(m[dt]!=null) last=m[dt]; arr.push(last); }); return arr; });
-  const rets=series.map(dailyReturns);
-  const wsum=(weights.reduce((a,b)=>a+b,0))||1; const W=weights.map(x=>x/wsum);
-  const L=Math.min(...rets.map(r=>r.length));
-  const pr=[]; for(let t=0;t<L;t++){ let r=0; for(let i=0;i<codes.length;i++) r+=W[i]*rets[i][rets[i].length-L+t]; pr.push(r); }
-  const mean=pr.reduce((a,b)=>a+b,0)/L;
-  const variance=pr.reduce((a,b)=>a+(b-mean)**2,0)/(L-1);
-  const volDaily=Math.sqrt(variance);
-  const annVol=volDaily*Math.sqrt(252);
-  const growth=pr.reduce((acc,r)=>acc*(1+r),1);
-  const annRet=Math.pow(growth,252/L)-1;
-  const rf=0.02, sharpe=annVol>0?(annRet-rf)/annVol:0;
-  let peak=1,maxDD=0; pr.forEach(r=>{ const v=peak*(1+r); if(v>peak)peak=v; const dd=v/peak-1; if(dd<maxDD)maxDD=dd; });
-  const N=codes.length; const corr=[]; for(let i=0;i<N;i++){corr[i]=[];for(let j=0;j<N;j++)corr[i][j]=i===j?1:pearson(rets[i].slice(0,L),rets[j].slice(0,L));}
-  let offSum=0,offCnt=0; for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){offSum+=corr[i][j];offCnt++;}
-  const corrAvg=offCnt?offSum/offCnt:0;
+  // 与「投资计划概览」共用同一套组合统计（portfolioStats），保证"概览年化"与"诊断年化"完全一致，不再自相矛盾
+  const st=await portfolioStats(codes, weights);
+  if(!st){ box.innerHTML='<div class="empty">部分计划基金历史不足（需近 4 年净值），无法计算风险指标。</div>'; return; }
+  const annRet=st.ann, annVol=st.vol, maxDD=st.maxDD, sharpe=st.sharpe;
+  const corrAvg=st.corrAvg, score=st.score, risk=st.risk, rc=st.rc;
+  const W=weights.map(x=>(+x||0)/(weights.reduce((a,b)=>a+b,0)||1));
   const hhi=W.reduce((s,x)=>s+x*x,0); const divScore=Math.max(0,Math.min(100,(1-hhi)*100));
-  const sharpeScore=Math.max(0,Math.min(100,sharpe/2*100));
-  const corrScore=Math.max(0,Math.min(100,(1-corrAvg)*100));
-  const score=Math.round(0.35*divScore+0.35*sharpeScore+0.30*corrScore);
-  let risk="",rc="";
-  if(annVol<0.08){risk="低";rc="good";} else if(annVol<0.15){risk="中低";rc="good";}
-  else if(annVol<0.25){risk="中";rc="warn";} else if(annVol<0.35){risk="中高";rc="bad";}
-  else {risk="高";rc="bad";}
+  const years=st.years.toFixed(1);
   const col=v=>v>=0?'var(--up)':'var(--down)';
   const lvlColor=v=>v<0.1?'var(--good)':v<0.2?'var(--warn)':'var(--bad)';
   const card=(label,value,color,hint)=>`<div class="kpi"><span class="label">${label}</span><span class="value" style="color:${color||'var(--text)'}">${value}</span>${hint?`<span class="hint">${hint}</span>`:''}</div>`;
-  const years=(L/252).toFixed(1);
   box.innerHTML=`
     <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr));margin-top:10px">
       ${card('年化收益率', (annRet>=0?'+':'')+(annRet*100).toFixed(1)+'%', col(annRet), '基于近'+years+'年')}
@@ -1888,7 +1881,7 @@ async function analyze(){
     for(const h of holdings){
       const cached=window.__histCache[h.code];
       if(cached && cached.length>=20){ h.history=cached; continue; }   // 缓存有效才复用，避免脏空缓存把曲线压平
-      const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]}));
+      const r=await api("/api/history/"+h.code+"?days=1460").catch(()=>({data:[]}));
       h.history=r.data||[]; window.__histCache[h.code]=h.history;
     }
     const miss=holdings.filter(h=>!h.history||h.history.length<20);
@@ -2353,7 +2346,7 @@ async function calcPlanCum(dates){
     if(!window.__histCache) window.__histCache={};
     for(const f of pf){
       if(!window.__histCache[f.code]){
-        const r=await api("/api/history/"+f.code+"?days=730").catch(()=>({data:[]}));
+        const r=await api("/api/history/"+f.code+"?days=1460").catch(()=>({data:[]}));
         window.__histCache[f.code]=r.data||[];
       }
     }
@@ -2409,19 +2402,19 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
     const flat=(pc!=null&&Math.abs(pc)<0.5);
     // 我的组合波动远小于投资计划（且计划确有走势）→ 提示组合偏稳健，非数据错误
     const relFlat=(rPlan>5 && rP < rPlan*0.25);
-    _dg.innerHTML=`数据 ${sDates.length} 个交易日（${sDates[0]||"—"} ~ ${sDates[sDates.length-1]||"—"}）· 我的组合累计 <b style="color:#f2c14e">${nn(pc)}</b>`
+    _dg.innerHTML=`近 ${(sDates.length/252).toFixed(1)} 年（${sDates[0]||"—"} ~ ${sDates[sDates.length-1]||"—"}，共 ${sDates.length} 个交易日）· 我的组合（实际持仓）累计 <b style="color:#f2c14e">${nn(pc)}</b>`
       + (plc!=null?` · 投资计划 <b style="color:#a78bfa">${nn(plc)}</b>`:"")
       + ` · ${benchName} <b style="color:#4da3ff">${nn(bc)}</b>`
       + (flat?`<br><span style="color:var(--warn)">我的组合波动极小（多为货币/短债类资产），曲线接近水平属正常；若持仓含权益基金却仍平线，请点「刷新」重拉净值。</span>`:"")
       + (relFlat&&!flat?`<br><span style="color:var(--muted)">提示：我的组合波动幅度明显小于投资计划（前者更偏稳健/债券货币类），这是真实风险差异，并非数据错误；想看到更明显的走势，可在「组合工作台」增加权益类基金。</span>`:"");
   }
-  // 双 Y 轴：组合/计划用左轴、沪深300 用右轴——否则组合涨 200%+ 时基准的 20% 波动会被压成一条贴底直线
+  // 三轴：我的组合=左轴、沪深300=右轴、投资计划=隐藏右轴——计划的高涨幅不再压平组合线
   const ds=[{label:"我的组合",data:sArr(portCum.map(v=>+(v*100).toFixed(2))),borderColor:"#f2c14e",
     backgroundColor:"rgba(242,193,78,.12)",fill:true,tension:.25,pointRadius:0,yAxisID:"y"}];
   // 投资计划组合（决策区设定的计划基金）：紫色虚线，与"我的实际持仓"对比看计划是否更优
   if(planCum && planCum.some(v=>v!=null))
     ds.push({label:"投资计划",data:sArr(planCum.map(v=>v==null?null:+(v*100).toFixed(2))),
-      borderColor:"#a78bfa",borderDash:[6,4],borderWidth:2,backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0,yAxisID:"y"});
+      borderColor:"#a78bfa",borderDash:[6,4],borderWidth:2,backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0,yAxisID:"y2"});
   if(benchCum && benchCum.some(v=>v!=null))
     ds.push({label:benchName,data:sArr(benchCum.map(v=>v==null?null:+(v*100).toFixed(2))),
       borderColor:"#4da3ff",backgroundColor:"transparent",fill:false,tension:.25,pointRadius:0,yAxisID:"y1"});
@@ -2434,7 +2427,8 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
         tooltip:{callbacks:{label:c=>c.dataset.label+": "+(c.parsed.y==null?"—":(c.parsed.y>=0?"+":"")+c.parsed.y+"%")}}},
       scales:{x:{ticks:{color:"#9896a6",maxTicksLimit:8},grid:{color:"rgba(255,255,255,.05)"}},
         y:{position:"left",ticks:{color:"#f2c14e",callback:v=>v+"%"},grid:{color:"rgba(255,255,255,.05)"}},
-        y1:{position:"right",grid:{drawOnChartArea:false},ticks:{color:"#4da3ff",callback:v=>v+"%"}}}}
+        y1:{position:"right",grid:{drawOnChartArea:false},ticks:{color:"#4da3ff",callback:v=>v+"%"}},
+        y2:{position:"right",grid:{drawOnChartArea:false},ticks:{display:false},display:true}}}
   });
 }
 
