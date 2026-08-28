@@ -647,12 +647,11 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     <div class="card">
       <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-sparkles"/></svg></span>智能配置推荐（结合当前市场环境）
         <span style="margin-left:auto" class="row">
-          <button class="btn-ghost btn-sm" onclick="loadBacktest()" title="用修复后的多因子逻辑在 6/12/24 个月前选基、模拟持有至今，验证推荐是否真的有用">📈 推荐效果回测</button>
+          <button class="btn-ghost btn-sm" onclick="openBtModal()" title="模拟从过去买入推荐组合持有至今，验证推荐是否真的有用（独立弹窗，跟随你选的基金）">📈 推荐效果回测</button>
           <button class="btn-primary btn-sm" onclick="loadRecommend()">🔄 生成推荐</button>
         </span>
       </h3>
       <div id="recoBox"><div class="empty">点击「生成推荐」，工具将抓取沪深300等指数判断市场温度，给出股/债/货/QDII 配置比例与精选基金。生成后弹窗内可一键配置建仓。</div></div>
-      <div id="btBox"></div>
     </div>
 
     <!-- 单基金买入诊断 -->
@@ -880,6 +879,18 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     </div>
     <div class="sub">结合当前市场温度，给出大类配置比例与精选基金，弹窗内可直接完成一键配置建仓</div>
     <div class="modal-body" id="recoModalBody"></div>
+  </div>
+</div>
+
+<!-- 推荐效果回测弹窗：模拟"从过去买入推荐组合持有至今"，验证能否盈利 -->
+<div class="overlay" id="btOverlay" onclick="if(event.target===this)closeBtModal()">
+  <div class="modal" id="btModal" style="width:min(960px,96vw)">
+    <div class="modal-head">
+      <h2><svg class="i"><use href="#i-trending-up"/></svg> 推荐效果回测</h2>
+      <button class="modal-close" onclick="closeBtModal()" aria-label="关闭">×</button>
+    </div>
+    <div class="sub" id="btSub">用修复后的多因子逻辑选基，模拟从过去买入持有至今，看能否盈利、盈利多少（对比沪深300）。</div>
+    <div class="modal-body" id="btModalBody"></div>
   </div>
 </div>
 
@@ -1967,37 +1978,51 @@ function renderTrend(dates, portCum, benchCum, benchName){
   });
 }
 
-// ---------------- 推荐效果回测：验证推荐逻辑是否“有用” ----------------
-// 用修复后的多因子逻辑分别在 6/12/24 个月前按资产类别选基、按推荐配置加权持有至今，
-// 与沪深300、等权全宇宙对比；结果后端缓存 12 小时，首次约 1-2 分钟。
+// ---------------- 推荐效果回测（独立弹窗） ----------------
+// 回测对象：优先「你选出的组合」（选入配资/一键配置建仓的基金），否则回测「推荐组合」
+//（各品类按修复后逻辑选最优、按推荐配置加权）。多锚点(6/12/24月)买入持有至今，对比沪深300。
+// 后端结果缓存 12 小时，首次约 1 分钟。
 async function loadBacktest(){
-  const box=document.getElementById("btBox");
-  if(!box) return;
-  box.innerHTML='<div class="empty" style="text-align:left">⏳ 正在回测：用修复后的多因子逻辑（风险调整收益主导、去追涨、估值/均值回归买点）分别在 6/12/24 个月前选基并模拟持有至今…首次约需 1-2 分钟，之后 12 小时内秒出。</div>';
+  const body=document.getElementById("btModalBody"); if(!body) return;
+  let codes=[];
+  if(window.selFunds && window.selFunds.size) codes=[...window.selFunds.keys()];
+  else if(window.__lastSetupCodes && window.__lastSetupCodes.length) codes=window.__lastSetupCodes;
+  const sub=document.getElementById("btSub");
+  if(sub) sub.innerHTML = codes.length
+    ? `回测对象：<b>你选出的 ${codes.length} 只基金组合</b>（等权买入持有至今）· 与沪深300对比`
+    : `回测对象：<b>推荐组合</b>（各品类按修复后逻辑选最优、按推荐配置加权持有至今）· 与沪深300对比；
+       也可以在推荐弹窗里「一键配置建仓」选好基金后，回测会自动跟随你选的组合。`;
+  const q=codes.length?("?codes="+codes.join(",")):"";
+  body.innerHTML='<div class="empty" style="text-align:left">⏳ 正在回测：模拟从过去买入持有至今…首次约需 1 分钟，之后 12 小时内秒出。</div>';
   try{
-    const d=await api("/api/recommend-backtest", 180000).catch(e=>({ok:false,error:String(e)}));
-    if(!d.ok){ box.innerHTML='<div class="empty">回测失败：'+(d.error||"未知错误")+'</div>'; return; }
+    const d=await api("/api/recommend-backtest"+q, 180000).catch(e=>({ok:false,error:String(e)}));
+    if(!d.ok){ body.innerHTML='<div class="empty">回测失败：'+(d.error||"未知错误")+'</div>'; return; }
     const rows=(d.results||[]).map(r=>{
       const pr=r.portRet, br=r.benchRet, ur=r.univRet;
       const excess=(pr!=null&&br!=null)?(pr-br):null;
       const cls=v=>v==null?"var(--muted)":(v>=0?"var(--up)":"var(--down)");
       const eCls=excess==null?"var(--muted)":(excess>=0?"var(--up)":"var(--down)");
       const pickTxt=(r.picks||[]).map(p=>
-        `<span style="white-space:nowrap">${p.asset} <b>${p.name}</b> ${p.fwdRet!=null?`(<span style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"}">${p.fwdRet>=0?"+":""}${p.fwdRet}%</span>)`:""}</span>`
+        p.code
+          ? `<span style="white-space:nowrap">${p.name?p.name:p.code} ${p.fwdRet!=null?`<b style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"}">${p.fwdRet>=0?"+":""}${p.fwdRet}%</b>`:"<span class='muted'>(无数据)</span>"}</span>`
+          : `<span style="white-space:nowrap">${p.asset} <b>${p.name}</b> ${p.fwdRet!=null?`<b style="color:${p.fwdRet>=0?"var(--up)":"var(--down)"}">${p.fwdRet>=0?"+":""}${p.fwdRet}%</b>`:""}</span>`
       ).join(" · ")||"—";
       return `<tr>
-        <td>${r.label}<br><span class="muted" style="font-size:11px">锚点 ${r.asof||"—"}</span></td>
+        <td>${r.label}<br><span class="muted" style="font-size:11px">买入日 ${r.asof||"—"}</span></td>
         <td class="num" style="color:${cls(pr)};font-weight:700">${pr!=null?(pr>=0?"+":"")+pr+"%":"—"}</td>
         <td class="num" style="color:${cls(br)}">${br!=null?(br>=0?"+":"")+br+"%":"—"}</td>
         <td class="num" style="color:${eCls};font-weight:700">${excess!=null?(excess>=0?"+":"")+excess+"pp":"—"}</td>
         <td class="num" style="color:${cls(ur)}">${ur!=null?(ur>=0?"+":"")+ur+"%":"—"}</td>
-        <td style="font-size:11.5px;line-height:1.6;max-width:320px">${pickTxt}</td>
+        <td style="font-size:11.5px;line-height:1.6;max-width:330px">${pickTxt}</td>
       </tr>`;
     }).join("");
-    box.innerHTML=`<div class="note" style="margin:10px 0 6px"><svg class="i"><use href="#i-trending-up"/></svg> <b>推荐效果回测</b>：<span class="muted">${d.method||""} 生成于 ${d.generatedAt||"—"}</span></div>
-      <div class="table-scroll"><table><thead><tr><th>持有周期</th><th class="num">按推荐配置组合收益</th><th class="num">沪深300</th><th class="num">超额</th><th class="num">等权全宇宙</th><th>当时精选基金（类别·前瞻收益）</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }catch(e){ box.innerHTML='<div class="empty">回测失败：'+(e.message||e)+'</div>'; }
+    body.innerHTML=`<div class="note" style="margin:10px 0 6px"><svg class="i"><use href="#i-trending-up"/></svg> <b>回测结果</b>：<span class="muted">${d.method||""} 生成于 ${d.generatedAt||"—"}</span></div>
+      <div class="table-scroll"><table><thead><tr><th>持有周期</th><th class="num">组合收益</th><th class="num">沪深300</th><th class="num">超额</th><th class="num">等权全宇宙</th><th>回测基金（持有收益）</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="note" style="margin-top:8px">买入价=买入日（或之前最近交易日）真实历史净值，卖出价=今日最新净值；全部来自天天基金真实数据，可在官网核对。仅验证历史样本，非收益承诺。</div>`;
+  }catch(e){ body.innerHTML='<div class="empty">回测失败：'+(e.message||e)+'</div>'; }
 }
+function openBtModal(){ document.getElementById("btOverlay").classList.add("show"); loadBacktest(); }
+function closeBtModal(){ document.getElementById("btOverlay").classList.remove("show"); }
 
 // ---------------- 智能配置推荐 ----------------
 async function loadRecommend(){
@@ -2081,11 +2106,13 @@ async function loadRecommend(){
   const setupHtml = `<div class="setup-card" style="position:sticky;top:0;z-index:5;background:rgba(22,22,28,.98);box-shadow:0 6px 20px rgba(0,0,0,.35)">
     <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
       <svg class="i"><use href="#i-zap"/></svg> 一键配置最优基金
-      <span class="muted" style="font-size:11px;font-weight:600">按综合分择优（同类≤2只防扎堆）分配本金、建立仓位，支持定投（日/周/月/年）</span>
+      <span class="muted" style="font-size:11px;font-weight:600">按「类别分散 + 综合分择优」选最优 N 只组合（A股权益为主 + 海外/债券分散），支持定投（日/周/月/年）</span>
     </div>
     <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:10px;align-items:flex-end">
-      <div><div class="muted" style="font-size:11px;margin-bottom:4px">基金数量</div>
-        <input id="setupN2" type="number" value="3" min="1" max="10" inputmode="numeric" style="width:74px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
+      <div><div class="muted" style="font-size:11px;margin-bottom:4px">选几只</div>
+        <select id="setupN2" style="width:84px;padding:8px 8px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:14px;font-weight:600">
+          <option value="3">3 只</option><option value="4">4 只</option><option value="5" selected>5 只</option>
+        </select></div>
       <div><div class="muted" style="font-size:11px;margin-bottom:4px">本金（¥）</div>
         <input id="setupP2" type="number" value="100000" min="0" step="1000" inputmode="decimal" style="width:118px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:15px;font-weight:600"></div>
       <div><div class="muted" style="font-size:11px;margin-bottom:4px">定投频率</div>
@@ -2119,7 +2146,35 @@ async function loadRecommend(){
   saveRecoPersist();   // 持久化推荐目标，供操作信号交叉验证（即使刷新也不矛盾）
 }
 
-// 一键配置最优基金：从推荐结果按综合分最优选 N 只（同类≤2），分配本金建仓，并记录每月定投计划
+// 选 N 只最优组合：按「资产类别分散 + 类内综合分择优」。
+// 规则：A股权益（股/混/指）占多数席位，海外(QDII)、债券/黄金各留 1 席（若有），
+// 避免选出一把同涨同跌的基金；名额不满时用剩余高分基金补足。
+function pickBestN(list, n){
+  const EQ=["股票型","混合型","指数型"];
+  const pools={eq:[],ov:[],ot:[]};
+  list.forEach(f=>{
+    const a=f.asset||f.category||"";
+    if(EQ.indexOf(a)>=0) pools.eq.push(f);
+    else if(a==="海外(QDII)") pools.ov.push(f);
+    else pools.ot.push(f);
+  });
+  const byS=a=>a.sort((x,y)=>(y.score||0)-(x.score||0));
+  byS(pools.eq); byS(pools.ov); byS(pools.ot);
+  let eqSeats, ovSeats, otSeats;
+  if(n<=3){ eqSeats=Math.min(pools.eq.length,2); ovSeats=Math.min(pools.ov.length,1); otSeats=Math.min(pools.ot.length,Math.max(0,n-eqSeats-ovSeats)); }
+  else if(n===4){ eqSeats=Math.min(pools.eq.length,2); ovSeats=Math.min(pools.ov.length,1); otSeats=Math.min(pools.ot.length,Math.max(0,n-eqSeats-ovSeats)); }
+  else { eqSeats=Math.min(pools.eq.length,Math.max(2,Math.ceil(n*0.6))); ovSeats=Math.min(pools.ov.length,1); otSeats=Math.min(pools.ot.length,Math.max(0,n-eqSeats-ovSeats)); }
+  const picked=[];
+  const take=(pool,k)=>{ for(let i=0;i<pool.length&&k>0;i++){ if(picked.indexOf(pool[i])<0){ picked.push(pool[i]); k--; } } };
+  take(pools.eq,eqSeats); take(pools.ov,ovSeats); take(pools.ot,otSeats);
+  if(picked.length<n){   // 名额未满（某类池空）→ 用剩余高分基金补足
+    const rest=[...list].filter(f=>picked.indexOf(f)<0).sort((x,y)=>(y.score||0)-(x.score||0));
+    for(const f of rest){ if(picked.length>=n) break; picked.push(f); }
+  }
+  return picked;
+}
+
+// 一键配置最优基金：从推荐结果按「类别分散+综合分」选最优 N 只组合，分配本金建仓，并记录定投计划
 // 支持弹窗（setupN2/P2/D2/Y2=持有月数）入口：nIn/principalIn/dcaIn/monthsIn 传入
 async function quickSetup(nIn, principalIn, dcaIn, monthsIn, freqIn){
   const list=Object.values(window.__recoFunds||{});
@@ -2130,25 +2185,9 @@ async function quickSetup(nIn, principalIn, dcaIn, monthsIn, freqIn){
   const freq=(freqIn&&FREQ[freqIn])?freqIn:"month";
   const months=Math.max(1,Math.min(360, +(monthsIn!==undefined?monthsIn:60)||60));
   if(principal<=0){ toast("请输入本金金额"); return; }
-  // 最优选基：全局按综合分从高到低择优，同类最多 2 只防扎堆。
-  // 无论选 3/5/8 只，拿到的都是当前推荐池里综合分最优的组合（旧版按类别轮转会漏掉高分基金）
-  const byCat={};
-  list.forEach(f=>{ (byCat[f.category]=byCat[f.category]||[]).push(f); });
-  const sorted=[...list].sort((x,y)=>(y.score||0)-(x.score||0));
-  const picked=[]; const catCnt={};
-  for(const f of sorted){
-    if(picked.length>=n) break;
-    const c=f.category||"其他";
-    if((catCnt[c]||0)>=2) continue;          // 同类最多 2 只（跨类分散，防单类扎堆）
-    picked.push(f); catCnt[c]=(catCnt[c]||0)+1;
-  }
-  if(picked.length<n){                        // 若因同类限制未凑满，放宽补足（极端场景）
-    for(const f of sorted){
-      if(picked.length>=n) break;
-      if(picked.indexOf(f)>=0) continue;
-      picked.push(f);
-    }
-  }
+  // 最优组合：类别分散（权益为主+海外/债券各1席）+ 类内综合分择优
+  const picked=pickBestN(list, n);
+  window.__lastSetupCodes=picked.map(f=>f.code);   // 供「推荐效果回测」跟随你选的组合
   if(!picked.length){ toast("推荐结果为空，无法配置"); return; }
   // 按综合分归一化分配本金（评分高的多配）
   const tot=picked.reduce((s,f)=>s+(f.score||0),0)||1;
