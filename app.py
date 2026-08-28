@@ -1136,6 +1136,89 @@ def _fit_reason(asset, fac, env):
     return ""
 
 
+# 全局评级阈值（推荐/诊断共用，保证全应用口径一致）：
+# recommend_portfolio 每次按当次评分分布自适应更新；advise_fund 等读取同一阈值，
+# 避免“推荐里说推荐、诊断里却说谨慎”的矛盾。
+_RECO_TH = {"reco": 56.0, "watch": 42.0}
+
+
+def _build_reco_candidates(max_per_cat=None, time_left=None):
+    """实时榜单候选构建（基金池不内置）：拉取各品类实时榜单，成立≥3年过滤，
+    按近1年收益等距分层抽样（去追涨），返回 (candidates, empty_cats, fallback_cats)。
+    candidates=[(cat_label, asset, code, name)] 已做类别轮转（避免单类独占评分预算）；
+    fallback_cats 仅在实时榜单完全不可达（网络故障）时记录，供上层在 note 标注，绝不静默用内置名单冒充实时。"""
+    now = datetime.date.today()
+
+    def _est_years(d):
+        try:
+            y, mo, dd = map(int, d.split("-"))
+            return (now - datetime.date(y, mo, dd)).days / 365.25
+        except Exception:
+            return 99.0
+
+    def _call_rank(ft, pn, name_filter=None, wait_s=6):
+        from concurrent.futures import ThreadPoolExecutor
+        ex = ThreadPoolExecutor(max_workers=1)
+        try:
+            fut = ex.submit(get_rank_list, ft, pn, name_filter)
+            return fut.result(timeout=wait_s) or []
+        except Exception:
+            return []
+        finally:
+            ex.shutdown(wait=False)
+
+    candidates, empty_cats, fallback_cats = [], [], []
+    for ft, cat_label, asset, topn, need_age in _RECO_CATS:
+        if time_left is not None and time_left() < 13:   # 预留时间给评分
+            break
+        key = "gold" if ft == "__gold" else ("money" if ft == "__money" else ft)
+        used_fb = False
+        try:
+            if ft == "__gold":
+                rows = _call_rank("all", 200, name_filter="黄金")
+            elif ft == "__money":
+                rows = _call_rank("money", 30)
+            else:
+                rows = _call_rank(ft, 100)
+            if not rows:
+                rows = list(_FALLBACK_SPECIAL.get(key, [])); used_fb = True
+        except Exception:
+            rows = list(_FALLBACK_SPECIAL.get(key, [])); used_fb = True
+        if used_fb:
+            fallback_cats.append(cat_label)
+        if need_age:
+            rows = [r for r in rows if _est_years(r[3]) >= 3.0]   # 只评成立≥3年（经历牛熊、数据可靠）
+        # 去追涨：不按“近1年涨幅”排序截断候选，改为在收益分布上等距分层抽样，
+        # 低/中/高收益基金都进候选池，最终由多因子综合分择优。
+        rows.sort(key=lambda r: r[2])
+        n_rows = len(rows)
+        POOL = max_per_cat if max_per_cat else topn * 6
+        head = []
+        if n_rows:
+            step = max(1.0, n_rows / float(POOL))
+            seen = set()
+            for i in range(POOL):
+                r = rows[min(n_rows - 1, int(i * step))]
+                if r[0] not in seen:
+                    seen.add(r[0]); head.append(r)
+        for code, name, y1, ed in head:
+            candidates.append((cat_label, asset, code, name))
+        if not head:
+            empty_cats.append(cat_label)
+    # 类别轮转：每类候选交替进入评分队列，避免排在候选最前的股票型独占预算
+    _rot = {}
+    for it in candidates:
+        _rot.setdefault(it[0], []).append(it)
+    cand_order = []
+    _rkeys = list(_rot.keys())
+    _rmax = max((len(v) for v in _rot.values()), default=0)
+    for i in range(_rmax):
+        for k in _rkeys:
+            if i < len(_rot[k]):
+                cand_order.append(_rot[k][i])
+    return cand_order, empty_cats, fallback_cats
+
+
 def recommend_portfolio():
     # 全局时间预算：SCF 函数超时上限有限，冷启动时东财接口响应慢，
     # 市场温度/基准/候选扫描/评分共享同一预算，超时即降级返回，绝不整体超时（否则前端 Failed to fetch）。
@@ -1195,7 +1278,7 @@ def recommend_portfolio():
             env.get("sample", 0), (env.get("pos_ratio") or 0) * 100) if env.get("source") == "fund_breadth" else ""
         note = ("当前市场：%s（温度 %d）。%s%s%s" % (env["regime"], env["score"], vtxt, tilt or "据此给出如下配置建议。", src_hint))
 
-    # === 动态候选：实时拉取全市场榜单（不再使用内置名单） ===
+    # === 动态候选：实时拉取全市场榜单（基金池不内置；仅网络故障时兜底并在 note 标注） ===
     # 基准日线复用带日期的缓存（bench:hs300d，供贝塔按交易日对齐）；
     # 冷启动无缓存时传 None，由 _compute_factors 内部按需获取（cached，跨请求复用），
     # 保证推荐评分里的 Beta/Alpha 不被错位基准污染。
@@ -1204,77 +1287,10 @@ def recommend_portfolio():
         bench = _bc[2]
     else:
         bench = None
-    now = datetime.date.today()
-    candidates = []
-    empty_cats = []
-
-    def _est_years(d):
-        try:
-            y, mo, dd = map(int, d.split("-"))
-            return (now - datetime.date(y, mo, dd)).days / 365.25
-        except Exception:
-            return 99.0
-
-    def _call_rank(ft, pn, name_filter=None, wait_s=6):
-        """带超时的榜单拉取：SCF 上偶发 socket 挂死，绝不让单个请求拖死推荐，超时即回退内置名单。"""
-        from concurrent.futures import ThreadPoolExecutor
-        ex = ThreadPoolExecutor(max_workers=1)
-        try:
-            fut = ex.submit(get_rank_list, ft, pn, name_filter)
-            return fut.result(timeout=wait_s) or []
-        except Exception:
-            return []
-        finally:
-            ex.shutdown(wait=False)
-
-    for ft, cat_label, asset, topn, need_age in _RECO_CATS:
-        if _left() < 13:  # 预留时间给评分，候选扫描提前收工
-            break
-        key = "gold" if ft == "__gold" else ("money" if ft == "__money" else ft)
-        try:
-            if ft == "__gold":
-                rows = _call_rank("all", 200, name_filter="黄金")
-            elif ft == "__money":
-                rows = _call_rank("money", 30)
-            else:
-                rows = _call_rank(ft, 100)
-            if not rows:
-                rows = list(_FALLBACK_SPECIAL.get(key, []))
-        except Exception:
-            rows = list(_FALLBACK_SPECIAL.get(key, []))
-        if need_age:
-            rows = [r for r in rows if _est_years(r[3]) >= 3.0]   # 只评成立≥3年（经历牛熊、数据可靠）
-        # 去追涨：不再按“近1年涨幅”排序截断候选（那会只挑近期冠军、系统性追高）。
-        # 改为在收益分布上“等距分层抽样”，低/中/高收益基金都进候选池，最终由多因子综合分择优。
-        rows.sort(key=lambda r: r[2])   # 升序，便于按收益分层
-        n_rows = len(rows)
-        POOL = topn * 6                  # 每类候选池放大到 topn*6（约 18~90），预算内评分、综合分定 top3
-        head = []
-        if n_rows:
-            step = max(1.0, n_rows / float(POOL))
-            seen = set()
-            for i in range(POOL):
-                r = rows[min(n_rows - 1, int(i * step))]
-                if r[0] not in seen:
-                    seen.add(r[0]); head.append(r)
-        for code, name, y1, ed in head:
-            candidates.append((cat_label, asset, code, name))
-        if not head:
-            empty_cats.append(cat_label)
-
-    # 类别轮转：让每类候选交替进入评分队列，避免排在候选最前的股票型独占预算，
-    # 导致债券/货币/黄金/海外等类别一个都评不出来（线上曾出现"仅 3 只股票型"的问题）。
-    _rot = {}
-    for it in candidates:
-        _rot.setdefault(it[0], []).append(it)
-    cand_order = []
-    _rkeys = list(_rot.keys())
-    _rmax = max((len(v) for v in _rot.values()), default=0)
-    for i in range(_rmax):
-        for k in _rkeys:
-            if i < len(_rot[k]):
-                cand_order.append(_rot[k][i])
-    candidates = cand_order
+    candidates, empty_cats, fallback_cats = _build_reco_candidates(time_left=_left)
+    if fallback_cats:
+        note = (note + "（⚠️ 实时榜单暂不可达，%s 本次按兜底名单，请稍后重试获取实时推荐）"
+                % "、".join(fallback_cats))
 
     # === 多因子精评（实时净值/五维/经理/估值） ===
     # 时间预算：与全局 _BUDGET 共享，宁可少评几只也不能整体超时。
@@ -1384,6 +1400,8 @@ def recommend_portfolio():
     _comp_med = _median(_all_comp) or 50.0
     TH_RECO = max(56.0, _comp_med + 8.0)
     TH_WATCH = max(42.0, _comp_med + 1.0)
+    _RECO_TH["reco"] = TH_RECO      # 同步全局评级阈值：诊断/分析读取同一口径，避免“推荐说好、诊断说差”
+    _RECO_TH["watch"] = TH_WATCH
 
     by_cat = {}
     for cat_label, asset, fac in scored:
@@ -1558,21 +1576,12 @@ def _buy_signal_of(fac):
     return "中性持有"
 
 
-def _reco_universe():
-    """回测稳定候选宇宙：用内置头部基金清单（长期成立、数据可靠），不依赖实时榜单，
-    保证回测可复现、可跨节点运行；覆盖股/混/指/债/QDII/黄金/货币各大类。"""
-    out = []
-    for cat, lst in _FALLBACK_SPECIAL.items():
-        for code, name, y1, ed in lst:
-            out.append({"code": code, "name": name, "estab": ed})
-    return out
-
-
 def recommend_backtest():
     """推荐效果回测（验证推荐逻辑是否“有用”）——忠实复现产品逻辑：
     对多个历史锚点(近6/12/24个月)，用【修复后的同一套多因子逻辑】在锚点时点，
     按资产类别各选综合分最优的基金，再按推荐配置比例加权构建组合并持有至今天，
-    计算组合收益，与沪深300、等权全宇宙收益对比。结果缓存 12h（计算较重），首次可能稍慢。"""
+    计算组合收益，与沪深300、等权全宇宙收益对比。结果缓存 12h（计算较重），首次可能稍慢。
+    回测宇宙来自实时榜单分层抽样（与主推荐同一候选构建函数，不内置基金池）。"""
     _BUDGET = 95.0
     _t0 = time.time()
 
@@ -1582,13 +1591,11 @@ def recommend_backtest():
     # 资产默认配置（与 recommend_portfolio 均衡默认一致）：权益占大头，黄金/货币仅小仓
     ALLOC = {"股票型": 0.30, "混合型": 0.12, "指数型": 0.13, "海外(QDII)": 0.15,
              "债券型": 0.20, "黄金": 0.05, "货币型": 0.05}
-    _CAT_ASSET = {"gp": "股票型", "hh": "混合型", "zs": "指数型", "zq": "债券型",
-                  "qdii": "海外(QDII)", "gold": "黄金", "money": "货币型"}
+    # 回测宇宙 = 实时榜单按挑选逻辑分层抽样（不内置）：与主推荐共用 _build_reco_candidates
+    cand, _empty, _fb = _build_reco_candidates(max_per_cat=6)
     cat_universe = {}
-    for cat, lst in _FALLBACK_SPECIAL.items():
-        asset = _CAT_ASSET.get(cat)
-        cat_universe.setdefault(asset, []).extend(
-            [{"code": c, "name": n, "estab": e} for c, n, y1, e in lst])
+    for cat_label, asset, code, name in cand:
+        cat_universe.setdefault(asset, []).append({"code": code, "name": name})
 
     hs_series = cached("bk", "hs300_sina", _daily_ttl(), lambda: _get_index_series("1.000300", 1200))
     anchors = [("近6个月", 6), ("近12个月", 12), ("近24个月", 24)]
@@ -1683,13 +1690,12 @@ def recommend_backtest():
                 acc += p["weight"] * (p["fwdRet"] / 100.0)
                 tot_w += p["weight"]
         port_ret = (acc / tot_w) if tot_w > 0 else None
-        # 等权全宇宙 forward 收益（对照基准）
+        # 等权全宇宙 forward 收益（对照基准，宇宙=实时榜单候选）
         ur = []
-        for cat, lst in _FALLBACK_SPECIAL.items():
-            for code, name, y1, ed in lst:
-                a, b = _nav_at(code, asof_s), _nav_now(code)
-                if a and b and a > 0:
-                    ur.append(b / a - 1)
+        for _cl, _asset, _code, _name in cand:
+            a, b = _nav_at(_code, asof_s), _nav_now(_code)
+            if a and b and a > 0:
+                ur.append(b / a - 1)
         univ_ret = (sum(ur) / len(ur)) if ur else None
         results.append({
             "label": label, "asof": asof_s, "error": None,
@@ -1699,7 +1705,7 @@ def recommend_backtest():
             "univRet": round(univ_ret * 100, 1) if univ_ret is not None else None,
         })
     return {"ok": True, "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "method": "对近6/12/24个月锚点，用修复后的多因子逻辑（风险调整收益主导、去追涨、估值/均值回归买点）按资产类别各选最优基金、按推荐配置比例加权持有至今天，与沪深300、等权全宇宙对比。仅验证历史样本，非未来收益承诺。",
+            "method": "回测宇宙来自实时榜单分层抽样（不内置）；对近6/12/24个月锚点，用修复后的多因子逻辑（风险调整收益主导、去追涨、估值/均值回归买点）按资产类别各选最优基金、按推荐配置比例加权持有至今天，与沪深300、等权全宇宙对比。仅验证历史样本，非未来收益承诺。",
             "results": results}
 
 
@@ -2591,7 +2597,11 @@ def advise_fund(code, capital=100000):
     fac = _compute_factors(code)
     if fac is None:
         return {"ok": False, "error": "未找到基金或历史净值不足 60 个交易日，无法稳健评估"}
-    mu, sigma = fac.get("mu"), fac.get("sigma")
+    # 盈利概率与推荐接口同框架：用均值回归预期收益 μE（非历史漂移 μ），
+    # 避免“历史涨→概率高”的外推偏差，也保证诊断与推荐口径一致。
+    mu, sigma = fac.get("muE"), fac.get("sigma")
+    if mu is None or sigma is None or sigma <= 0:
+        mu, sigma = fac.get("mu"), fac.get("sigma")
     if mu is None or sigma is None or sigma <= 0:
         # 无收益序列（异常兜底）：货币类收益极稳，盈利概率近似 100%
         p1, p3, p6, p12 = 0.999, 0.999, 0.999, 0.999
@@ -2612,7 +2622,9 @@ def advise_fund(code, capital=100000):
         p1, p3, p6, p12 = mc(21), mc(63), mc(126), mc(252)
 
     composite = fac["composite"]
-    verdict = "推荐" if composite >= 68 else ("谨慎关注" if composite >= 50 else "暂不推荐")
+    # 评级阈值与推荐接口同源（_RECO_TH，recommend_portfolio 每次按分布自适应更新），
+    # 保证同一基金在「推荐」与「诊断」里结论一致。
+    verdict = "推荐" if composite >= _RECO_TH["reco"] else ("谨慎关注" if composite >= _RECO_TH["watch"] else "暂不推荐")
 
     # 仓位建议：按波动风险控制单只上限；估值过高（>80%）减仓
     if fac["vol"] < 0.10:
