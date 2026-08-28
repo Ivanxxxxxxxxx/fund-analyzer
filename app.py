@@ -1227,8 +1227,14 @@ def _build_reco_candidates(max_per_cat=None, time_left=None):
         rows.sort(key=lambda r: r[2], reverse=True)   # 按近1年收益降序（榜单前列=同类收益前列）
         POOL = max_per_cat if max_per_cat else topn
         head = rows[:POOL]
-        # 兼容：若 rows 为空（网络故障已回退内置名单），保留内置名单原顺序
+        # 同一基金 A/C/E 份额只留一只（按"名称去份额后缀"去重，保留榜单靠前/收益更高的那只），
+        # 避免推荐级同时出现"西部利得景程A + 西部利得景程C"导致一键配置重复买入同一基金。
+        _seen_norm = set()
         for code, name, y1, ed in head:
+            _norm = re.sub(r"[ACDE]$", "", name or "")
+            if _norm in _seen_norm:
+                continue
+            _seen_norm.add(_norm)
             candidates.append((cat_label, asset, code, name))
         if not head:
             empty_cats.append(cat_label)
@@ -1554,7 +1560,8 @@ def recommend_portfolio():
                           "peerRank": rank, "peerN": peer_n, "prob12": _prob12(fac),
                           "benchSecid": fac.get("benchSecid"), "buySignal": buySignal,
                           "mu": fac.get("mu"), "muE": fac.get("muE"), "sigma": fac.get("sigma"),
-                          "vol": fac.get("vol"), "maxMdd": fac.get("maxMdd")})
+                          "vol": fac.get("vol"), "maxMdd": fac.get("maxMdd"), "winRate": fac.get("winRate"),
+                          "sc": fac.get("sc") or {}})
     funds.sort(key=lambda x: (x["asset"], -x["score"]))
 
     # === 跨类相关性去重（P1-F）：避免推荐两只同涨同跌的基金（如两只纳斯达克/QDII、两只沪深300）===
@@ -2010,8 +2017,11 @@ def _compute_factors(code, bench_rets=None, asof=None):
                 "tenure": None, "age": None, "r3y": None, "r2y": None,
                 "managers": f.get("managers") or [],
                 "m": 0.00025, "s": 0.0006, "mu": 0.00025, "sigma": 0.0006,
+                "winRate": 1.0,   # 货币基金月胜率≈100%（类现金，几乎无月度亏损）
                 "sc": {"fee": 90.0, "scale": 60.0, "inst": 50.0, "age": 80.0,
-                       "tenure": 60.0, "sortino": 60.0, "mdd": 95.0, "long": 60.0}}
+                       "tenure": 60.0, "sortino": 60.0, "mdd": 95.0, "long": 60.0,
+                       "win": 95.0, "sharpe": 60.0, "mom": 55.0, "alpha": 50.0,
+                       "ir": 50.0, "dd": 95.0, "val": 50.0, "avr": 50.0, "calmar": 60.0}}
     hist = get_history(code, 1200 if asof else 730)          # 单位净值（仅用于展示/自身分位）
     data = hist.get("data") or []
     if asof:
@@ -2102,6 +2112,25 @@ def _compute_factors(code, bench_rets=None, asof=None):
 
     calmar = ann / abs(mdd) if mdd < 0 else (ann / 0.01 if ann > 0 else 0.0)
 
+    # 因子归一化 → 0-100 贡献
+    def clamp(x):
+        return max(0.0, min(100.0, x))
+
+    # ---- 月胜率（持有体验/稳定性核心指标）：近24个月正收益月份占比 ----
+    # 投资学依据：胜率直接回答"持有这只基金，随机某月买入持有1个月赚钱的概率"；
+    # 高胜率基金拿得住、体验好，是"大概率盈利"的最直接度量（2026-08-28 因子补强）。
+    _win_m = _tot_m = 0
+    for i in range(len(aclos) - 1, 0, -21):      # 21 交易日≈1个月，从最新往回数
+        if i - 21 < 0:
+            break
+        if aclos[i] / aclos[i - 21] - 1 > 0:
+            _win_m += 1
+        _tot_m += 1
+        if _tot_m >= 24:
+            break
+    winRate = (_win_m / _tot_m) if _tot_m else None
+    sc_win = clamp(winRate * 100) if winRate is not None else 50.0
+
     # ---- 新增：更细的风险与质地因子（多方查证：晨星 MRAR 惩罚下跌、Sortino/Treynor、规模、费率、成立年限、机构持有）----
     r500 = ret(500) if n > 500 else None                     # 近 2 年收益（长期动量，防短期冲高）
     neg = [x for x in rets if x < 0]                         # 下行收益样本
@@ -2187,9 +2216,7 @@ def _compute_factors(code, bench_rets=None, asof=None):
             if wm:
                 tenure = float(wm.group(1))
 
-    # 因子归一化 → 0-100 贡献
-    def clamp(x):
-        return max(0.0, min(100.0, x))
+    # 因子归一化 → 0-100 贡献（clamp 定义在 calmar 计算后，此处复用）
 
     mom_val = 0.5 * r250 + 0.3 * (r500 if r500 is not None else r250) + 0.2 * r120   # 动量：1年/2年/120日 加权
     sc_mom = clamp(50 + mom_val * 100 * 1.5)
@@ -2231,18 +2258,20 @@ def _compute_factors(code, bench_rets=None, asof=None):
     # 经理任职年限：≥5 年满分（经历牛熊周期的经验价值）
     sc_tenure = clamp((tenure if tenure is not None else 2.0) / 5.0 * 100)
 
-    # 权重（风险调整收益与长期稳健为主导，动量显著下调，避免“追涨”）：
-    # 夏普/索提诺/卡玛/Alpha 合计 0.40，长期 0.06，动量仅 0.06；
-    # 估值 0.09 仅对指数/基准匹配基金有效；质地(费率/规模/年限/经理/机构)合计 0.20。
-    w = {"avr": 0.10, "mom": 0.06, "long": 0.06, "val": 0.09, "sharpe": 0.10,
+    # 权重（风险调整收益与长期稳健为主导，动量显著下调，避免"追涨"）：
+    # 夏普/索提诺/卡玛/Alpha 合计 0.40，长期 0.05，动量仅 0.05；
+    # 估值 0.09 仅对指数/基准匹配基金有效；质地(费率/规模/年限/经理/机构)合计 0.18；
+    # 月胜率 0.04（稳定性/持有体验，2026-08-28 补强）。
+    w = {"avr": 0.10, "mom": 0.05, "long": 0.05, "val": 0.09, "sharpe": 0.10,
          "sortino": 0.11, "calmar": 0.09, "alpha": 0.10, "dd": 0.04, "mdd": 0.05,
-         "ir": 0.05, "fee": 0.04, "scale": 0.04, "age": 0.03, "inst": 0.02, "tenure": 0.02}
+         "ir": 0.03, "fee": 0.04, "scale": 0.04, "age": 0.03, "inst": 0.02, "tenure": 0.02,
+         "win": 0.04}
     composite = (sc_avr * w["avr"] + sc_mom * w["mom"] + sc_long * w["long"]
                  + sc_val * w["val"] + sc_sharpe * w["sharpe"] + sc_sortino * w["sortino"]
                  + sc_calmar * w["calmar"] + sc_alpha * w["alpha"] + sc_dd * w["dd"]
                  + sc_mdd * w["mdd"] + sc_ir * w["ir"] + sc_fee * w["fee"]
                  + sc_scale * w["scale"] + sc_age * w["age"] + sc_inst * w["inst"]
-                 + sc_tenure * w["tenure"])
+                 + sc_tenure * w["tenure"] + sc_win * w["win"])
 
     return {"code": code, "name": f.get("name"), "type": f.get("type", ""),
             "nav": f.get("nav"), "navDate": f.get("navDate"),
@@ -2256,10 +2285,11 @@ def _compute_factors(code, bench_rets=None, asof=None):
             "managers": managers, "tenure": tenure,
             "fee": fee, "scale": scale, "instPct": inst, "age": age_years, "r3y": r3y, "r2y": r2y,
             "muE": round(muE, 4),
+            "winRate": winRate,
             "sc": {"mom": sc_mom, "long": sc_long, "val": sc_val, "sharpe": sc_sharpe,
                    "sortino": sc_sortino, "calmar": sc_calmar, "alpha": sc_alpha, "dd": sc_dd,
                    "mdd": sc_mdd, "ir": sc_ir, "avr": sc_avr, "fee": sc_fee, "scale": sc_scale,
-                   "age": sc_age, "inst": sc_inst, "tenure": sc_tenure},
+                   "age": sc_age, "inst": sc_inst, "tenure": sc_tenure, "win": sc_win},
             "composite": round(composite, 1)}
 
 
