@@ -1542,9 +1542,13 @@ def recommend_portfolio():
     # === 推荐组合级盈利预期（蒙特卡洛对数近似，按推荐权重加权，独立假设） ===
     recoProb = None
     if funds:
-        wsum = sum(x["weight"] for x in funds) or 1.0
-        mu_p = sum(x["weight"] * (x.get("muE") or x.get("mu") or 0.0) for x in funds) / wsum
-        var_p = sum((x["weight"] / wsum) ** 2 * ((x.get("sigma") or 0.0) ** 2) for x in funds)
+        # 组合盈利预期只按「推荐」级基金加权：谨慎/暂不（如高估值黄金，1年概率≈0%）只是配置提示，
+        # 不应把"推荐组合"的整体概率拖成 0%（否则出现"推荐了却概率0%"的自相矛盾）。
+        _rfs = [x for x in funds if x["verdict"] == "推荐"]
+        _src = _rfs if _rfs else funds
+        wsum = sum(x["weight"] for x in _src) or 1.0
+        mu_p = sum(x["weight"] * (x.get("muE") or x.get("mu") or 0.0) for x in _src) / wsum
+        var_p = sum((x["weight"] / wsum) ** 2 * ((x.get("sigma") or 0.0) ** 2) for x in _src)
         sigma_p = _sqrt(var_p) if var_p > 0 else 0.0
         _e = __import__("math").exp
 
