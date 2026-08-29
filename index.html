@@ -2088,6 +2088,16 @@ async function analyze(){
         let base=null; for(const v of aligned){ if(v!=null){base=v;break;} }
         if(base) benchCum=aligned.map(v=> v==null?null:(v/base-1));
         benchName=b.name||"沪深300";
+        // 异常自检：长窗口(>300天)却算出极小基准累计(<2%)，属异常，打印内部值便于定位
+        const _bl=benchCum?benchCum[benchCum.length-1]:null;
+        if(trendDates.length>300 && _bl!=null && Math.abs(_bl)<0.02){
+          console.warn("[基准诊断] 长窗口但基准累计异常小", JSON.stringify({
+            td0:trendDates[0], td1:trendDates[trendDates.length-1], len:trendDates.length,
+            base:aligned.find(v=>v!=null), last:aligned[aligned.length-1],
+            idxName:b.name, idxDates0:b.dates[0], idxDates1:b.dates[b.dates.length-1],
+            codes:(typeof holdings!=="undefined"?holdings.map(h=>h.code):[])
+          }));
+        }
       }
     }catch(e){}
     if(benchCum){ const s=benchCum.findIndex(v=>v!=null); if(s>0){ benchCum=benchCum.slice(s); portCum=portCum.slice(s); trendDates=trendDates.slice(s); } }
