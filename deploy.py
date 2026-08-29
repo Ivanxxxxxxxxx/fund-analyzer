@@ -73,6 +73,10 @@ def api(repo, method, path, body=None, tries=3):
             print(f"✗ {path}: HTTP {e.code} {msg}")
             return None
         except Exception as e:
+            if i < tries - 1:
+                print(f"  · {path}: 网络错误 {e}，重试({i+1})")
+                time.sleep(2)
+                continue
             print(f"✗ {path}: 网络错误 {e}")
             return None
     return None
