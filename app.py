@@ -300,7 +300,7 @@ def _get_detail_raw(code):
            "navDate": None, "changePct": None,
            "assetAllocation": [], "industry": [], "holdings": [],
            "perfEval": None, "managers": [],
-           "scale": None, "instPct": None, "feeRate": None}
+           "scale": None, "instPct": None, "feeRate": None, "minBuy": None}
     txt = None
     for host in ("https://fund.eastmoney.com", "https://fundf10.eastmoney.com"):
         try:
@@ -407,6 +407,16 @@ def _get_detail_raw(code):
             res["feeRate"] = float(m.group(1))
     except Exception:
         pass
+    # 最低申购金额（基金购买规则，单位元）：调仓建议据此把调仓金额取整为合法申购额。
+    # pingzhongdata 形如 var fund_minsg="10"; 或 var fund_minsg=10;
+    try:
+        m = re.search(r'fund_minsg\s*=\s*"?([0-9]+(?:\.[0-9]+)?)"?', txt)
+        if m:
+            v = float(m.group(1))
+            if v > 0:
+                res["minBuy"] = v
+    except Exception:
+        pass
     return res
 
 
@@ -446,7 +456,7 @@ def _get_fund_raw(code):
             "perfEval": detail.get("perfEval") or None,
             "managers": detail.get("managers") or [],
             "scale": detail.get("scale"), "instPct": detail.get("instPct"),
-            "feeRate": detail.get("feeRate")}
+            "feeRate": detail.get("feeRate"), "minBuy": detail.get("minBuy")}
 
 
 def _get_history_raw(code, days=365):
