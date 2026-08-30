@@ -83,8 +83,10 @@ def _is_trading_now():
     return (_dt.time(9, 30) <= t <= _dt.time(11, 30)) or (_dt.time(13, 0) <= t <= _dt.time(15, 0))
 
 
-def cached(category, key, ttl, fn):
-    """通用缓存：ttl 为秒；ttl<=0 表示不缓存（如非交易时段的盘中估值）。"""
+def cached(category, key, ttl, fn, validate=None):
+    """通用缓存：ttl 为秒；ttl<=0 表示不缓存（如非交易时段的盘中估值）。
+    validate(val) 可选，返回 False 时结果不写入缓存（视为无效，如主源抖动导致序列过短、
+    被兜底逻辑截断的残缺历史），避免脏缓存整天返回残缺数据。"""
     if ttl <= 0:
         return fn()
     ck = category + ":" + key
@@ -98,6 +100,8 @@ def cached(category, key, ttl, fn):
     _empty = (val in (None, "", 0) or (isinstance(val, (list, dict)) and len(val) == 0)
               or (category == "index" and isinstance(val, dict) and not val.get("values")))
     if _empty:
+        return val
+    if callable(validate) and not validate(val):
         return val
     _CACHE[ck] = (now_ts, ttl, val)
     return val
@@ -591,7 +595,12 @@ def get_detail(code):
 
 
 def get_history(code, days=365):
-    return cached("history", "%s_%d" % (code, days), _daily_ttl(), lambda: _get_history_raw(code, days))
+    # 长区间请求（>=120 天）若结果明显过短（主源抖动、只剩兜底少量数据），视为无效、不写入缓存，
+    # 避免脏缓存整天困死在残缺序列上（曾导致组合走势被裁到 ~19 个交易日）。
+    return cached("history", "%s_%d" % (code, days), _daily_ttl(),
+                  lambda: _get_history_raw(code, days),
+                  validate=lambda v: not (days and days >= 120
+                                          and len(v.get("data", [])) < max(60, days // 2)))
 
 
 def _get_adj_series_raw(code):
