@@ -698,6 +698,20 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
     <div id="holdingsBox">
       <div class="empty">还没有基金，先在上方输入代码添加吧。</div>
     </div>
+    <!-- 波动约束调仓建议：在可接受波动内最大化年化，并贴合基金最低申购规则给出可执行调仓动作 -->
+    <div class="rebal-card" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
+      <div class="ov-h" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <svg class="i"><use href="#i-target"/></svg><b>波动约束调仓建议</b>
+        <span class="muted" style="font-size:11px">在你输入的年化波动上限内，用均值-方差有效前沿把组合年化收益最大化，并贴合各基金最低申购额给出可执行的增持 / 减持动作。</span>
+      </div>
+      <div class="ov-p-row" style="margin-top:8px">
+        <label>我能接受的年化波动</label>
+        <input id="rebalVol" class="num" type="number" min="3" max="40" step="1" value="15" style="width:64px">%
+        <button class="btn-primary btn-sm" onclick="rebalanceAdvise()">🎯 生成调仓建议</button>
+        <span class="muted" style="font-size:11px">范围 5%~30%（与计划收益最大化一致）；默认 15%。</span>
+      </div>
+      <div id="rebalBox"><div class="empty" style="font-size:12px">点「生成调仓建议」：基于你当前持仓市值，在目标波动下求最大年化配置，按各基金最低申购额取整后，给出「增持 / 减持 ¥X」的具体动作与调仓后预期年化、波动对比。</div></div>
+    </div>
   </div>
 
     </div></div></div>
@@ -1785,18 +1799,9 @@ async function renderPlanSim(){
   const freq=(JSON.parse(localStorage.getItem("fp_dca")||"{}")).freq||"month";
   const tv=Math.max(5,Math.min(30,+(sim.targetVol||15)));
   const pf=getPlanFunds();
-  // 若计划基金组合与实时持仓完全一致（同一批基金），计划概览/诊断统一用持仓的实际金额占比作为权重，
-  // 与「持仓分析」口径一致，消除“同基金不同数”。计划≠持仓时仍用计划自身仓位权重。
-  const sameSet=holdings.length && pf.length===holdings.length &&
-    pf.map(f=>f.code).slice().sort().join(",")===holdings.map(h=>h.code).slice().sort().join(",");
-  let funds;
-  if(sameSet){
-    const tot=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
-    const hmap={}; holdings.forEach(h=>hmap[h.code]=(+h.value||0)/tot);
-    funds=pf.map(f=>({code:f.code,name:f.name,value:Math.max(1,(hmap[f.code]||0.05)*10000)}));
-  } else {
-    funds=pf.map(f=>({code:f.code,name:f.name,value:Math.max(1,+(f.weight||0.05)*10000)}));
-  }
+  // 投资计划永远使用【计划自身】的仓位权重（f.weight），不借用实际持仓占比。
+  // 即便计划基金集合与实际持仓完全一致，也各自独立诊断，互不影响（用户明确要求分离）。
+  const funds=pf.map(f=>({code:f.code,name:f.name,value:Math.max(1,+(f.weight||0.05)*10000)}));
   // 参数编辑区 + 计划基金（可增删）
   const pe=document.getElementById("planSimParams");
   if(pe){
@@ -1869,19 +1874,10 @@ async function analyzePlan(){
   if(!pf.length){ box.innerHTML='<div class="empty">投资计划里还没有基金：去上方加入或点「加入投资计划」。</div>'; return; }
   box.innerHTML='<div class="empty">正在拉取计划基金历史净值、计算风险指标…</div>';
   const codes=pf.map(f=>f.code);
-  // 若投资计划的基金组合与当前实时持仓完全一致（同一批基金），则用持仓的实际金额占比作为权重，
-  // 保证「计划诊断」与「持仓分析」对同样的基金给出完全一致的数据，消除“同基金不同数”的困惑。
-  const sameSet = holdings.length && codes.length===holdings.length &&
-                  codes.slice().sort().join(",")===holdings.map(h=>h.code).slice().sort().join(",");
-  let weights;
-  if(sameSet){
-    const tot=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
-    const hmap={}; holdings.forEach(h=>hmap[h.code]=(+h.value||0)/tot);
-    weights=codes.map(c=>hmap[c]!=null?hmap[c]:0);
-  } else {
-    const wmap={}; pf.forEach(f=>wmap[f.code]=+f.weight||0);
-    weights=codes.map(c=>wmap[c]);
-  }
+  // 计划诊断始终基于【计划自身】权重（f.weight），不借用实际持仓占比；
+  // 即使基金完全相同，投资计划与实际持仓也是两套独立口径，分别显示、互不替代。
+  const wmap={}; pf.forEach(f=>wmap[f.code]=+f.weight||0);
+  const weights=codes.map(c=>wmap[c]);
   // 与「投资计划概览」共用同一套组合统计（portfolioStats），保证"概览年化"与"诊断年化"完全一致，不再自相矛盾
   const st=await portfolioStats(codes, weights);
   if(!st){ box.innerHTML='<div class="empty">部分计划基金历史不足（需近 4 年净值），无法计算风险指标。</div>'; return; }
@@ -1906,6 +1902,135 @@ async function analyzePlan(){
     </div>
     <div class="note" style="margin-top:8px">诊断：${planDiag(annRet,annVol,maxDD,corrAvg,score,rc)}</div>`;
 }
+// 把目标市值按各基金最低申购额(minBuy)取整，得到可执行的新市值与增持/减持动作；
+// 通过把残差补偿到最大市值基金，保证再平衡后总资金基本不变。
+function snapToMinBuy(cur, tgt, mins){
+  const n=cur.length;
+  const d=tgt.map((tv,i)=> tv-cur[i]);                 // 原始 delta
+  const sd=d.map((x,i)=>{
+    const m=Math.max(1, mins[i]||10);
+    if(x>=0){
+      if(x<m) return x>0? m : 0;                       // 微小增持 → 至少买最低额；恰好 0 则不动
+      return Math.ceil(x/m)*m;                         // 向上取整为最低申购整数倍
+    } else {
+      const ax=-x;
+      if(ax<m) return x<0? -m : 0;                     // 微小减持 → 至少卖最低额
+      return -Math.floor(ax/m)*m;                      // 向下取整
+    }
+  });
+  // 让总 delta 归零：把残差补偿到市值最大的基金（再取整为合法申购额）
+  const residual = -sd.reduce((a,b)=>a+b,0);
+  if(Math.abs(residual)>1e-6){
+    let idx=0; for(let i=1;i<n;i++) if(cur[i]>cur[idx]) idx=i;
+    const m=Math.max(1, mins[idx]||10);
+    let nd=sd[idx]+residual;
+    nd = nd>=0 ? (nd<m? (nd>0?m:0):Math.ceil(nd/m)*m) : (Math.abs(nd)<m?-m:-Math.floor(Math.abs(nd)/m)*m);
+    sd[idx]=nd;
+  }
+  const newVals=cur.map((v,i)=>Math.max(0, v+sd[i]));
+  const res = newVals.reduce((a,b)=>a+b,0) - cur.reduce((a,b)=>a+b,0);
+  return {newVals, deltas:sd, residual:res};
+}
+
+// 🎯 波动约束调仓建议：当前持仓 → 在用户给定年化波动上限内求最大年化配置（均值-方差有效前沿），
+// 按各基金最低申购额取整后，输出可执行的增持/减持动作 + 教学文字。总市值不变（纯再平衡）。
+async function rebalanceAdvise(){
+  const box=document.getElementById("rebalBox"); if(!box) return;
+  if(holdings.length<2){ toast("调仓建议至少需要 2 只持仓基金"); return; }
+  const tvEl=document.getElementById("rebalVol");
+  const tvPct=Math.max(5,Math.min(30, tvEl?(+tvEl.value||15):15));
+  if(tvEl) tvEl.value=tvPct;
+  const targetVol=tvPct/100;
+  box.innerHTML='<div class="empty">正在拉取各基金历史净值、计算协方差与最低申购规则…</div>';
+  if(!window.__histCache) window.__histCache={};
+  const codes=holdings.map(h=>h.code);
+  const names=holdings.map(h=>h.name||"");
+  const minBuy={};
+  for(const c of codes){
+    if(!window.__histCache[c] || window.__histCache[c].length<20){
+      const r=await api("/api/history/"+c+"?days=730").catch(()=>({data:[]}));
+      window.__histCache[c]=r.data||[];
+    }
+    const f=await api("/api/fund/"+c).catch(()=>({}));
+    minBuy[c]= Math.max(1, +(f&&f.minBuy)||10);        // 取不到则按 10 元兜底
+  }
+  const navs=codes.map(c=>(window.__histCache[c]||[]).map(d=>d.nav).filter(v=>v>0));
+  const rets=navs.map(dailyReturns);
+  const L=Math.min(...rets.map(r=>r.length));
+  if(L<20){ box.innerHTML='<div class="empty">部分基金历史不足（需≥20 个交易日），无法生成调仓建议。</div>'; return; }
+  const aligned=rets.map(r=> r.slice(r.length-L));
+  const mu=aligned.map(r=>{ const g=r.reduce((a,x)=>a*(1+x),1); return Math.pow(g,252/L)-1; });
+  const mean=aligned.map(r=> r.reduce((a,x)=>a+x,0)/L);
+  const n=codes.length;
+  const Sigma=[]; for(let i=0;i<n;i++){ Sigma[i]=[]; for(let j=0;j<n;j++){
+    let s=0; for(let k=0;k<L;k++) s+=(aligned[i][k]-mean[i])*(aligned[j][k]-mean[j]);
+    Sigma[i][j]=s/(L-1)*252;
+  }}
+  // 缺历史基金的兜底（中性参与，不主导分配）
+  const validMu=mu.filter(v=>isFinite(v));
+  const avgMu=validMu.length? validMu.reduce((a,b)=>a+b,0)/validMu.length : 0;
+  const maxVar=Math.max(...Sigma.map((row,i)=>Math.max(row[i],1e-6)));
+  for(let i=0;i<n;i++){ if(!isFinite(mu[i])){ mu[i]=avgMu; for(let j=0;j<n;j++) Sigma[i][j]=Sigma[j][i]=(i===j?maxVar:0); } }
+
+  // 当前组合（按市值权重）统计，用于对比
+  const curVals=holdings.map(h=>+h.value||0);
+  const curTotal=curVals.reduce((a,b)=>a+b,0)||1;
+  const curW=curVals.map(v=>v/curTotal);
+  const curSt=await portfolioStats(codes, curVals);
+
+  // 求解：目标波动下最大年化权重（与计划收益最大化同算法）
+  const w=solveMaxRetAtVol(mu, Sigma, 0.05, 0.55, targetVol);
+  const wsum=w.reduce((a,b)=>a+b,0)||1; const W=w.map(x=>x/wsum);
+  const tgtSt=await portfolioStats(codes, W);
+
+  // 目标市值（按当前总市值再平衡，总资金不变）→ 按最低申购额取整
+  const tgtRaw=W.map(x=>curTotal*x);
+  const minsArr=codes.map(c=>minBuy[c]);
+  const snapped=snapToMinBuy(curVals, tgtRaw, minsArr);
+  const newVals=snapped.newVals, deltas=snapped.deltas, residual=snapped.residual;
+
+  const col=v=>v>=0?'var(--up)':'var(--down)';
+  const pct=x=>(x*100).toFixed(1)+'%';
+  const cardKPI=(label,value,color,hint)=>`<div class="kpi"><span class="label">${label}</span><span class="value" style="color:${color||'var(--text)'}">${value}</span>${hint?`<span class="hint">${hint}</span>`:''}</div>`;
+  let rows='';
+  codes.forEach((c,i)=>{
+    const d=deltas[i];
+    const action = (Math.abs(d)<1e-6) ? '<span class="muted">维持（无需变动）</span>'
+      : (d>0 ? `<b style="color:var(--up)">增持 ¥${Math.round(d).toLocaleString()}</b>`
+             : `<b style="color:var(--down)">减持 ¥${Math.round(-d).toLocaleString()}</b>`);
+    rows+=`<tr>
+      <td><span class="pf-code">${c}</span> <span class="pf-name">${names[i]||"—"}</span></td>
+      <td class="num">¥${Math.round(curVals[i]).toLocaleString()}</td>
+      <td class="num">${pct(curW[i])}</td>
+      <td class="num">¥${Math.round(newVals[i]).toLocaleString()}</td>
+      <td class="num">${pct(newVals[i]/curTotal)}</td>
+      <td class="num">${action}</td>
+      <td class="muted" style="font-size:11px">最低申购 ¥${Math.round(minBuy[c]).toLocaleString()}</td>
+    </tr>`;
+  });
+  const curAnn=curSt?curSt.ann:null, curVol=curSt?curSt.vol:null;
+  const tgtAnn=tgtSt?tgtSt.ann:null, tgtVol=tgtSt?tgtSt.vol:null;
+  const headline = (curAnn!=null&&tgtAnn!=null) ?
+    `调仓前：预期年化 <b style="color:${col(curAnn)}">${(curAnn>=0?'+':'')+pct(curAnn)}</b>、波动 <b>${pct(curVol)}</b>；调仓后（目标波动 ${tvPct}%）：预期年化 <b style="color:${col(tgtAnn)}">${(tgtAnn>=0?'+':'')+pct(tgtAnn)}</b>、波动 <b>${pct(tgtVol)}</b>。`
+    : `已在目标波动 ${tvPct}% 下求得最大年化配置，下方为具体调仓动作。`;
+  const note = (residual && Math.abs(residual)>1) ? `<div class="note" style="margin-top:6px">注：因按最低申购额取整，调仓后总市值与当前相差约 ¥${Math.round(Math.abs(residual)).toLocaleString()}（已在最大持仓上补偿，可视为现金余额 / 缺口，不影响配置结构）。</div>` : '';
+  const clampNote = (tgtVol!=null && tgtVol>targetVol+0.005) ? `<div class="note" style="margin-top:6px;color:var(--warn)">⚠️ 你设定的目标波动低于这些基金可达的最低波动，已自动取「最低波动组合」（即当前能买到的最稳配置）。可放宽波动上限以获得更高收益。</div>` : '';
+  box.innerHTML=`
+    <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:10px">
+      ${cardKPI('目标波动上限', tvPct+'%', 'var(--text)', '你设定的风险上限')}
+      ${curAnn!=null?cardKPI('调仓前预期年化', (curAnn>=0?'+':'')+pct(curAnn), col(curAnn), '当前市值加权'):''}
+      ${tgtAnn!=null?cardKPI('调仓后预期年化', (tgtAnn>=0?'+':'')+pct(tgtAnn), col(tgtAnn), '目标波动内最大年化'):''}
+      ${tgtVol!=null?cardKPI('调仓后波动', pct(tgtVol), tgtVol>targetVol+0.005?'var(--warn)':'var(--good)', tgtVol>targetVol+0.005?'已钳到最低波动组合':'在目标内'):''}
+    </div>
+    <div class="note" style="margin-top:8px">${headline}</div>
+    <div style="overflow-x:auto;margin-top:10px"><table class="pf-table">
+      <thead><tr><th>基金</th><th class="num">当前市值</th><th class="num">当前占比</th><th class="num">建议目标市值</th><th class="num">建议占比</th><th class="num">动作</th><th class="num">购买规则</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    ${clampNote}${note}
+    <div class="note" style="margin-top:8px"><b>怎么调：</b>按上表「动作」列执行——标注「增持」的基金，买入对应金额（已自动取整为最低申购额的整数倍）；标注「减持」的基金，赎回对应金额；「维持」的基金不动。这是一次<b>再平衡</b>（总资金不变），把仓位从当前配置移动到有效前沿上的最大年化点。所有金额均满足对应基金的<b>最低申购规则</b>。</div>`;
+}
+
 function planDiag(annRet,annVol,maxDD,corrAvg,score,rc){
   const parts=[];
   parts.push('该计划组合历史年化'+(annRet>=0?'正收益 '+ (annRet*100).toFixed(1) +'%':'亏损 '+(annRet*100).toFixed(1)+'%')+'，波动 '+ (annVol*100).toFixed(1) +'%，属'+rc+'风险');
