@@ -1900,7 +1900,32 @@ async function analyzePlan(){
       ${card('分散度', divScore.toFixed(0), divScore>60?'var(--good)':'var(--warn)', '1-赫芬达尔')}
       ${card('组合健康分', score, score>=70?'var(--good)':score>=50?'var(--warn)':'var(--bad)', '综合评分')}
     </div>
-    <div class="note" style="margin-top:8px">诊断：${planDiag(annRet,annVol,maxDD,corrAvg,score,rc)}</div>`;
+    <div class="note" style="margin-top:8px">诊断：${planDiag(annRet,annVol,maxDD,corrAvg,score,rc)}</div>
+    <div style="margin-top:14px">
+      <h4 class="sec" style="margin:0 0 8px;font-size:14px"><span class="ic"><svg class="i"><use href="#i-trending-up"/></svg></span>盈利可能性（蒙特卡洛模拟）</h4>
+      <div id="planProbBox"><div class="empty" style="font-size:12px">正在模拟…</div></div>
+      <div class="note" style="margin-top:6px;font-size:11px">基于计划组合历史日收益率做 2000 次路径模拟，概率随持有期拉长通常提升（但不保证未来收益）。</div>
+    </div>`;
+  // 盈利可能性：与持仓诊断同源算法，但用【计划自身】权重算组合日收益，复用蒙特卡洛 renderProb（写入计划专属容器，不污染持仓 probBox）
+  try{
+    const _hist=[];
+    for(const c of codes){ const r=await api("/api/history/"+c+"?days=730").catch(()=>({data:[]})); _hist.push(r.data||[]); }
+    const _dSet=new Set(); _hist.forEach(h=>h.forEach(d=>{ if(d&&d.date) _dSet.add(d.date); }));
+    const _dates=Array.from(_dSet).sort();
+    if(_dates.length>2){
+      const _navs=codes.map((c,i)=>{ const m={}; (_hist[i]||[]).forEach(d=>{ if(d&&d.date!=null) m[d.date]=d.nav; }); let last=null; return _dates.map(d=>{ if(m[d]!=null) last=m[d]; return last; }); });
+      if(!_navs.some(n=>n.some(v=>v==null))){
+        const _rets=_navs.map(dailyReturns);
+        const _L=Math.min(..._rets.map(r=>r.length));
+        const _wsum=weights.reduce((a,b)=>a+(+b||0),0)||1;
+        const _W=weights.map(x=>(+x||0)/_wsum);
+        const _pr=[]; for(let t=0;t<_L;t++){ let s=0; for(let i=0;i<codes.length;i++) s+=_W[i]*_rets[i][_rets[i].length-_L+t]; _pr.push(s); }
+        const _mean=_pr.reduce((a,b)=>a+b,0)/_L;
+        const _var=_pr.reduce((a,b)=>a+(b-_mean)**2,0)/(_L-1);
+        renderProb(_mean, Math.sqrt(_var), "planProbBox");
+      } else { document.getElementById("planProbBox").innerHTML='<div class="empty" style="font-size:12px">部分计划基金历史不足，无法模拟盈利概率。</div>'; }
+    } else { document.getElementById("planProbBox").innerHTML='<div class="empty" style="font-size:12px">历史数据不足，无法模拟盈利概率。</div>'; }
+  }catch(e){ document.getElementById("planProbBox").innerHTML='<div class="empty" style="font-size:12px">盈利概率模拟失败：'+(e&&e.message||e)+'</div>'; }
 }
 // 把目标市值按各基金最低申购额(minBuy)取整，得到可执行的新市值与增持/减持动作；
 // 通过把残差补偿到最大市值基金，保证再平衡后总资金基本不变。
@@ -2400,7 +2425,8 @@ function renderRisk(m){
   </div>`;
 }
 
-function renderProb(mean,volDaily){
+function renderProb(mean,volDaily,elId){
+  const box=document.getElementById(elId||"probBox"); if(!box) return;
   const horizons=[{d:21,t:"1 个月"},{d:63,t:"3 个月"},{d:126,t:"6 个月"},{d:252,t:"1 年"}];
   const sims=2000;
   const out=horizons.map(h=>{
@@ -2417,7 +2443,7 @@ function renderProb(mean,volDaily){
     exp=Math.max(-0.999, Math.min(9.99, exp));   // 展示保护：-99.9% ~ +999%
     return {t:h.t, p:win/sims, exp};
   });
-  document.getElementById("probBox").innerHTML=`<div class="prob-grid">`+
+  box.innerHTML=`<div class="prob-grid">`+
     out.map(o=>{
       // 盈利概率阈值分色：≥60% 绿（较稳）/ 45-60% 橙黄（中性）/ <45% 红（谨慎）——与图例一致，一眼可读
       const c=o.p>=0.6?"#34d399":o.p>=0.45?"#f0a23a":"#fb7185";
