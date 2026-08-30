@@ -2581,7 +2581,8 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
   // 用底部 HTML 图例替代 Chart.js 内部图例：避免超长「终值」文字在窄容器被挤出、并挤占曲线区
   const lastOf=a=>{ if(!a) return null; for(let i=a.length-1;i>=0;i--){ const v=a[i]; if(v!=null&&isFinite(v)) return v; } return null; };
   const _pc=lastOf(portCum), _bc=lastOf(benchCum), _plc=lastOf(planCum);
-  const fmtPct=v=>v==null?"":("（终值 "+(v>=0?"+":"")+v.toFixed(1)+"%）");
+  // cum 数组存的是小数（0.2161 表示 +21.61%），显示时一律 ×100；画图层(2612/2618)已是 v*100，文字层此前漏乘100，导致显示成 0.2% 而非 21.6%
+  const fmtPct=v=>v==null?"":("（终值 "+(v*100>=0?"+":"")+(v*100).toFixed(1)+"%）");
   const _ct=document.getElementById("legendComboTxt"); if(_ct) _ct.textContent="我的组合"+fmtPct(_pc);
   const _bt=document.getElementById("legendBenchTxt"); if(_bt) _bt.textContent=benchName+fmtPct(_bc);
   const _pt=document.getElementById("legendPlanTxt"); if(_pt) _pt.textContent="投资计划"+fmtPct(_plc);
@@ -2590,7 +2591,7 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
   if(_dg){
     const lastOf=a=>{ if(!a) return null; for(let i=a.length-1;i>=0;i--){ const v=a[i]; if(v!=null&&isFinite(v)) return v; } return null; };
     const rng=a=>{ if(!a) return 0; const v=a.filter(x=>x!=null&&isFinite(x)); if(!v.length) return 0; return Math.max(...v)-Math.min(...v); };
-    const nn=v=>(v==null)?"—":((v>=0?"+":"")+v.toFixed(1)+"%");
+    const nn=v=>(v==null)?"—":((v*100>=0?"+":"")+(v*100).toFixed(1)+"%");
     const pc=lastOf(portCum), bc=lastOf(benchCum), plc=lastOf(planCum);
     // 年份/交易日数必须取自完整 dates（而非抽样后的 sDates），否则区间对、计数错，出现"三年区间却写近0.7年/183个交易日"的口径错位
     const _d0=new Date(dates[0]), _d1=new Date(dates[dates.length-1]);
@@ -2598,7 +2599,8 @@ function renderTrend(dates, portCum, benchCum, benchName, planCum){
     const _tdays=dates.length;
     const rP=rng(portCum), rPlan=rng(planCum), rB=rng(benchCum);
     // 终值接近平（<0.5%）→ 组合本身几乎无波动
-    const flat=(pc!=null&&Math.abs(pc)<0.5);
+    // pc/bc 为小数口径（0.5% = 0.005），终值接近平线判定用小数阈值
+    const flat=(pc!=null&&Math.abs(pc)<0.005);
     // 我的组合波动远小于投资计划（且计划确有走势）→ 提示组合偏稳健，非数据错误
     const relFlat=(rPlan>5 && rP < rPlan*0.25);
     _dg.innerHTML=`近 ${_yrs} 年（${dates[0]||"—"} ~ ${dates[dates.length-1]||"—"}，共 ${_tdays} 个交易日）· 我的组合（实际持仓）累计 <b style="color:#f2c14e">${nn(pc)}</b>`
@@ -2682,7 +2684,8 @@ async function loadBacktest(mode){
       const excess=(pr!=null&&br!=null)?+(pr-br).toFixed(1):null;   // 统一一位小数，避免浮点尾巴
       const cls=v=>v==null?"var(--muted)":(v>=0?"var(--up)":"var(--down)");
       const eCls=excess==null?"var(--muted)":(excess>=0?"var(--up)":"var(--down)");
-      const pv=v=>v==null?"—":((+v)>=0?"+":"")+(+v).toFixed(1)+"%";
+      // 与趋势诊断行遵守同一约定：cum 为小数口径（0.2161=+21.61%），显示时 ×100
+      const pv=v=>v==null?"—":((+v*100)>=0?"+":"")+(+v*100).toFixed(1)+"%";
       const chips=(r.picks||[]).map(p=>{
         const nm=p.code?(p.name||p.code):((p.asset||"")+"·"+(p.name||""));
         if(p.fwdRet==null) return `<div class="bt-f"><span class="bt-fn">${nm}</span><span class="muted" style="white-space:nowrap">${p.note||"无数据"}</span></div>`;
