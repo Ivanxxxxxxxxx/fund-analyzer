@@ -2263,12 +2263,9 @@ async function analyze(){
     renderSugg({w,holdings,corrAvg,maxDD,sharpe,risk,divScore,corr,score});
     loadOptimize();
     renderSignals(computeSignals());
-    // 若投资计划基金组合与实时持仓完全一致（同一批基金），计划线直接复用持仓线本身——
-    // 彻底杜绝"同基金却算出不同累计收益"的算法口径差异（之前 calcPlanCum 与 portCum 日收益计算方式不同导致偏离 ~3 个百分点）。
-    const _pf=getPlanFunds();
-    const _sameSet = _pf.length && _pf.length===holdings.length &&
-                     _pf.map(f=>f.code).slice().sort().join(",")===holdings.map(h=>h.code).slice().sort().join(",");
-    const _planCum = _sameSet ? portCum : await calcPlanCum(dates);
+    // 投资计划走势线永远使用计划自身设定的权重（f.weight）独立计算，
+    // 绝不复用实际持仓线、也绝不借用实际持仓金额占比——即便基金完全相同也要各算各的（用户明确要求"计划是怎么就怎么"两套口径）。
+    const _planCum = await calcPlanCum(dates);
     renderTrend(trendDates, portCum, benchCum, benchName, _planCum);
     setDataStamp();
     window.__score=score; window.__risk=risk;
@@ -2658,20 +2655,10 @@ async function calcPlanCum(dates){
         window.__histCache[f.code]=r.data||[];
       }
     }
-    // 权重：若投资计划基金组合与实时持仓完全一致（同一批基金），则使用持仓的实际金额占比作为权重，
-    // 保证「投资计划」走势线与「我的组合」走势线对同样的基金+同样配置完全重合（解决"同基金线却不同"）。
+    // 权重：永远使用投资计划自身设定的权重 f.weight（归一化），绝不借用实际持仓金额占比。
     const codes=pf.map(f=>f.code);
-    const sameSet = holdings.length && codes.length===holdings.length &&
-                    codes.slice().sort().join(",")===holdings.map(h=>h.code).slice().sort().join(",");
-    let w;
-    if(sameSet){
-      const tot=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
-      const hmap={}; holdings.forEach(h=>hmap[h.code]=(+h.value||0)/tot);
-      w=codes.map(c=>hmap[c]!=null?hmap[c]:1/codes.length);
-    } else {
-      const tot=pf.reduce((s,f)=>s+(+f.weight||1),0)||1;
-      w=pf.map(f=>(+f.weight||1)/tot);
-    }
+    const tot=pf.reduce((s,f)=>s+(+f.weight||1),0)||1;
+    const w=pf.map(f=>(+f.weight||1)/tot);
     const maps=pf.map(f=>{const m={};(window.__histCache[f.code]||[]).forEach(d=>{if(d&&d.date!=null)m[d.date]=d.nav;});return m;});
     // 与「我的组合」portCum 完全逐行一致的算法：在传入的完整 dates 上前向填充→dailyReturns→
     // 尾部对齐(L)合成组合日收益 pr→链式累积。此前"裸算日收益+头对齐索引+独立日期基准"三重偏差导致同基金仍偏离 ~3 个百分点。
