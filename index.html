@@ -1726,8 +1726,13 @@ async function optimizePlanMaxReturn(){
   if(!manual.length) manual=getPlanFunds();
   if(!manual.length){ toast("计划里还没有基金"); return; }
   const tvEl=document.getElementById("targetVol");
-  const tvPct=Math.max(5,Math.min(30, tvEl?(+tvEl.value||15):15));
-  const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}"); sim.targetVol=tvPct; localStorage.setItem("fp_sim",JSON.stringify(sim));
+  // 先把输入框当前值提交到 sim.targetVol，再读取——不依赖 onchange 的触发时机，
+  // 否则用户键入后未先 blur、或参数区被某次 renderPlanSim 重建时，刚键入的数字会丢失、回退成默认 15。
+  const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
+  const _raw=tvEl?(tvEl.value!==""?tvEl.value:undefined):undefined;
+  sim.targetVol=Math.max(5,Math.min(30, +(_raw!==undefined?_raw:(sim.targetVol||15))));
+  localStorage.setItem("fp_sim",JSON.stringify(sim));
+  const tvPct=sim.targetVol;
   const targetVol=tvPct/100;
   toast("正在按目标波动 "+tvPct+"% 优化分配（拉取历史、计算协方差）…");
   if(!window.__histCache) window.__histCache={};
@@ -1834,7 +1839,7 @@ async function renderPlanSim(){
       <label>计划基金</label>
       <input id="planFundInput" class="num" type="text" placeholder="输入基金代码加入计划" style="max-width:180px" onkeydown="if(event.key==='Enter')addPlanFund()">
       <button class="btn-ghost btn-sm" onclick="addPlanFund()">+ 加入</button>
-      <label style="margin-left:10px">目标波动</label><input id="targetVol" class="num" type="number" min="5" max="30" step="1" value="${tv}" style="width:54px" onchange="saveTargetVol(this.value)" title="收益最大化分配时的目标年化波动，5%~30%">%
+      <label style="margin-left:10px">目标波动</label><input id="targetVol" class="num" type="number" min="5" max="30" step="1" value="${tv}" style="width:54px" oninput="saveTargetVol(this.value)" onchange="saveTargetVol(this.value)" title="收益最大化分配时的目标年化波动，5%~30%">%
       <button class="btn-ghost btn-sm" onclick="optimizePlanMaxReturn()" title="在你设定的目标波动下，把组合年化收益最大化（均值-方差有效前沿，只做多+单只5%~55%）">📈 收益最大化（按目标波动）</button>
       <button class="btn-ghost btn-sm" onclick="resetPlanWeights()" title="实时分析每只基金历史波动，波动越低配越多（风险平价），比均分更科学">📊 智能配置（风险平价）</button>
       <button class="btn-ghost btn-sm" onclick="normalizePlanWeights()" title="保持各基金相对比例不变，把总仓位缩放回 100%（金额合计=本金）">⚖️ 归一化</button>
