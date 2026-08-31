@@ -1680,6 +1680,9 @@ def recommend_backtest():
     cat_universe = {}
     for cat_label, asset, code, name in cand:
         cat_universe.setdefault(asset, []).append({"code": code, "name": name})
+    # 随机对照候选池（与 recommend_backtest_codes 同源）：从同一候选宇宙随机取同数量基金 20 次
+    _univ = [c for _cl, _a, c, _n in cand]
+    _rnd_ctl = random.Random(20260828)
 
     hs_series = cached("bk", "hs300_sina", _daily_ttl(), lambda: _get_index_series("1.000300", 1200))
     anchors = [("近6个月", 6), ("近12个月", 12), ("近24个月", 24)]
@@ -1722,6 +1725,7 @@ def recommend_backtest():
             bench_asof = {"dates": bench_full["dates"][:bi], "rets": bench_full["rets"][:max(0, bi - 1)]}
         # 每个资产类别：在 asof 时点用修复后逻辑选综合分最优的 1 只
         picks = []
+        _all_comp = []   # 全候选宇宙综合分（用于阈值自适应，与 recommend_portfolio 同口径）
         for asset, alw in ALLOC.items():
             cands = cat_universe.get(asset, [])
             if not cands:
@@ -1738,8 +1742,10 @@ def recommend_backtest():
                             fac = fut.result()
                         except Exception:
                             fac = None
-                        if fac and (best is None or fac["composite"] > best[1]["composite"]):
-                            best = (u, fac)
+                        if fac:
+                            _all_comp.append(fac["composite"])
+                            if best is None or fac["composite"] > best[1]["composite"]:
+                                best = (u, fac)
             except Exception:
                 pass
             if not best:
@@ -1758,9 +1764,13 @@ def recommend_backtest():
                           "valPct": fac.get("valPct"), "buySignal": _buy_signal_of(fac),
                           "p12": _p12x, "r3y": fac.get("r3y"),
                           "weight": alw, "fwdRet": (round(fwd * 100, 1) if fwd is not None else None)})
-        # 阈值自适应（与主推荐一致）：基于各品类最优分的分布
-        _pm = _median([p["score"] for p in picks]) or 50.0
-        _tr = max(56.0, _pm + 8.0); _tw = max(42.0, _pm + 1.0)
+        # 阈值自适应（与主推荐同口径，但基于【全候选宇宙】综合分分布）
+        # ——原代码取"各品类最优分"的中位数+8，候选池窄导致该中位数虚高（如 71+8=79），
+        # 所有基金都不够格被剔除、组合变空、portRet=None（2026-08-31 修复）。
+        # 改为取全候选宇宙综合分中位数；且因回测候选池是抽样（每类≤6只）、中位数天然高于
+        # 线上真实推荐的全市场扫描（数百只），故 offset 用 4 而非 8，才能复现同等的精选度。
+        _pm = _median(_all_comp) if _all_comp else 50.0
+        _tr = max(56.0, _pm + 4.0); _tw = max(42.0, _pm + 1.0)
         for p in picks:
             p["verdict"] = "推荐" if p["score"] >= _tr else ("谨慎" if p["score"] >= _tw else "观望")
         # 宁缺毋滥（与一键配置 buildCombo 同口径）：只保留达到「推荐」标准的类别最优基金；
@@ -1796,12 +1806,33 @@ def recommend_backtest():
             if a and b and a > 0:
                 ur.append(b / a - 1)
         univ_ret = (sum(ur) / len(ur)) if ur else None
+        # 随机选基对照：同一候选宇宙随机取同数量基金 20 次，均值/90分位持有收益与我们的组合对比
+        # （验证选基逻辑是否真优于随机，而非幸存者偏差/未来函数；与 recommend_backtest_codes 同源）
+        _n = max(1, len(picks))
+        _rr = []
+        if _univ and len(_univ) >= _n:
+            for _i in range(20):
+                _s = _rnd_ctl.sample(_univ, _n)
+                _vals = []
+                for _c in _s:
+                    _na, _nb = _nav_at(_c, asof_s), _nav_now(_c)
+                    if _na and _nb and _na > 0:
+                        _vals.append(_nb / _na - 1)
+                    elif _is_money(_c):
+                        _days = max(1.0, (datetime.date.today() - asof).days)
+                        _vals.append((1.0 + 0.017) ** (_days / 365.0) - 1.0)
+                if _vals:
+                    _rr.append(sum(_vals) / len(_vals) * 100)
+        _rand_avg = round(sum(_rr) / len(_rr), 1) if _rr else None
+        _rr_s = sorted(_rr)
+        _rand_p90 = round(_rr_s[min(len(_rr_s) - 1, int(len(_rr_s) * 0.9) - 1)], 1) if _rr else None
         results.append({
             "label": label, "asof": asof_s, "error": None,
             "picks": picks,
             "portRet": round(port_ret * 100, 1) if port_ret is not None else None,
             "benchRet": round(bench_ret * 100, 1) if bench_ret is not None else None,
             "univRet": round(univ_ret * 100, 1) if univ_ret is not None else None,
+            "randRet": _rand_avg, "randP90": _rand_p90,
         })
     return {"ok": True, "generatedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
             "method": "回测宇宙来自实时榜单分层抽样（不内置）；对近6/12/24个月锚点，用修复后的多因子逻辑（风险调整收益主导、去追涨、估值/均值回归买点）按资产类别各选最优基金、按推荐配置比例加权持有至今天，与沪深300、等权全宇宙对比。仅验证历史样本，非未来收益承诺。",
