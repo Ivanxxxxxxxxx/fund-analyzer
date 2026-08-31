@@ -1313,7 +1313,7 @@ function renderDcaGuide(){
     const codesMatch = s.smartWeights && s.smartWeights.length===holdings.length && holdings.every(h=>swMap[h.code]!=null);
     const tvRow=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0">
       <label style="font-size:12.5px">目标年化波动</label>
-      <input id="dcaSmartVol" class="num" type="number" min="5" max="30" step="1" value="${s.smartTarget}" style="width:60px" oninput="saveSmartVol(this.value)" onchange="saveSmartVol(this.value)">%
+      <input id="dcaSmartVol" class="num" type="number" min="5" max="30" step="1" value="${s.smartTarget}" style="width:60px" oninput="saveSmartVol(this.value)" onchange="runSmartVolChange()">%
       <button class="btn-primary btn-sm" onclick="smartDcaAllocate()">📈 智能计算分配</button>
       <span class="muted" style="font-size:11px">在目标波动内把预期年化收益最大化（均值-方差）</span>
     </div>`;
@@ -1386,13 +1386,18 @@ function setDcaMode(m){
   renderDcaGuide();
   if(m==='smart'){ const amt=Math.max(0,+(s.amount)||0); if(amt>0) smartDcaAllocate(); }
 }
-// 智能分配目标波动：键入即存，且金额>0 时即时重算（不依赖 onchange 时机）
+// 智能分配目标波动：键入时只持久化，绝不重渲染输入框（避免每次按键重建 DOM 导致光标丢失/"自动跳"，与 saveTargetVol 一致）
 function saveSmartVol(v){
   const s=getDca();
   s.smartTarget=Math.max(5,Math.min(30,+(v||15)));
   localStorage.setItem("fp_dca", JSON.stringify(s));
+}
+// 失焦/回车时才重算智能分配（此时输入框已离开焦点，renderDcaGuide 重建 DOM 不会打断输入）
+function runSmartVolChange(){
+  const s=getDca();
   const amt=Math.max(0,+(s.amount)||0);
-  if(amt>0) smartDcaAllocate();
+  if(amt>0){ smartDcaAllocate(); }
+  else { renderDcaGuide(); }
 }
 // 智能定投分配：在用户设定的目标年化波动内，用均值-方差有效前沿把组合预期年化收益最大化，
 // 再按最优权重把每月定投金额拆到各基金；同时算出"按市值比例"方案作对比。
