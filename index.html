@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<html lang="zh-CN" data-page-node-id="IPI5yLzhuEM3HZ0aGc6SV6">
+<head data-page-node-id="3yyfbpYOwhZ7nO2htvVlo6">
+<meta charset="UTF-8" data-page-node-id="vkdn2sGuUxBdvGNoRN6nqF">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" data-page-node-id="94ryDfOfkegVLlF5qTifny">
 <title>基金组合健康度分析</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%8A%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%8A%3C/text%3E%3C/svg%3E" data-page-node-id="nwYIpkCa5LfuybAnNE8Au6">
 <script src="static/chart.umd.js"></script>
 <style>
 :root{
@@ -111,7 +111,7 @@ body{
 .view{display:none;animation:viewIn .3s cubic-bezier(.22,1,.36,1)}
 .view.active{display:block}
 @keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.view-h{display:flex;align-items:baseline;gap:10px;margin:2px 2px 16px}
+.view-h{display:flex;align-items:baseline;gap:10px;margin:2px 2px 18px}
 .view-h .vt{font-size:21px;font-weight:750;letter-spacing:.4px}
 .view-h .vs{font-size:12.5px;color:var(--muted)}
 .view-h .vline{flex:1;height:1px;background:linear-gradient(90deg,var(--line2),transparent);margin-left:6px}
@@ -171,18 +171,18 @@ button:disabled:hover{transform:none}
 .sd-empty{padding:14px;color:var(--muted);font-size:13px;text-align:center}
 /* ---------- 卡片 ---------- */
 .card{background:linear-gradient(180deg, rgba(24,24,30,.9), rgba(16,16,20,.92));
-  border:1px solid var(--line);border-radius:var(--radius);padding:22px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
+  border:1px solid var(--line);border-radius:var(--radius);padding:24px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
 .card::before{content:"";position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(232,179,57,.5),transparent)}
-h3.sec{margin:0 0 16px;font-size:15px;font-weight:650;display:flex;align-items:center;gap:10px;letter-spacing:.3px}
+h3.sec{margin:0 0 18px;font-size:15px;font-weight:650;display:flex;align-items:center;gap:10px;letter-spacing:.3px}
 h3.sec .ic{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font-size:14px;
   background:linear-gradient(135deg,rgba(232,179,57,.2),rgba(184,134,11,.16));border:1px solid rgba(232,179,57,.25)}
 .empty{color:var(--muted);font-size:13px;text-align:center;padding:26px 10px;line-height:1.8}
-.note{color:var(--muted);font-size:12px;line-height:1.7;margin-top:10px}
+.note{color:var(--muted);font-size:12px;line-height:1.75;margin-top:10px}
 /* ---------- KPI 总览 ---------- */
-.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
 .kpi-card{background:linear-gradient(180deg, rgba(24,24,30,.9), rgba(16,16,20,.92));
-  border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden}
+  border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden}
 .kpi-card::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#f2c558,#c9921f);opacity:.85}
 .kpi-card .k-l{font-size:12px;color:var(--muted);margin-bottom:7px;display:flex;align-items:center;gap:6px}
 .kpi-card .k-v{font-size:23px;font-weight:750;font-family:var(--mono);letter-spacing:.2px;line-height:1.1}
@@ -196,7 +196,7 @@ h3.sec .ic{width:28px;height:28px;border-radius:9px;display:grid;place-items:cen
 /* ---------- 表格 ---------- */
 .table-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 table.holdings{width:100%;border-collapse:collapse;font-size:13px}
-table.holdings th,table.holdings td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;white-space:nowrap}
+table.holdings th,table.holdings td{border-bottom:1px solid var(--line);padding:11px 10px;text-align:left;white-space:nowrap}
 table.holdings th{color:var(--muted);font-weight:600;font-size:12px}
 table.holdings tr:hover td{background:rgba(255,255,255,.02)}
 table.holdings .num{text-align:right}
@@ -653,278 +653,278 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
 
 </style>
 </head>
-<body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<symbol id="i-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
-<symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></symbol>
-<symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></symbol>
-<symbol id="i-calculator" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></symbol>
-<symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></symbol>
-<symbol id="i-line-chart" viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></symbol>
-<symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3Z"/></symbol>
-<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></symbol>
-<symbol id="i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
-<symbol id="i-map-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
-<symbol id="i-package" viewBox="0 0 24 24"><line x1="16.5" x2="7.5" y1="9.4" y2="6.6"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" x2="12" y1="22.08" y2="12"/></symbol>
-<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
-<symbol id="i-trending-up" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></symbol>
-<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
-<symbol id="i-building" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></symbol>
-<symbol id="i-lightbulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></symbol>
-<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
-<symbol id="i-wallet" viewBox="0 0 24 24"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></symbol>
-<symbol id="i-home" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
-<symbol id="i-bar-chart" viewBox="0 0 24 24"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></symbol>
-<symbol id="i-coins" viewBox="0 0 24 24"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></symbol>
-<symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
-<symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></symbol>
-<symbol id="i-wand" viewBox="0 0 24 24"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h0"/><path d="M17.8 6.2 19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></symbol>
-<symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
-<symbol id="i-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
-<symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+<body data-page-node-id="5DQxvuGGQJpy77cI1zY7dA">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" data-page-node-id="xxn73TzPzSqWUuR9xo5Y2i"><defs data-page-node-id="4xqAFOuuq8yRo19aaZGTU4">
+<symbol id="i-layers" viewBox="0 0 24 24" data-page-node-id="tXdUBWJzcBlb0mZee2HNLK"><polygon points="12 2 2 7 12 12 22 7 12 2" data-page-node-id="bzmEUoVo1GTSCJ1RiGqusy"/><polyline points="2 17 12 22 22 17" data-page-node-id="cicYWZ9W93q3MdfaCxo9Yb"/><polyline points="2 12 12 17 22 12" data-page-node-id="8rfCUqNz0ByWXizxZUDo6K"/></symbol>
+<symbol id="i-compass" viewBox="0 0 24 24" data-page-node-id="76GnqRTVGbMkKmczjgpD35"><circle cx="12" cy="12" r="10" data-page-node-id="ErJtaKHVNg6fbdct9Gt0SO"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" data-page-node-id="xewC7NjB2L7SDqyNZtBC2E"/></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24" data-page-node-id="fWY7rz2G33b4nj0zZKZqSS"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" data-page-node-id="DDZcRwtlAVGzCKTqUqYAbs"/><path d="M14 2v4a2 2 0 0 0 2 2h4" data-page-node-id="uxomWTP7h2MMNUbk9WKCL4"/><path d="M16 13H8" data-page-node-id="h0kBbLIhcsKGLH3I3LWT6y"/><path d="M16 17H8" data-page-node-id="BdEvy87LA1UoY0Seg3iOKI"/><path d="M10 9H8" data-page-node-id="pmRILISTKDQiK7i6A5QQTP"/></symbol>
+<symbol id="i-calculator" viewBox="0 0 24 24" data-page-node-id="tG7UzgtWd4fpiMxK7sxLBE"><rect x="4" y="2" width="16" height="20" rx="2" data-page-node-id="Dl5KpItccEJP8t269QS9PW"/><line x1="8" x2="16" y1="6" y2="6" data-page-node-id="swV8SHQFbvmKki1o7doNc3"/><line x1="16" x2="16" y1="14" y2="18" data-page-node-id="3C2D3k4eTbBykfrVEy18Iu"/><path d="M16 10h.01" data-page-node-id="Vtrxf8f9ASHCwAXczTnN9w"/><path d="M12 10h.01" data-page-node-id="YbszJhtQ5X0uWhEiCCqqY6"/><path d="M8 10h.01" data-page-node-id="Xpxe5X5jJE4veyaDAiNvPk"/><path d="M12 14h.01" data-page-node-id="SQv5fJyElF2Eq8LoM3FQsV"/><path d="M8 14h.01" data-page-node-id="jF6sGtLpQfGGi2UKW9H0H0"/><path d="M12 18h.01" data-page-node-id="JxEL9bldtpaFnICElQmyqs"/><path d="M8 18h.01" data-page-node-id="VeH0tk8mFjLHuDiDsjDBKy"/></symbol>
+<symbol id="i-briefcase" viewBox="0 0 24 24" data-page-node-id="OMfzKJbTKGglaO1cNuhaKy"><rect x="2" y="7" width="20" height="14" rx="2" data-page-node-id="Lz0wzuFq0k4nBTSndDz5ks"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" data-page-node-id="9MAfXFcHTGKlZtWXOdxPyk"/></symbol>
+<symbol id="i-line-chart" viewBox="0 0 24 24" data-page-node-id="9RpfUfbZ0nu8VmAFiADzR3"><polyline points="3 17 9 11 13 15 21 7" data-page-node-id="MIeuKPseQXsoC7VC2KhBEi"/><polyline points="15 7 21 7 21 13" data-page-node-id="fGG8VnMUJJwComM1yFebp4"/></symbol>
+<symbol id="i-sparkles" viewBox="0 0 24 24" data-page-node-id="jq6vmgx89cqhePePUjERHu"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3Z" data-page-node-id="EhdZyyjJlaqLqe0foR0idl"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" data-page-node-id="XXtBGYWyIm7VLSu2zo0IfF"><circle cx="11" cy="11" r="8" data-page-node-id="9yHNghiumi6mRxPsJougpj"/><line x1="21" x2="16.65" y1="21" y2="16.65" data-page-node-id="OTL2BDQe9xMQI7CBrC9WUB"/></symbol>
+<symbol id="i-activity" viewBox="0 0 24 24" data-page-node-id="KdG6y79VYg04ezRhBPI6tH"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" data-page-node-id="9NYKaIfAszeRU8tj5IliQA"/></symbol>
+<symbol id="i-map-pin" viewBox="0 0 24 24" data-page-node-id="x0vV1sAoubP8CQxp52EnYj"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" data-page-node-id="lH9qoTPk8d4f9GP8nkDVud"/><circle cx="12" cy="10" r="3" data-page-node-id="JkUedJ1ZzEIFsTuH0r38vy"/></symbol>
+<symbol id="i-package" viewBox="0 0 24 24" data-page-node-id="KtUte9mnSfXgCREajMmw81"><line x1="16.5" x2="7.5" y1="9.4" y2="6.6" data-page-node-id="9HUcsG3AsU8L7Nv0ROd9SF"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" data-page-node-id="14kw8YwooenwscBIEkdaPF"/><polyline points="3.27 6.96 12 12.01 20.73 6.96" data-page-node-id="MEWbBx0FmzpFUa8hAhxWZ1"/><line x1="12" x2="12" y1="22.08" y2="12" data-page-node-id="o2hOQ9zCH0HG7Ss0vkjxqy"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24" data-page-node-id="8g2rr9f12C7e91Anh1iaED"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" data-page-node-id="oFChufQPqldTxrfWqN1JNW"/></symbol>
+<symbol id="i-trending-up" viewBox="0 0 24 24" data-page-node-id="LFxFqGSCBnkCuDBGdRCgNN"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" data-page-node-id="q00XQeT60Ip1FQsazFmHJ7"/><polyline points="16 7 22 7 22 13" data-page-node-id="A4Ooz2RL974sEdJSiKMd4h"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24" data-page-node-id="hNROUHEo1DlL2F6LW3Vcsp"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" data-page-node-id="lGocyrK0qKLPtYuVLXYhlz"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" data-page-node-id="QQfZbDbXDKyunO2e8VAo9G"/></symbol>
+<symbol id="i-building" viewBox="0 0 24 24" data-page-node-id="p7lSTu3FGi9AijVgbgUltI"><rect x="4" y="2" width="16" height="20" rx="2" data-page-node-id="JGBVuD3ehDFuPLwpVc6W5A"/><path d="M9 22v-4h6v4" data-page-node-id="yqdU4oZsV8hPKZlEHyHCFp"/><path d="M8 6h.01" data-page-node-id="w2Qr2Mnj0VYOGGbVzVUBmi"/><path d="M16 6h.01" data-page-node-id="NLyBhFJyr7HLtHa5lXH8jA"/><path d="M12 6h.01" data-page-node-id="nuEBq7XDKag5kVKKEaopUZ"/><path d="M12 10h.01" data-page-node-id="2AJNfaJcBYCDbXiDEp771C"/><path d="M12 14h.01" data-page-node-id="6qmtajUDObe1RlPFwB8PxJ"/><path d="M16 10h.01" data-page-node-id="luGef8REdxIJy8lKzRvYHh"/><path d="M16 14h.01" data-page-node-id="QN8Yy0GVZ1Omh8WhV2KyLW"/><path d="M8 10h.01" data-page-node-id="nvltF28gnrWPdzZp2ez9nl"/><path d="M8 14h.01" data-page-node-id="DxqaSc1UCQqiFJvL5HlSNF"/></symbol>
+<symbol id="i-lightbulb" viewBox="0 0 24 24" data-page-node-id="AThnBsVBuyLDj3hzWlvYPg"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" data-page-node-id="8ZsRDP9mCFcddxF7lb1bQh"/><path d="M9 18h6" data-page-node-id="PzfhrmmRQctkAUoQdSNqSk"/><path d="M10 22h4" data-page-node-id="gNSXArH0WpG71ciNRpV6h5"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24" data-page-node-id="23dOSLI98iXBYcYg6KCcth"><circle cx="12" cy="12" r="10" data-page-node-id="0I9KZzMERjFgafCjCmYruJ"/><circle cx="12" cy="12" r="6" data-page-node-id="HWXMiQFvozgNPMfU6xcLUD"/><circle cx="12" cy="12" r="2" data-page-node-id="pk5bW5A9tewDwmD8LES3Gx"/></symbol>
+<symbol id="i-wallet" viewBox="0 0 24 24" data-page-node-id="6rZfaweGFUBlGHxzJaHvGI"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" data-page-node-id="qZrepmLqUQ2jvRZO37xiCc"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" data-page-node-id="vI6zS0UjUDlm4Q4qe07HER"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" data-page-node-id="xqp5eoJJDE3sFgKzpP2pcv"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24" data-page-node-id="GFRAR8mT5elkRemYwxyUWD"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" data-page-node-id="wnLYtnJed0nGXVe92PMKaK"/><polyline points="9 22 9 12 15 12 15 22" data-page-node-id="LNiUGqG6nI5zTdl1D9Zv1T"/></symbol>
+<symbol id="i-bar-chart" viewBox="0 0 24 24" data-page-node-id="ekOnFHmAXEfPVmMJtnug06"><line x1="12" x2="12" y1="20" y2="10" data-page-node-id="InT3PuZxGPZLWmA9tgCHnO"/><line x1="18" x2="18" y1="20" y2="4" data-page-node-id="MtEmOeQBmgHBb5OWcOP8Uq"/><line x1="6" x2="6" y1="20" y2="16" data-page-node-id="vSAxEUdYFApjTOmqcoBr62"/></symbol>
+<symbol id="i-coins" viewBox="0 0 24 24" data-page-node-id="0e96jgjCkQIl7j3bBxlAQB"><circle cx="8" cy="8" r="6" data-page-node-id="5XvofBFPrgP5TlX99p6wSv"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18" data-page-node-id="2MWKqsEzvmFnP9ODVqGBFH"/><path d="M7 6h1v4" data-page-node-id="TAcDwGxPBapngoPv4lYhXg"/><path d="m16.71 13.88.7.71-2.82 2.82" data-page-node-id="kmn1b6PICVIJ79DqBEdsTE"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24" data-page-node-id="sYD0HuZPk47SoEuTBuM4HG"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" data-page-node-id="OCdlUvSA9o1JNZbV8HBgA3"/><polyline points="7 10 12 15 17 10" data-page-node-id="vQfqSTKlyruCFDdUs1PFpm"/><line x1="12" x2="12" y1="15" y2="3" data-page-node-id="LBcxsasZuL99q1OemaAgqt"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24" data-page-node-id="TgTbl2IB6AV6845Uf01ERj"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" data-page-node-id="DJ6EA7DUoUAPiBRGTPy513"/><polyline points="17 8 12 3 7 8" data-page-node-id="dgnUXrdUbEjpfpY0MHPzhZ"/><line x1="12" x2="12" y1="3" y2="15" data-page-node-id="hWGeeUuBaf0cty9IoZ3EOZ"/></symbol>
+<symbol id="i-wand" viewBox="0 0 24 24" data-page-node-id="OCAcf7sc1DWT9JVav0gkLm"><path d="M15 4V2" data-page-node-id="oyj0jT2knNO0Bd21QusIem"/><path d="M15 16v-2" data-page-node-id="Zm9NixzSxYD7ykwoXCBKvm"/><path d="M8 9h2" data-page-node-id="g3dB9d3pFp3xzXfA0RLJBo"/><path d="M20 9h2" data-page-node-id="XG4hDa9KGQ2XHyUxaWxwrV"/><path d="M17.8 11.8 19 13" data-page-node-id="q69U6yYT3wp1AD2ILZE6cG"/><path d="M15 9h0" data-page-node-id="G6oA9aE0S8GeJuypc4uODE"/><path d="M17.8 6.2 19 5" data-page-node-id="C5eC2Z7rJZkamVYDQ5BI5y"/><path d="m3 21 9-9" data-page-node-id="SVvrwZM0ikHgfIsaCwiyua"/><path d="M12.2 6.2 11 5" data-page-node-id="QcoLE7krgf2ChMtIOg64G4"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24" data-page-node-id="0YXqBjqCiey8QTBM7FHj5g"><polyline points="3 6 5 6 21 6" data-page-node-id="Chy2A2h59T3ZiukrARdP2R"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" data-page-node-id="1hMmOnE2XYM6Qt5d3Uwr6q"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24" data-page-node-id="SzrEZcPBAyRvyNQsGGcakC"><polyline points="23 4 23 10 17 10" data-page-node-id="YRivd4TBsbWaZqKTkLJE7g"/><polyline points="1 20 1 14 7 14" data-page-node-id="uMEDAOqDuD0IhSOL3skXtV"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" data-page-node-id="ekT3xaC3uwXknB1VV0f6HB"/></symbol>
+<symbol id="i-zap" viewBox="0 0 24 24" data-page-node-id="Z0xEasqpjZUSDCuIHGnktz"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" data-page-node-id="XwHvExA2IGIJLdb5hK2j0w"/></symbol>
 </defs></svg>
 
-<header class="topbar">
-  <div class="tb-brand"><span class="tb-logo">📊</span><span class="tb-name">基金组合健康度分析</span></div>
-  <span class="tb-view" id="tbView">组合工作台</span>
-  <span class="tb-spacer"></span>
-  <span class="tb-quote" id="tbQuote"><span class="tq-name">沪深300</span><span class="tq-val muted">加载中…</span></span>
+<header class="topbar" data-page-node-id="Z4Vka46D6Qa5Fc2VBlw9Kv">
+  <div class="tb-brand" data-page-node-id="CWPMGDZCZS1fAedM0jbrfU"><span class="tb-logo" data-page-node-id="O8ph32c7UoXgXlHWTCezpi">📊</span><span class="tb-name" data-page-node-id="JPYRcKiQLhek1LuogQFBpn">基金组合健康度分析</span></div>
+  <span class="tb-view" id="tbView" data-page-node-id="BU9yZVrbwXKbPKAm3ORudG">组合工作台</span>
+  <span class="tb-spacer" data-page-node-id="0YNtOAlGnoS8xHqV6pg0he"></span>
+  <span class="tb-quote" id="tbQuote" data-page-node-id="nZpkEmrSCDaRqFvOd2qjCB"><span class="tq-name" data-page-node-id="KExQoSjdbXF20qUP7jsXFD">沪深300</span><span class="tq-val muted" data-page-node-id="wTFJcGKgEs6MnBzHzTlCTa">加载中…</span></span>
 </header>
 
-<div class="shell">
-  <aside class="nav">
-    <div class="nav-logo" title="基金工作台">📊</div>
-    <button class="nav-item on" data-view="portfolio" onclick="switchView('portfolio')"><span class="ni-ic"><svg class="i"><use href="#i-layers"/></svg></span>组合</button>
-    <button class="nav-item" data-view="tools" onclick="switchView('tools')"><span class="ni-ic"><svg class="i"><use href="#i-compass"/></svg></span>决策</button>
-    <button class="nav-item" data-view="report" onclick="switchView('report')"><span class="ni-ic"><svg class="i"><use href="#i-file-text"/></svg></span>报告</button>
-    <button class="nav-item" data-view="calc" onclick="switchView('calc')"><span class="ni-ic"><svg class="i"><use href="#i-calculator"/></svg></span>工具</button>
+<div class="shell" data-page-node-id="hhduAd4jiALt8iqIdex2dp">
+  <aside class="nav" data-page-node-id="BZLmaXHxWGtSlI5YgEC3vP">
+    <div class="nav-logo" title="基金工作台" data-page-node-id="pT45WRiEoHQDBFXPbGEWV1">📊</div>
+    <button class="nav-item on" data-view="portfolio" onclick="switchView('portfolio')" data-page-node-id="wtJBUbqVAwOBc3F8fWE9Dh"><span class="ni-ic" data-page-node-id="aAfKpV7t08RULJ2DgdLoR7"><svg class="i" data-page-node-id="xtkbHGwwynUR8fAWc0D7jV"><use href="#i-layers" data-page-node-id="qcyLQfNAC0HMP8TTIfbjhV"/></svg></span>组合</button>
+    <button class="nav-item" data-view="tools" onclick="switchView('tools')" data-page-node-id="AYZU1q1RsRQRtv0ybSCwsq"><span class="ni-ic" data-page-node-id="pGAnhwDi6izjdFKCelyyUa"><svg class="i" data-page-node-id="Az0BccGyoc6sBqgi8lAakM"><use href="#i-compass" data-page-node-id="fpkHMWgfZnn0Jc2Ek7RNyc"/></svg></span>决策</button>
+    <button class="nav-item" data-view="report" onclick="switchView('report')" data-page-node-id="FDFhnnB1N8HoZCqnSLqmXR"><span class="ni-ic" data-page-node-id="eJfvK53esCYy2rj1CiGKhU"><svg class="i" data-page-node-id="jjHMFJhJSKL165fSz48X0D"><use href="#i-file-text" data-page-node-id="NEFShF3AXBUcq61spHheTb"/></svg></span>报告</button>
+    <button class="nav-item" data-view="calc" onclick="switchView('calc')" data-page-node-id="o8l2IyG0kXMPFRQT129ase"><span class="ni-ic" data-page-node-id="8RBXMzGpQEyhm6G9mlMWRA"><svg class="i" data-page-node-id="QXa3LszcwiFuv5XbPbkMU7"><use href="#i-calculator" data-page-node-id="IsAaGLUIhmAtduF7oSRdde"/></svg></span>工具</button>
   </aside>
-  <main class="stage"><div class="stage-inner">
-  <div class="trend-dock">
-    <div class="td-head">
-      <span class="td-t"><svg class="i"><use href="#i-line-chart"/></svg>组合走势</span>
-      <span class="vline" style="flex:1;height:1px;background:var(--line)"></span>
+  <main class="stage" data-page-node-id="wXrVxCmdtLcHbemavPnqfS"><div class="stage-inner" data-page-node-id="rVY4kBH4cRH9hq5SJr0LjC">
+  <div class="trend-dock" data-page-node-id="cngZWDt1jayVRJmutksojw">
+    <div class="td-head" data-page-node-id="UM7qUYiZh5n9bjt7HWRzGQ">
+      <span class="td-t" data-page-node-id="okbft2ISiPM2DGvkPwPvf4"><svg class="i" data-page-node-id="vOhTomgetVroQtVhqI06vm"><use href="#i-line-chart" data-page-node-id="looB78UmbvYSEiBUssda5F"/></svg>组合走势</span>
+      <span class="vline" style="flex:1;height:1px;background:var(--line)" data-page-node-id="F7dkAINCMthvEkldDmcuZS"></span>
     </div>
-    <div id="trendBox"><div class="empty">点击「开始分析」后展示组合 vs 沪深300 的累计收益曲线。</div></div>
-    <div id="trendCanvasWrap" class="trend-wrap" style="display:none"><canvas id="trendCanvas"></canvas></div>
+    <div id="trendBox" data-page-node-id="piXfTjYeTtDw4B9zMtd4H5"><div class="empty" data-page-node-id="8egBhXCTSHOzjeHPIZPL0R">点击「开始分析」后展示组合 vs 沪深300 的累计收益曲线。</div></div>
+    <div id="trendCanvasWrap" class="trend-wrap" style="display:none" data-page-node-id="J0QpJXA0nePyxo0GRCuwkp"><canvas id="trendCanvas" data-page-node-id="32rFEnesTDApp91C8yKWxB"></canvas></div>
     <!-- 诊断行与图例放在 canvas 容器之外，避免被固定高度容器 + overflow:hidden 裁掉 -->
-    <div id="trendDiag" style="display:none;margin-top:8px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.8"></div>
-    <div id="trendLegend" style="display:none;gap:12px 20px;justify-content:center;flex-wrap:wrap;margin-top:6px;font-size:12.5px;color:#f1f0ea;line-height:1.8">
-      <span id="legendCombo"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#f2c14e;vertical-align:middle;margin-right:6px"></i><b id="legendComboTxt">我的组合</b></span>
-      <span id="legendPlan" style="display:none"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#a78bfa;vertical-align:middle;margin-right:6px"></i><b id="legendPlanTxt">投资计划</b></span>
-      <span id="legendBench"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#4da3ff;vertical-align:middle;margin-right:6px"></i><b id="legendBenchTxt">沪深300</b></span>
+    <div id="trendDiag" style="display:none;margin-top:8px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.8" data-page-node-id="pD3wJRFbZ1Txw3NkD4AiA1"></div>
+    <div id="trendLegend" style="display:none;gap:12px 20px;justify-content:center;flex-wrap:wrap;margin-top:6px;font-size:12.5px;color:#f1f0ea;line-height:1.8" data-page-node-id="5COLmNrtYeY5mRWxs1vQFU">
+      <span id="legendCombo" data-page-node-id="6rX7mzPCFcVqS29gKpG0eE"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#f2c14e;vertical-align:middle;margin-right:6px" data-page-node-id="n9PmFLL2qQ8n9pf5ugFahc"></i><b id="legendComboTxt" data-page-node-id="09wg6hBAuHxkvmX6dkTIBz">我的组合</b></span>
+      <span id="legendPlan" style="display:none" data-page-node-id="vit3g9ummEgtPZjlDxWEuq"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#a78bfa;vertical-align:middle;margin-right:6px" data-page-node-id="CIrcWT8EnTqhKxyKGQZkh8"></i><b id="legendPlanTxt" data-page-node-id="xEmjIcwFnBgRMF2E9XN1hs">投资计划</b></span>
+      <span id="legendBench" data-page-node-id="Db9Nw4apxDEI5ckSu76MjG"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#4da3ff;vertical-align:middle;margin-right:6px" data-page-node-id="jmjGVp3ircp8gqkvIgqWiy"></i><b id="legendBenchTxt" data-page-node-id="cXJ50AwxNwDsJfQboaCuBQ">沪深300</b></span>
     </div>
   </div>
 
-<section class="view fold open" id="view-portfolio" data-key="portfolio">
-  <div class="view-h"><span class="vt"><svg class="i"><use href="#i-layers"/></svg> 组合工作台</span><span class="vs" id="sumPortfolio">暂无持仓</span><span class="vline"></span></div>
-<div class="fold-b"><div><div class="fold-inner">
-  <div class="op-bar">
-    <div class="op-search">
+<section class="view fold open" id="view-portfolio" data-key="portfolio" data-page-node-id="s5Ampw4I0362NsAKBb1LiU">
+  <div class="view-h" data-page-node-id="0D021Wj0TuQoV1DyWKGDVF"><span class="vt" data-page-node-id="1RRMS8uiptOq5EtQ3nfnmz"><svg class="i" data-page-node-id="n1BFhSBUxVHGYRQUKGpOqD"><use href="#i-layers" data-page-node-id="7TbnHT5MjGVWondgb6XDkO"/></svg> 组合工作台</span><span class="vs" id="sumPortfolio" data-page-node-id="q2D0EiI15Dsm4ca7zPl2C6">暂无持仓</span><span class="vline" data-page-node-id="SvLGrkVZeAwJ2HAgNQUkBv"></span></div>
+<div class="fold-b" data-page-node-id="WDf77nt7RukI3LBrNBMycU"><div data-page-node-id="aXlIUJpk2XhDsFdqLCF5rw"><div class="fold-inner" data-page-node-id="EojalkpsDVaDaP8QezYnCc">
+  <div class="op-bar" data-page-node-id="yfx2bWKcMkhkGvI4yzirGB">
+    <div class="op-search" data-page-node-id="fKqUpvhthhWFarNgXG9Xtz">
       <input type="text" id="codeInput" autocomplete="off" inputmode="numeric"
              placeholder="输入基金代码(如 110011) 或名称，回车直接添加"
-             oninput="onSearchInput()" onkeydown="if(event.key==='Enter')quickAdd()">
-      <div id="searchDropdown" class="search-dropdown"></div>
-      <button class="btn-primary" onclick="quickAdd()">+ 添加</button>
+             oninput="onSearchInput()" onkeydown="if(event.key==='Enter')quickAdd()" data-page-node-id="MRkDztl3pHcNhghuSczGTY">
+      <div id="searchDropdown" class="search-dropdown" data-page-node-id="DXGmkpwC8ng6OEIrjC2mzD"></div>
+      <button class="btn-primary" onclick="quickAdd()" data-page-node-id="Hn4mFD9CkfDPq27raIF7QD">+ 添加</button>
     </div>
-    <div class="op-actions">
-      <button class="btn-primary" id="analyzeBtn" onclick="runAnalysis()">开始分析</button>
-      <button class="btn-ghost btn-sm" onclick="refreshNav()"><svg class="i"><use href="#i-refresh"/></svg> 刷新</button>
-      <span class="live" id="liveBadge"><span class="dot" id="liveDot"></span><span id="liveText">每 2 分钟自动刷新</span></span>
+    <div class="op-actions" data-page-node-id="XOfsMhyWIPX5bu02wdpZLW">
+      <button class="btn-primary" id="analyzeBtn" onclick="runAnalysis()" data-page-node-id="iwxDMInD02EPMoOtjQazmB">开始分析</button>
+      <button class="btn-ghost btn-sm" onclick="refreshNav()" data-page-node-id="fSxtuZvmTcXlLAVi0EJ7SW"><svg class="i" data-page-node-id="MhwGhXAQNW1WJY0CJdYLph"><use href="#i-refresh" data-page-node-id="IRhcQzb5xphkxcVS3eC5Yu"/></svg> 刷新</button>
+      <span class="live" id="liveBadge" data-page-node-id="Dq8pBOqipbWvqQS8dEHAf1"><span class="dot" id="liveDot" data-page-node-id="d5UlwwsbCPBCkkkEA6DDOF"></span><span id="liveText" data-page-node-id="ijB9mgsNgv7LcTLP9luxAQ">每 2 分钟自动刷新</span></span>
     </div>
   </div>
-  <div class="kpi-row">
-    <div class="kpi-card"><div class="k-l"><svg class="i"><use href="#i-wallet"/></svg> 总市值</div><div class="k-v" id="kpiTotal">¥0</div><div class="k-s">当前组合资产规模</div></div>
-    <div class="kpi-card"><div class="k-l"><svg class="i"><use href="#i-trending-up"/></svg> 累计盈亏</div><div class="k-v" id="kpiPl">¥0</div><div class="k-s" id="kpiPlSub">—</div></div>
-    <div class="kpi-card"><div class="k-l"><svg class="i"><use href="#i-target"/></svg> 组合健康分</div><div class="k-v" id="kpiScore">—</div><div class="k-s">点击「开始分析」后更新</div></div>
-    <div class="kpi-card"><div class="k-l"><svg class="i"><use href="#i-package"/></svg> 持仓数量</div><div class="k-v" id="kpiCount">0</div><div class="k-s">只基金</div></div>
+  <div class="kpi-row" data-page-node-id="SEo0ogxO5QjHaLs44MqaEt">
+    <div class="kpi-card" data-page-node-id="F8wPaMejeRDXsNjraBB9GD"><div class="k-l" data-page-node-id="XeEg5P5pSdnVyD1BiuLePd"><svg class="i" data-page-node-id="cczcclIBUCDHUzNJr8EQ99"><use href="#i-wallet" data-page-node-id="GNGgmuWabf8raZdYF3dbIF"/></svg> 总市值</div><div class="k-v" id="kpiTotal" data-page-node-id="ZOMQRLzuNHYHOZBOBcaUvd">¥0</div><div class="k-s" data-page-node-id="2JjLW9dDRpHDaWMYpqFfLi">当前组合资产规模</div></div>
+    <div class="kpi-card" data-page-node-id="llE1qo2ZKJzlipDeqw9NSe"><div class="k-l" data-page-node-id="Jz5lijplUEELHZmhK9pg4z"><svg class="i" data-page-node-id="n6elS7HnkdZxN4KOXkjyvy"><use href="#i-trending-up" data-page-node-id="Ck0kQzI1cnkzVstuBA3Pph"/></svg> 累计盈亏</div><div class="k-v" id="kpiPl" data-page-node-id="YhJGIhgAVBosIX4I1SW4X6">¥0</div><div class="k-s" id="kpiPlSub" data-page-node-id="uF0iF26ofs2c2PJAF9Ji8W">—</div></div>
+    <div class="kpi-card" data-page-node-id="kjYpLchfhCoYBXzuzGV0fh"><div class="k-l" data-page-node-id="azqmrDHhsQEdzaE2hrW36b"><svg class="i" data-page-node-id="oqm1QgFsBBMlhXFNk0nAh3"><use href="#i-target" data-page-node-id="WP6TD1EgQOpTp5mHq12T2a"/></svg> 组合健康分</div><div class="k-v" id="kpiScore" data-page-node-id="HJmjYruqvCltqrIqUtnRx7">—</div><div class="k-s" data-page-node-id="g3uyhPDo4nIMRi2vREMh3x">点击「开始分析」后更新</div></div>
+    <div class="kpi-card" data-page-node-id="ntyHE7zOpCFcETKpyeAGtJ"><div class="k-l" data-page-node-id="G87dKIXZnCGX76mejLE2Lr"><svg class="i" data-page-node-id="zA7cXgOGRPkDHICkWcKLmQ"><use href="#i-package" data-page-node-id="ruTQCGB5PnF3Slg1MEp02r"/></svg> 持仓数量</div><div class="k-v" id="kpiCount" data-page-node-id="u8r73p2zctM5MXyyQMOo8X">0</div><div class="k-s" data-page-node-id="eDVwULIc3Y0CtwNEF4YCsp">只基金</div></div>
   </div>
-  <div class="hint-row" style="display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 14px">
-    <span class="pill">数据来源：天天基金公开接口（仅作分析参考，非投资建议）</span>
-    <span class="pill pill-soft"><svg class="i"><use href="#i-lightbulb"/></svg> 支付宝/蚂蚁财富销售的是同一批公募基金，6 位代码通用</span>
+  <div class="hint-row" style="display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 14px" data-page-node-id="QWQSy6mXcp9VfMY3s2UvFT">
+    <span class="pill" data-page-node-id="UkAcGlhjLyl04ciE7C0Izh">数据来源：天天基金公开接口（仅作分析参考，非投资建议）</span>
+    <span class="pill pill-soft" data-page-node-id="iyRRH6FeNKTDTubRC1TC3E"><svg class="i" data-page-node-id="tbB4d850HduPqIijbvGXko"><use href="#i-lightbulb" data-page-node-id="AQd4o98GLuJOTEZ65h48pm"/></svg> 支付宝/蚂蚁财富销售的是同一批公募基金，6 位代码通用</span>
   </div>
 <!-- 实时持仓概览：本金=持仓明细总投入（不可在此改），走势/预测按实际持仓实时计算 -->
-  <div class="card">
-    <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-trending-up"/></svg></span>实时持仓概览（本金 / 定投 / 预期走势）
-      <span style="margin-left:auto" class="row"><span class="muted" style="font-size:11px;font-weight:600">本金 = 持仓明细成本合计，改本金请到「持仓明细」</span></span>
+  <div class="card" data-page-node-id="3JT79BQf0piv0Hqem6VSkZ">
+    <h3 class="sec" data-page-node-id="MTfX6U2URMkFnUHooP9CgC"><span class="ic" data-page-node-id="HSIQL917p4LDE7HKtaIsya"><svg class="i" data-page-node-id="kIHqDV1CsCRhlCn2dD4WhI"><use href="#i-trending-up" data-page-node-id="G8vCzHGfdxODKdp0HqnrzW"/></svg></span>实时持仓概览（本金 / 定投 / 预期走势）
+      <span style="margin-left:auto" class="row" data-page-node-id="PWpxhocGokl2Pj9282PlF3"><span class="muted" style="font-size:11px;font-weight:600" data-page-node-id="KXfcjMOShRzxqrTqoviSq2">本金 = 持仓明细成本合计，改本金请到「持仓明细」</span></span>
     </h3>
-    <div id="planOverview"><div class="empty">还没有持仓：用「智能决策 → 一键配置最优基金」建仓，或手动添加基金后，这里按你的实际持仓实时生成走势与预期收益。</div></div>
+    <div id="planOverview" data-page-node-id="JmVtzkZyH0yB9cJFNlVqsz"><div class="empty" data-page-node-id="4emrnD2EKf2gzD6Zb6Sx7Y">还没有持仓：用「智能决策 → 一键配置最优基金」建仓，或手动添加基金后，这里按你的实际持仓实时生成走势与预期收益。</div></div>
   </div>
 <!-- 配置合理性速览 + 每月定投计划：并排两列（正方形卡片，减少下滑） -->
-  <div class="pair-grid">
-    <div class="card sq-card"><div id="configHealth"></div></div>
-    <div class="card sq-card"><div id="dcaGuide"></div></div>
+  <div class="pair-grid" data-page-node-id="YFMfxliDJ01kJ9HBinclaN">
+    <div class="card sq-card" data-page-node-id="lhyUbhjVmw3XnoFPnKej0N"><div id="configHealth" data-page-node-id="8x553fE9J0SCrckEdARnVb"></div></div>
+    <div class="card sq-card" data-page-node-id="fPsUu5YBjNmJpqhGBGDxH9"><div id="dcaGuide" data-page-node-id="cW4yNh1S2kLE9AYdQFJafZ"></div></div>
   </div>
 <!-- 持仓明细 -->
-  <div class="card">
-    <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-briefcase"/></svg></span>持仓明细（市值 / 占比 / 成本 / 盈亏）
-      <span style="margin-left:auto" class="row">
-        <span class="pill" id="dataStamp" style="border-color:rgba(52,211,153,.35);color:#7fe3a8">数据更新：—</span>
-        <button class="btn-ghost btn-sm" onclick="backtestHoldings()" title="模拟从过去买入你当前持仓组合（按市值权重）持有至今，对比沪深300"><svg class="i"><use href="#i-trending-up"/></svg> 组合回测</button>
-        <button class="btn-ghost btn-sm" onclick="exportJSON()"><svg class="i"><use href="#i-download"/></svg> 导出</button>
-        <button class="btn-ghost btn-sm" onclick="importJSON()"><svg class="i"><use href="#i-upload"/></svg> 导入</button>
-        <button class="btn-ghost btn-sm" onclick="fillSample()"><svg class="i"><use href="#i-wand"/></svg> 示例</button>
-        <button class="btn-ghost btn-sm" onclick="clearAll()"><svg class="i"><use href="#i-trash"/></svg> 清空</button>
-        <input type="file" id="importFile" accept="application/json" style="display:none" onchange="doImport(this)">
+  <div class="card" data-page-node-id="WJ8VF3b5e6m818nGjD68MF">
+    <h3 class="sec" data-page-node-id="1tHrHY9FL8owKzrTMfIcdw"><span class="ic" data-page-node-id="7GcdhuFxSKP15i8EB24bkJ"><svg class="i" data-page-node-id="RFYLxgn9WhVyEmCVVuInOx"><use href="#i-briefcase" data-page-node-id="VSz65s51NfjE3zEz6mQosh"/></svg></span>持仓明细（市值 / 占比 / 成本 / 盈亏）
+      <span style="margin-left:auto" class="row" data-page-node-id="1UR3dDq8FglqTqOBfGZJQT">
+        <span class="pill" id="dataStamp" style="border-color:rgba(52,211,153,.35);color:#7fe3a8" data-page-node-id="1WLbVF3xch1Sc5VQB42SOk">数据更新：—</span>
+        <button class="btn-ghost btn-sm" onclick="backtestHoldings()" title="模拟从过去买入你当前持仓组合（按市值权重）持有至今，对比沪深300" data-page-node-id="xaVJlNgs1XtGez3qiqM2lc"><svg class="i" data-page-node-id="bYvcqS5Iujv2JvqoOf2SEJ"><use href="#i-trending-up" data-page-node-id="bYsKtCEnBGEWawMprlpDiw"/></svg> 组合回测</button>
+        <button class="btn-ghost btn-sm" onclick="exportJSON()" data-page-node-id="caCTvU7sWjBsc2YbKOgCZv"><svg class="i" data-page-node-id="wepJzPD5YmHd5AqY2uHKSD"><use href="#i-download" data-page-node-id="N3mQrGNRsvGLdrawBhp1X3"/></svg> 导出</button>
+        <button class="btn-ghost btn-sm" onclick="importJSON()" data-page-node-id="id51FCITyrAHguOGfphZU7"><svg class="i" data-page-node-id="lloAtpQZFFd9qmeQZBaDoA"><use href="#i-upload" data-page-node-id="dZFuFB77YmVVkNGvc1ilW9"/></svg> 导入</button>
+        <button class="btn-ghost btn-sm" onclick="fillSample()" data-page-node-id="d1jtHIzVpXAZXf9lpTIwHH"><svg class="i" data-page-node-id="Vj8OxNY9118wx393eLrBCk"><use href="#i-wand" data-page-node-id="cWyouDBEXFG4GVXiZR1jgl"/></svg> 示例</button>
+        <button class="btn-ghost btn-sm" onclick="clearAll()" data-page-node-id="ptFRQt0f4BThdAqLn0jy3D"><svg class="i" data-page-node-id="DDJnuvzWAryD72bGOwV57G"><use href="#i-trash" data-page-node-id="MTJ5p8g3d5BI7LCZmC9o6U"/></svg> 清空</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none" onchange="doImport(this)" data-page-node-id="uBJY3KmJlb03vIEQAhZkWW">
       </span>
     </h3>
-    <div id="holdingsBox">
-      <div class="empty">还没有基金，先在上方输入代码添加吧。</div>
+    <div id="holdingsBox" data-page-node-id="32ffGvpP0qt0WL2bqBTjcv">
+      <div class="empty" data-page-node-id="fXlJZi0yYAYnb7ijldTGNr">还没有基金，先在上方输入代码添加吧。</div>
     </div>
     <!-- 波动约束调仓建议：在可接受波动内最大化年化，并贴合基金最低申购规则给出可执行调仓动作 -->
-    <div class="rebal-card" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
-      <div class="ov-h" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <svg class="i"><use href="#i-target"/></svg><b>波动约束调仓建议</b>
-        <span class="muted" style="font-size:11px">在你输入的年化波动上限内，用均值-方差有效前沿把组合年化收益最大化，并贴合各基金最低申购额给出可执行的增持 / 减持动作。</span>
+    <div class="rebal-card" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px" data-page-node-id="jFL6DF5r8ozaLyf4KkHHt2">
+      <div class="ov-h" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap" data-page-node-id="izVrkzI3o3THOnRMgXjZNq">
+        <svg class="i" data-page-node-id="cihMjnSRUR5mGeXImqcTnC"><use href="#i-target" data-page-node-id="B1oMImwHnSKB2cAznxGJwq"/></svg><b data-page-node-id="PKTDaDwOVQejXwqjJ2dwCk">波动约束调仓建议</b>
+        <span class="muted" style="font-size:11px" data-page-node-id="DWSY1HMkz4POWbH5JUiZEo">在你输入的年化波动上限内，用均值-方差有效前沿把组合年化收益最大化，并贴合各基金最低申购额给出可执行的增持 / 减持动作。</span>
       </div>
-      <div class="ov-p-row" style="margin-top:8px">
-        <label>我能接受的年化波动</label>
-        <input id="rebalVol" class="num" type="number" min="3" max="40" step="1" value="15" style="width:64px" oninput="saveRebalVol(this.value)" onchange="saveRebalVol(this.value)">%
-        <button class="btn-primary btn-sm" onclick="rebalanceAdvise()">🎯 生成调仓建议</button>
-        <span class="muted" style="font-size:11px">范围 5%~30%（与计划收益最大化一致）；默认 15%。</span>
+      <div class="ov-p-row" style="margin-top:8px" data-page-node-id="w2SlZ1ErvYb4F9PdHJFGBJ">
+        <label data-page-node-id="Dz0RQ7IWU53YvOiiys9vCn">我能接受的年化波动</label>
+        <input id="rebalVol" class="num" type="number" min="3" max="40" step="1" value="15" style="width:64px" oninput="saveRebalVol(this.value)" onchange="saveRebalVol(this.value)" data-page-node-id="1Hq1XnFQu92zluArPGBDdL">%
+        <button class="btn-primary btn-sm" onclick="rebalanceAdvise()" data-page-node-id="2jr5y1aes55KbSOR6JRa5X">🎯 生成调仓建议</button>
+        <span class="muted" style="font-size:11px" data-page-node-id="6YocuF4kheUnvTvcnoGZbM">范围 5%~30%（与计划收益最大化一致）；默认 15%。</span>
       </div>
-      <div id="rebalBox"><div class="empty" style="font-size:12px">点「生成调仓建议」：基于你当前持仓市值，在目标波动下求最大年化配置，按各基金最低申购额取整后，给出「增持 / 减持 ¥X」的具体动作与调仓后预期年化、波动对比。</div></div>
+      <div id="rebalBox" data-page-node-id="khRe9sy7y0Ocbz4EHSID9W"><div class="empty" style="font-size:12px" data-page-node-id="5zaiaADBLHUstOmVENDyOJ">点「生成调仓建议」：基于你当前持仓市值，在目标波动下求最大年化配置，按各基金最低申购额取整后，给出「增持 / 减持 ¥X」的具体动作与调仓后预期年化、波动对比。</div></div>
     </div>
   </div>
 
     </div></div></div>
   </section>
 
-  <section class="view fold open" id="view-tools" data-key="tools">
-  <div class="view-h"><span class="vt"><svg class="i"><use href="#i-compass"/></svg> 智能决策</span><span class="vs" id="sumTools">配置推荐 · 买入诊断</span><span class="vline"></span></div>
-<div class="fold-b"><div><div class="fold-inner">
+  <section class="view fold open" id="view-tools" data-key="tools" data-page-node-id="NCTGvtXlFK03Bsi7h6sD1S">
+  <div class="view-h" data-page-node-id="fmXIrRe3ShNWW9J87j1hEd"><span class="vt" data-page-node-id="rQUYJz7aGvdEIM2MghISnT"><svg class="i" data-page-node-id="9z8VUZqzrL1yXyDDaJqAJi"><use href="#i-compass" data-page-node-id="z6x1hUDUmgDizLMECsZGE5"/></svg> 智能决策</span><span class="vs" id="sumTools" data-page-node-id="YJffmYUPkqneUJmK9vi9LC">配置推荐 · 买入诊断</span><span class="vline" data-page-node-id="7aUXIBAIdAebI4SSYWCgdc"></span></div>
+<div class="fold-b" data-page-node-id="4F7MZFF1TEJwfYDXTxojUN"><div data-page-node-id="2Nj0EZEoBX1EDIx8cZLD04"><div class="fold-inner" data-page-node-id="CasCRbCHOk4tgWp2vXPCzr">
 <!-- 智能工具区：推荐（主，更宽）+ 诊断（次）；窄屏自动单列 -->
-  <div class="decision-grid">
+  <div class="decision-grid" data-page-node-id="ixjCey2j2G1kuFuGFdWOwp">
     <!-- 智能配置推荐 -->
-    <div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-sparkles"/></svg></span>智能配置推荐（结合当前市场环境）
-        <span style="margin-left:auto" class="row">
-          <button class="btn-ghost btn-sm" onclick="openBtModal()" title="模拟从过去买入推荐组合持有至今，验证推荐是否真的有用（独立弹窗，跟随你选的基金）">📈 推荐效果回测</button>
-          <button class="btn-primary btn-sm" onclick="loadRecommend()">🔄 生成推荐</button>
+    <div class="card" data-page-node-id="sEgAjVmyXiPtYYAAAsYZau">
+      <h3 class="sec" data-page-node-id="fBA3RbEqp0ME9jJFEvWjjW"><span class="ic" data-page-node-id="1NR4uoOwGQ1C9POcsnwwBL"><svg class="i" data-page-node-id="g3X0e9zBd2WdAyTZXxdU4g"><use href="#i-sparkles" data-page-node-id="8ItapC2ZJfr8yFblCudimT"/></svg></span>智能配置推荐（结合当前市场环境）
+        <span style="margin-left:auto" class="row" data-page-node-id="MtqDOOI9Z7m5mbctgM8OmX">
+          <button class="btn-ghost btn-sm" onclick="openBtModal()" title="模拟从过去买入推荐组合持有至今，验证推荐是否真的有用（独立弹窗，跟随你选的基金）" data-page-node-id="IIo5Uax2eD6RFhaXGaYfqL">📈 推荐效果回测</button>
+          <button class="btn-primary btn-sm" onclick="loadRecommend()" data-page-node-id="4yck96bjEOepJDaf14UUt8">🔄 生成推荐</button>
         </span>
       </h3>
-      <div id="recoBox"><div class="empty">点击「生成推荐」，工具将抓取沪深300等指数判断市场温度，给出股/债/货/QDII 配置比例与精选基金。生成后弹窗内可一键配置建仓。</div></div>
+      <div id="recoBox" data-page-node-id="XQQd4GcUXyvbEQTEhM6mri"><div class="empty" data-page-node-id="oOzuyhlRV0g2QRL6CS8u9b">点击「生成推荐」，工具将抓取沪深300等指数判断市场温度，给出股/债/货/QDII 配置比例与精选基金。生成后弹窗内可一键配置建仓。</div></div>
     </div>
 
     <!-- 单基金买入诊断 -->
-    <div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-search"/></svg></span>单基金买入诊断（给出代码自动分析）</h3>
-      <div class="add-bar">
-        <div class="add-input-wrap">
+    <div class="card" data-page-node-id="cWTrDDO6pzrGOdJAEljAE2">
+      <h3 class="sec" data-page-node-id="uQSMq5AnCTFGQvjNNqrD0s"><span class="ic" data-page-node-id="A1covAFzMcAUnyhOHdd85u"><svg class="i" data-page-node-id="hY3rbCtSSuAB19l7XJH9dl"><use href="#i-search" data-page-node-id="rMEotTB49tRcpzMtUYdtOL"/></svg></span>单基金买入诊断（给出代码自动分析）</h3>
+      <div class="add-bar" data-page-node-id="RZW2JaSkCrjXdVpfYNrMsz">
+        <div class="add-input-wrap" data-page-node-id="VvtEbMa7DcdEoeMvTjM8kP">
           <input type="text" id="adviseInput" autocomplete="off" placeholder="输入基金代码(如 110011) 诊断是否值得买、适合买多少"
-                 onkeydown="if(event.key==='Enter')runAdvise()">
+                 onkeydown="if(event.key==='Enter')runAdvise()" data-page-node-id="NWbvADJEKjn5qEDSPHSRB7">
         </div>
         <input class="num" id="capitalInput" type="number" min="1000" step="10000" value="100000" title="可用于投资基金的总本金(元)" inputmode="decimal"
-               style="width:150px" placeholder="本金¥">
-        <button class="btn-primary" onclick="runAdvise()">开始诊断</button>
-        <span class="muted">本金用于估算「建议买入金额」</span>
+               style="width:150px" placeholder="本金¥" data-page-node-id="eBiDGMw2AX1lFrOF0pd2mT">
+        <button class="btn-primary" onclick="runAdvise()" data-page-node-id="M8RvppBElLtGxYqnlFJ3HC">开始诊断</button>
+        <span class="muted" data-page-node-id="glAmodty3rzSCLCfFcciB7">本金用于估算「建议买入金额」</span>
       </div>
-      <div id="adviseBox"><div class="empty">输入基金代码后点击「开始诊断」，自动分析收益/波动/回撤/估值分位/盈利概率，并给出是否推荐、建议仓位。</div></div>
+      <div id="adviseBox" data-page-node-id="bIoETfTkRGtXpKeHxCNk0a"><div class="empty" data-page-node-id="b66B8fubGb1tgdOZyd6m2D">输入基金代码后点击「开始诊断」，自动分析收益/波动/回撤/估值分位/盈利概率，并给出是否推荐、建议仓位。</div></div>
     </div>
   </div>
 
   <!-- 投资计划概览：计划基金/本金/定投/期限都可改，走势与预测随计划联动（与工作台「实时持仓概览」两码事） -->
-  <div class="card" style="margin-top:12px">
-    <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-target"/></svg></span>投资计划概览（选定基金的预期走势）
-      <span style="margin-left:auto" class="row">
-        <button class="btn-ghost btn-sm" onclick="renderPlanSim()" title="按当前计划参数重新计算">🔄 刷新</button>
-        <span class="muted" style="font-size:11px;font-weight:600">改下面的参数或计划基金，走势实时联动</span>
+  <div class="card" style="margin-top:12px" data-page-node-id="EAHhdJFnRhVUUP0F1Fwf8R">
+    <h3 class="sec" data-page-node-id="zHELr5ktNQsAwpEteBMiEN"><span class="ic" data-page-node-id="r8bA8JRyYC06raWoYoxdW6"><svg class="i" data-page-node-id="AMPLuMPj4jrcDcyOgReQfs"><use href="#i-target" data-page-node-id="iuLbRnisfs7qLX2WTyqKJT"/></svg></span>投资计划概览（选定基金的预期走势）
+      <span style="margin-left:auto" class="row" data-page-node-id="BZ6nvre7iNUWnexYv4VAyh">
+        <button class="btn-ghost btn-sm" onclick="renderPlanSim()" title="按当前计划参数重新计算" data-page-node-id="gOL5UdeFHfQjcqGFwDfFmr">🔄 刷新</button>
+        <span class="muted" style="font-size:11px;font-weight:600" data-page-node-id="29uch7vDCSLB8YZKEATT0i">改下面的参数或计划基金，走势实时联动</span>
       </span>
     </h3>
-    <div id="planSimParams" class="ov-params"></div>
-    <div id="planSimBox"><div class="empty">在这里规划：设定本金 / 定投 / 持有期限，并用「生成推荐 → 一键配置」选定计划基金（或在推荐弹窗「选入配资」），下方走势与预期收益会随计划实时联动。</div></div>
+    <div id="planSimParams" class="ov-params" data-page-node-id="4LpKiEzx4m2oQfGriZetIe"></div>
+    <div id="planSimBox" data-page-node-id="Z5iOZAjtx17QZrgOb5RLYs"><div class="empty" data-page-node-id="0z9gZSQijbJIs4CLakqQiu">在这里规划：设定本金 / 定投 / 持有期限，并用「生成推荐 → 一键配置」选定计划基金（或在推荐弹窗「选入配资」），下方走势与预期收益会随计划实时联动。</div></div>
   </div>
     </div></div></div>
   </section>
 
-  <section class="view fold" id="view-report" data-key="report">
-  <div class="view-h"><span class="vt"><svg class="i"><use href="#i-file-text"/></svg> 深度分析报告</span><span class="vs" id="sumReport">4 大维度 · 10 项诊断</span><span class="vline"></span></div>
-<div class="fold-b"><div><div class="fold-inner">
+  <section class="view fold" id="view-report" data-key="report" data-page-node-id="tClQyzBUBwGqZb1JnYDwzp">
+  <div class="view-h" data-page-node-id="yo6wuIz0cnAQwdc6UtSmiI"><span class="vt" data-page-node-id="RGJXDJ8DHyTkCYMeuSodYH"><svg class="i" data-page-node-id="on0KOobBX6vb2nkgSCjw5Y"><use href="#i-file-text" data-page-node-id="QHvsxu51MsX0UnYnfeUcut"/></svg> 深度分析报告</span><span class="vs" id="sumReport" data-page-node-id="QJF9PrdG1VDhdbu9aDot66">4 大维度 · 10 项诊断</span><span class="vline" data-page-node-id="rtAdY1QNiMAqDDqsizHkh2"></span></div>
+<div class="fold-b" data-page-node-id="ebbqstaO3nHZQv87Io8PIt"><div data-page-node-id="QwxhPXwmUcakqhopN9jrLf"><div class="fold-inner" data-page-node-id="GMPmKS69KunimHhASBDp1z">
 <!-- 分析结果：自适应多列网格 -->
-  <div class="grid analysis-grid">
+  <div class="grid analysis-grid" data-page-node-id="7GJokhIHVvh5cuI8QvaUJo">
 
-  <div class="report-body">
+  <div class="report-body" data-page-node-id="oLdtYulVlpLkKlCipjRKTW">
     <!-- 决策层 -->
-    <div class="report-group g-decision">
-      <div class="group-head"><span class="gbar"></span><span class="gt">决策层</span><span class="gsub">一眼看清组合状态</span><span class="gline"></span></div>
-      <div class="grid analysis-grid">
-<div class="card" id="overviewCard" style="grid-column:1/-1">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-target"/></svg></span>组合健康速览（分析后生成）</h3>
-      <div id="overviewBox" aria-live="polite"><div class="empty">点击「开始分析」后，这里汇总评分、风险与 Top 3 可执行动作。</div></div>
+    <div class="report-group g-decision" data-page-node-id="Fs4CsnUHtDOg0KmyYY9iqo">
+      <div class="group-head" data-page-node-id="QpOP5qHZOQxMgVSxH5Mm9J"><span class="gbar" data-page-node-id="ata0OVRnTh8VvSQx9GSLYy"></span><span class="gt" data-page-node-id="CqfXGHoQD8yarBgfL2Q8Y8">决策层</span><span class="gsub" data-page-node-id="nAOXly7eGbq0nZUqAeuCR6">一眼看清组合状态</span><span class="gline" data-page-node-id="oBnDNwqvBtBU0yBTjle6UT"></span></div>
+      <div class="grid analysis-grid" data-page-node-id="JJOkuuu3Pbq6Faqb01FJYG">
+<div class="card" id="overviewCard" style="grid-column:1/-1" data-page-node-id="1uKBsVEnEyN86pfgSq6mvU">
+      <h3 class="sec" data-page-node-id="dD2Pm5evJvetB9QaaBdlrS"><span class="ic" data-page-node-id="RgMlJD5mlHDuC7z57qiwqM"><svg class="i" data-page-node-id="AQcqqDPwyJBkKQnGLPt8Bu"><use href="#i-target" data-page-node-id="SnkG7ujQD6IKsVgij5IotF"/></svg></span>组合健康速览（分析后生成）</h3>
+      <div id="overviewBox" aria-live="polite" data-page-node-id="O5BCMIpzqaQQiUIHM0FkzH"><div class="empty" data-page-node-id="lo9M0isCugHHmmn2ptg1PO">点击「开始分析」后，这里汇总评分、风险与 Top 3 可执行动作。</div></div>
     </div>
-<div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-activity"/></svg></span>组合健康评分</h3>
-      <div class="gauge-wrap">
-        <svg viewBox="0 0 160 160" class="gauge">
-          <defs>
-            <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#34d399"/>
-              <stop offset="55%" stop-color="#ffb020"/>
-              <stop offset="100%" stop-color="#fb7185"/>
+<div class="card" data-page-node-id="pskX1BsZoYcRLHNrpdFlEo">
+      <h3 class="sec" data-page-node-id="RNMMBk0WUT9Hji1Y0hEgTS"><span class="ic" data-page-node-id="viFmuBqZvDTxeoE0rZZ0Ba"><svg class="i" data-page-node-id="ubzhWVZRNvOuE8kJX1YDxk"><use href="#i-activity" data-page-node-id="Jpszp2xmimDuCmAfD4QNXg"/></svg></span>组合健康评分</h3>
+      <div class="gauge-wrap" data-page-node-id="he3L9dymKNpHln5TAoIixm">
+        <svg viewBox="0 0 160 160" class="gauge" data-page-node-id="8KCManQwRDSKlQKQx6GT3M">
+          <defs data-page-node-id="OF5e9nYvKkOZ3GGzc5BovP">
+            <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1" data-page-node-id="lNz2OLSL7moPSVDDK6NUwi">
+              <stop offset="0%" stop-color="#34d399" data-page-node-id="W5X9WgNLlmCqb8RjaapJn1"/>
+              <stop offset="55%" stop-color="#ffb020" data-page-node-id="6it9XAFXNrJLipyKduGN6H"/>
+              <stop offset="100%" stop-color="#fb7185" data-page-node-id="QcZ1egyVhCCbE2vJslWVur"/>
             </linearGradient>
           </defs>
-          <circle cx="80" cy="80" r="66" class="gauge-track"/>
-          <circle cx="80" cy="80" r="66" class="gauge-fill" id="gaugeFill"/>
+          <circle cx="80" cy="80" r="66" class="gauge-track" data-page-node-id="TIOxaKn36Cbh94FYCXDWnC"/>
+          <circle cx="80" cy="80" r="66" class="gauge-fill" id="gaugeFill" data-page-node-id="n9qmCSLv4r0puBUNJE17Hd"/>
         </svg>
-        <div class="gauge-center">
-          <div class="gauge-score" id="gaugeScore">—</div>
-          <div class="gauge-grade" id="gaugeGrade">待分析</div>
+        <div class="gauge-center" data-page-node-id="eH49E3HFfoYbNhUWlFqiCc">
+          <div class="gauge-score" id="gaugeScore" data-page-node-id="RpvHGmtU0Zhy7Hpyk8TbPa">—</div>
+          <div class="gauge-grade" id="gaugeGrade" data-page-node-id="HqXSNiH5dhXsyzZwPAljVw">待分析</div>
         </div>
       </div>
-      <div class="gauge-formula">分散 35% · 风险收益 35% · 低相关 30%</div>
+      <div class="gauge-formula" data-page-node-id="wh0f1IQV3qAlYnrni9SyMu">分散 35% · 风险收益 35% · 低相关 30%</div>
     </div>
       </div>
     </div>
     <!-- 行动层 -->
-    <div class="report-group g-action">
-      <div class="group-head"><span class="gbar"></span><span class="gt">行动层</span><span class="gsub">该怎么做 · 优先看这里</span><span class="gline"></span></div>
-      <div class="grid analysis-grid">
-<div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-lightbulb"/></svg></span>可执行的优化建议</h3>
-      <ul class="suggestions" id="suggBox" aria-live="polite"><li class="muted" style="border-left-color:var(--muted)">分析后自动生成针对你组合的诊断与建议。</li></ul>
+    <div class="report-group g-action" data-page-node-id="BMKzmtw29UK3xDAQ4jaZCG">
+      <div class="group-head" data-page-node-id="JVifEgtSDqQpxX0ttrjDP6"><span class="gbar" data-page-node-id="bdwQektjJ3GhR9hgulm51q"></span><span class="gt" data-page-node-id="SE7qloFGBk8CG6FlRaNm0F">行动层</span><span class="gsub" data-page-node-id="yNCprDLrPG2AnKzJuChlRd">该怎么做 · 优先看这里</span><span class="gline" data-page-node-id="3OzXLMlJtG1228JLbsRCow"></span></div>
+      <div class="grid analysis-grid" data-page-node-id="QLJYTEzsO4aOqA0JKJka8S">
+<div class="card" data-page-node-id="rJy9NNeubkHnYDpVL3Zsa2">
+      <h3 class="sec" data-page-node-id="70zJ3nBbpPzDxEOFzjA1qz"><span class="ic" data-page-node-id="1FPalMOGL8BdJRuvmyHzjT"><svg class="i" data-page-node-id="gRSv04dBVCOFooGmrUvjAk"><use href="#i-lightbulb" data-page-node-id="COtAdFAwElNQDGOo3hEbtx"/></svg></span>可执行的优化建议</h3>
+      <ul class="suggestions" id="suggBox" aria-live="polite" data-page-node-id="8THNPmeu5CAy7kMuhQ9cJY"><li class="muted" style="border-left-color:var(--muted)" data-page-node-id="LYPGx6YkBr6gzJ7627Z0P2">分析后自动生成针对你组合的诊断与建议。</li></ul>
     </div>
-<div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-activity"/></svg></span>实时操作信号（加仓 / 减仓 / 平仓 / 持仓）</h3>
-      <div id="signalBox" aria-live="polite"><div class="empty">点击「开始分析」生成实时操作信号（交易时段每 2 分钟自动刷新）。</div></div>
+<div class="card" data-page-node-id="mSsiOAxAqSA3CGq5RXZq1e">
+      <h3 class="sec" data-page-node-id="InPFTpbsq3xVeEtirYPUCl"><span class="ic" data-page-node-id="u8UzoSqtLEKGsWa5Z9d5bu"><svg class="i" data-page-node-id="sXCRVeretyUWlsGwvCVIIi"><use href="#i-activity" data-page-node-id="dEMXaOs3fCqZImrgk2czcg"/></svg></span>实时操作信号（加仓 / 减仓 / 平仓 / 持仓）</h3>
+      <div id="signalBox" aria-live="polite" data-page-node-id="EBd9K3DaXlNTNriRVbLtUf"><div class="empty" data-page-node-id="sQwQpRAHb4stVGnXj7xWr5">点击「开始分析」生成实时操作信号（交易时段每 2 分钟自动刷新）。</div></div>
     </div>
       </div>
     </div>
     <!-- 数据层 -->
-    <div class="report-group g-data">
-      <div class="group-head"><span class="gbar"></span><span class="gt">数据层</span><span class="gsub">支撑结论的核心指标</span><span class="gline"></span></div>
-      <div class="grid analysis-grid">
-<div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-map-pin"/></svg></span>组合 KPI</h3>
-      <div id="kpiBox"><div class="empty">点击「开始分析」生成组合指标。</div></div>
+    <div class="report-group g-data" data-page-node-id="F3LnwC4Z4B6vTXuHNKCuiy">
+      <div class="group-head" data-page-node-id="sxJ1CAuygyJKJvHzMywbXZ"><span class="gbar" data-page-node-id="8jyW6oSR55afpgvJQrER00"></span><span class="gt" data-page-node-id="fI8ZsZFlLs0t999cmncQss">数据层</span><span class="gsub" data-page-node-id="BxTBR1jAjTE3EGyGiYqHVd">支撑结论的核心指标</span><span class="gline" data-page-node-id="BVkkOX3GfUJ1YAUPl7lijO"></span></div>
+      <div class="grid analysis-grid" data-page-node-id="CAuCNtulV2VIsLq7dAalhe">
+<div class="card" data-page-node-id="wmTLt7eFp41KAcpWgv3HAH">
+      <h3 class="sec" data-page-node-id="AfMOZtWdRSM9Qj7kGaPmLB"><span class="ic" data-page-node-id="3kz8PjnyNArqasW7FACKiW"><svg class="i" data-page-node-id="JITTMj1itR7RzqMsPoroTj"><use href="#i-map-pin" data-page-node-id="OLLjESvzM0myiWmQSPskRB"/></svg></span>组合 KPI</h3>
+      <div id="kpiBox" data-page-node-id="An7FwWt2GPDmOUbs6OzVQb"><div class="empty" data-page-node-id="FlbepOkLHvFG9EXr8WKM5z">点击「开始分析」生成组合指标。</div></div>
     </div>
-<div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-package"/></svg></span>资产配置环形图（按类型）</h3>
-      <div id="allocBox"><div class="empty">分析后展示资产类型分布。</div></div>
+<div class="card" data-page-node-id="dt5sz9TlNtsUQThTTeQUyE">
+      <h3 class="sec" data-page-node-id="pnTVUFuBTK0bQZqzn4Gla3"><span class="ic" data-page-node-id="pkazGOqJmWyprxQWAtoGWt"><svg class="i" data-page-node-id="smNwsrcZ8Nn3iyr7pXeMKH"><use href="#i-package" data-page-node-id="gpuECIOwzXZqZUp9NzDbuM"/></svg></span>资产配置环形图（按类型）</h3>
+      <div id="allocBox" data-page-node-id="t8ujlxUOPDHuBbRjvXGn2w"><div class="empty" data-page-node-id="p5N3Ap2JdD0CTgjO5RHh8u">分析后展示资产类型分布。</div></div>
     </div>
-<div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-shield"/></svg></span>风险体检</h3>
-      <div id="riskBox"><div class="empty">分析后展示波动率 / 最大回撤 / 风险等级。</div></div>
+<div class="card" data-page-node-id="BMtYGlNthVr3GwQ5PwYziJ">
+      <h3 class="sec" data-page-node-id="Ru62FvVGDWBuTAJ5CyXn6l"><span class="ic" data-page-node-id="0rdvEGdOkU1tj5jyvGvoRl"><svg class="i" data-page-node-id="vdTlzMVFMuSHDUvR68nKhY"><use href="#i-shield" data-page-node-id="vw40aglvmnzVX02Q7Ahjk6"/></svg></span>风险体检</h3>
+      <div id="riskBox" data-page-node-id="pMFcPOuuxMKAlNjRpAoZVp"><div class="empty" data-page-node-id="zBzLdm2UpxfC0VFe5CO2bD">分析后展示波动率 / 最大回撤 / 风险等级。</div></div>
     </div>
-<div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-link"/></svg></span>相关性预警（基金间日收益相关系数）</h3>
-      <div id="corrBox"><div class="empty">分析后展示相关性热力图，颜色越红代表同涨同跌风险越高。</div></div>
-      <div class="note">相关性越高 → 分散效果越差。建议组合内基金相关性尽量低于 0.7。</div>
+<div class="card" data-page-node-id="aL31kgSPBIJbjt0oXaogRZ">
+      <h3 class="sec" data-page-node-id="TFTxyzXEfcWYF0gyP7QKXN"><span class="ic" data-page-node-id="x4haVMOvhPAbJjmgXPcwMC"><svg class="i" data-page-node-id="7kTCpIIkmFPQTTuxVpuwHs"><use href="#i-link" data-page-node-id="2uGG4HXmSfXto6635GCUNW"/></svg></span>相关性预警（基金间日收益相关系数）</h3>
+      <div id="corrBox" data-page-node-id="2eMGHl5XvWSeG7147IFLXD"><div class="empty" data-page-node-id="9Of8z4UmG1u7F4h26c2wyN">分析后展示相关性热力图，颜色越红代表同涨同跌风险越高。</div></div>
+      <div class="note" data-page-node-id="alJ0F1HUPmzqHNSfwV6GVN">相关性越高 → 分散效果越差。建议组合内基金相关性尽量低于 0.7。</div>
     </div>
-<div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-building"/></svg></span>行业集中度与重叠持仓</h3>
-      <div id="industryBox"><div class="empty">分析后展示行业分布、集中度预警与跨基金重叠持仓。</div></div>
-      <div class="note">行业占比取自各基金最新季报配置，按持仓市值加权汇总；重叠持仓越多，隐性集中风险越高。</div>
+<div class="card" data-page-node-id="LGiE7L1aAshcYZVFqzACBD">
+      <h3 class="sec" data-page-node-id="Vku8eO7UQEKbLVBkDQrFDX"><span class="ic" data-page-node-id="WxYSBIlxUB2aSu7XCFzeBm"><svg class="i" data-page-node-id="oiUsWKTL8p3Bk18fZLUrhB"><use href="#i-building" data-page-node-id="wpG0RcLAfjKTBH2aDqpdDJ"/></svg></span>行业集中度与重叠持仓</h3>
+      <div id="industryBox" data-page-node-id="hWyJgZKvVjq0Fo5YcJtaFP"><div class="empty" data-page-node-id="Q4KSJFez74Vj9tMKctmubV">分析后展示行业分布、集中度预警与跨基金重叠持仓。</div></div>
+      <div class="note" data-page-node-id="FBqKR2swAqh2bqaQymAEjK">行业占比取自各基金最新季报配置，按持仓市值加权汇总；重叠持仓越多，隐性集中风险越高。</div>
     </div>
       </div>
     </div>
     <!-- 参考层 -->
-    <div class="report-group g-ref">
-      <div class="group-head"><span class="gbar"></span><span class="gt">参考层</span><span class="gsub">长期视角 · 仅供参考</span><span class="gline"></span></div>
-      <div class="grid analysis-grid">
-<div class="card">
-      <h3 class="sec"><span class="ic"><svg class="i"><use href="#i-trending-up"/></svg></span>盈利可能性（蒙特卡洛模拟）</h3>
-      <div id="probBox"><div class="empty">分析后展示不同持有期的盈利概率。</div></div>
-      <div class="note">基于历史日收益率做 2000 次路径模拟，概率随持有期拉长通常提升（但不保证未来收益）。</div>
+    <div class="report-group g-ref" data-page-node-id="wM9KxHMLwEQtKG4cFQezF2">
+      <div class="group-head" data-page-node-id="aUWCCmg0mi1mcc07nDCBcp"><span class="gbar" data-page-node-id="20uJd3B0HxQrK7fWbmIYFl"></span><span class="gt" data-page-node-id="6hYRJFaZyGS1fg7odJ99Ay">参考层</span><span class="gsub" data-page-node-id="apA4Cyaaaf2AeBTk6lGscn">长期视角 · 仅供参考</span><span class="gline" data-page-node-id="0f4iwLC0eB01g3Ek6uNBMl"></span></div>
+      <div class="grid analysis-grid" data-page-node-id="f3v9yiwHzgJO7tN9rzBv6c">
+<div class="card" data-page-node-id="hAE1z02qYpENc0ZxkXRHsh">
+      <h3 class="sec" data-page-node-id="IcUVw7igCeXjyDlOFgFXxu"><span class="ic" data-page-node-id="2scLCh0kuicEFcoQKH1bhO"><svg class="i" data-page-node-id="1VBgSOFetXJUVCNiEf4iEX"><use href="#i-trending-up" data-page-node-id="aoHKKWendL1SYtGDvZQIP4"/></svg></span>盈利可能性（蒙特卡洛模拟）</h3>
+      <div id="probBox" data-page-node-id="lPPqZRvCxWBVn8DN3zNF5Q"><div class="empty" data-page-node-id="Zo74Y6P7r9KaiEAYnuhlA9">分析后展示不同持有期的盈利概率。</div></div>
+      <div class="note" data-page-node-id="JPiCribVB0kagwWffRUOMV">基于历史日收益率做 2000 次路径模拟，概率随持有期拉长通常提升（但不保证未来收益）。</div>
     </div>
       </div>
     </div>
@@ -932,167 +932,167 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
 </div></div></div></div>
   </section>
 
-  <section class="view fold" id="view-calc" data-key="calc">
-  <div class="view-h"><span class="vt"><svg class="i"><use href="#i-calculator"/></svg> 投资工具箱</span><span class="vs">复利 · 租房 · 租售比（珠海参考）</span><span class="vline"></span></div>
-  <div class="fold-b"><div><div class="fold-inner">
-    <div class="calc-grid">
-      <div class="tool-card">
-        <div class="tl"><span class="tl-ic"><svg class="i"><use href="#i-wallet"/></svg></span>投资复利计算器<span class="tl-tag">支持定投（日/周/月/年）</span></div>
-        <div class="t-row"><label>初始本金（¥）</label><input class="num t-in" id="cp0" type="number" value="100000" min="0" inputmode="decimal"></div>
-        <div class="t-row"><label>年化收益率（%）</label><input class="num t-in" id="cpr" type="number" value="8" min="0" step="0.1" inputmode="decimal"></div>
-        <div class="t-row"><label>投资年限</label><input class="num t-in" id="cpn" type="number" value="10" min="1" inputmode="numeric"></div>
-        <div class="t-row"><label>定投频率</label><select class="num t-in" id="cpf">
-          <option value="day">每日</option>
-          <option value="week">每周</option>
-          <option value="month" selected>每月</option>
-          <option value="year">每年</option>
+  <section class="view fold" id="view-calc" data-key="calc" data-page-node-id="M8YzC0RixcMopbROcGchQf">
+  <div class="view-h" data-page-node-id="qsilIpT0mPRPBZI86jPuDX"><span class="vt" data-page-node-id="jCKwQbfbGbWk04CxxFBgLy"><svg class="i" data-page-node-id="DWxI32P4Sp4GCuy5YRu6qM"><use href="#i-calculator" data-page-node-id="3S0QPzVPr43eZSLlThVEBo"/></svg> 投资工具箱</span><span class="vs" data-page-node-id="2ZB21l6PwbfXau50NLchWD">复利 · 租房 · 租售比（珠海参考）</span><span class="vline" data-page-node-id="hoXV0mwb4zhEA3upJWfBfm"></span></div>
+  <div class="fold-b" data-page-node-id="DFsFJttHqfWFfrdjcG9kvx"><div data-page-node-id="mIMq2H5znWtLTGDEzG7zed"><div class="fold-inner" data-page-node-id="pRJftEVES8cZmVh6rkz808">
+    <div class="calc-grid" data-page-node-id="Tr7IcvUzm4mHiNrx1YwJ3p">
+      <div class="tool-card" data-page-node-id="hx9euxYR6KwwtnRoL1VyLr">
+        <div class="tl" data-page-node-id="XAbxyU85CTDn9jau1hLgt2"><span class="tl-ic" data-page-node-id="pvdVrNy1HsOfMuycBt31zF"><svg class="i" data-page-node-id="IKuV5K97lGNp3FqgjspaYf"><use href="#i-wallet" data-page-node-id="1GKam1pFfE8UCDqNRCuqGr"/></svg></span>投资复利计算器<span class="tl-tag" data-page-node-id="QEIws7akTHKnDyJzWakQC6">支持定投（日/周/月/年）</span></div>
+        <div class="t-row" data-page-node-id="S8ozE7m4GixkTOeeO5el41"><label data-page-node-id="3imLbM2cTQic0BoaNjC9OS">初始本金（¥）</label><input class="num t-in" id="cp0" type="number" value="100000" min="0" inputmode="decimal" data-page-node-id="PGIl3krC7DPfe8roKCB11M"></div>
+        <div class="t-row" data-page-node-id="10soZ25SDFD4KIUMDS3KIh"><label data-page-node-id="uvd6O4B5YLBTCQMGMy53i7">年化收益率（%）</label><input class="num t-in" id="cpr" type="number" value="8" min="0" step="0.1" inputmode="decimal" data-page-node-id="TWBHUku2fbEwZJlVxVWTf1"></div>
+        <div class="t-row" data-page-node-id="ZvBiekOHR8PiVlVT5ETO2L"><label data-page-node-id="7QfD13kfnAXbleTQQ944us">投资年限</label><input class="num t-in" id="cpn" type="number" value="10" min="1" inputmode="numeric" data-page-node-id="sZOEtBO2dp7PnTFEKnp4Wn"></div>
+        <div class="t-row" data-page-node-id="sWwdeagkUH2UNUTbwxBG1r"><label data-page-node-id="eHdhIDTWSBdcXPRtHNLtKi">定投频率</label><select class="num t-in" id="cpf" data-page-node-id="0lHI2aI3ryg5NEhIjN31U6">
+          <option value="day" data-page-node-id="ICz48vokVdsPxk64hf2FFf">每日</option>
+          <option value="week" data-page-node-id="nYeCsRh9DDIsiezowwacZ9">每周</option>
+          <option value="month" selected data-page-node-id="PY7nIIpR1QWBhmojsoelTZ">每月</option>
+          <option value="year" data-page-node-id="rPKiu2zng2jVkrTSs48FJx">每年</option>
         </select></div>
-        <div class="t-row"><label>定投金额（¥/期，0=不定投）</label><input class="num t-in" id="cpm" type="number" value="0" min="0" inputmode="decimal"></div>
-        <div class="t-row"><label>年化波动率（%，影响回撤）</label><input class="num t-in" id="cpv" type="number" value="15" min="0" step="1" inputmode="decimal">
-          <span class="preset-btn" onclick="setVol(8)">低波动</span><span class="preset-btn" onclick="setVol(15)">中波动</span><span class="preset-btn" onclick="setVol(25)">高波动</span></div>
-        <button class="btn-primary" onclick="calcCompound()" style="width:100%;margin-top:6px">计算复利</button>
-        <div class="t-out" id="cpo"><div class="muted">输入参数后点「计算复利」，看复利曲线与终值。</div></div>
+        <div class="t-row" data-page-node-id="tdTvQKpSWwgOu3vHzuf0CG"><label data-page-node-id="VHjVvK7QlofVOf8AggoC2Q">定投金额（¥/期，0=不定投）</label><input class="num t-in" id="cpm" type="number" value="0" min="0" inputmode="decimal" data-page-node-id="1PbNhLn7BxiPektgagn56n"></div>
+        <div class="t-row" data-page-node-id="wTGc4wIc2Ng8IW6L1IY97z"><label data-page-node-id="2ZbM388Siv3F6vaYUES6T9">年化波动率（%，影响回撤）</label><input class="num t-in" id="cpv" type="number" value="15" min="0" step="1" inputmode="decimal" data-page-node-id="naohwGhh74b9Y9tUsxbR1a">
+          <span class="preset-btn" onclick="setVol(8)" data-page-node-id="8WE9VeBKlxSYRWLv9RhhOc">低波动</span><span class="preset-btn" onclick="setVol(15)" data-page-node-id="A4Lg4Dtf5ID3UHwryDaoGE">中波动</span><span class="preset-btn" onclick="setVol(25)" data-page-node-id="S5vbaB8oadhPGG68zDrNmN">高波动</span></div>
+        <button class="btn-primary" onclick="calcCompound()" style="width:100%;margin-top:6px" data-page-node-id="XIQFiYX7By6yRqysI2NJMT">计算复利</button>
+        <div class="t-out" id="cpo" data-page-node-id="xjjLmuUejFTONHNPg5X0Y4"><div class="muted" data-page-node-id="zs8hjmmGDMWqGIfBxDt31g">输入参数后点「计算复利」，看复利曲线与终值。</div></div>
       </div>
-      <div class="tool-card">
-        <div class="tl"><span class="tl-ic"><svg class="i"><use href="#i-home"/></svg></span>租房成本计算器<span class="tl-tag">含押金 · 中介 · 涨幅</span></div>
-        <div class="t-row"><label>月租金（¥）</label><input class="num t-in" id="rp0" type="number" value="2500" min="0" inputmode="decimal"></div>
-        <div class="t-row"><label>租期（年）</label><input class="num t-in" id="rpn" type="number" value="5" min="1" inputmode="numeric"></div>
-        <div class="t-row"><label>租金年涨幅（%）</label><input class="num t-in" id="rpg" type="number" value="3" min="0" inputmode="decimal"></div>
-        <div class="t-row"><label>每月管理费/物业费（¥）</label><input class="num t-in" id="rpf" type="number" value="0" min="0" inputmode="decimal"></div>
-        <div class="t-row"><label>每月停车费（¥，0=无）</label><input class="num t-in" id="rpp" type="number" value="0" min="0" inputmode="decimal"></div>
-        <div class="t-row"><label>搬家费（¥，一次性）</label><input class="num t-in" id="rpmv" type="number" value="0" min="0" inputmode="decimal"></div>
-        <div class="t-row"><label>中介费（月数，1=1个月租金）</label><input class="num t-in" id="rpa" type="number" value="1" min="0" inputmode="decimal"></div>
-        <button class="btn-primary" onclick="calcRentCost()" style="width:100%;margin-top:6px">计算租房总成本</button>
-        <div class="t-out" id="rpo"><div class="muted">输入参数后点「计算租房总成本」，看租期总支出与年均成本。</div></div>
+      <div class="tool-card" data-page-node-id="GAFgZgFa8dK9rSt7q2qB3E">
+        <div class="tl" data-page-node-id="rnEMP9MbDkHnzAaAH6WYo4"><span class="tl-ic" data-page-node-id="ZEDhPIVqLT5gbyugTG0haG"><svg class="i" data-page-node-id="yZH2x80pLuGLwpo1LNDDTO"><use href="#i-home" data-page-node-id="5butDFKHmORNaghKcg8dLk"/></svg></span>租房成本计算器<span class="tl-tag" data-page-node-id="GMlO5S479DoqpxnHCzKS1q">含押金 · 中介 · 涨幅</span></div>
+        <div class="t-row" data-page-node-id="VDswjakw7UjDSg74eIWSJq"><label data-page-node-id="7BrRVxjIYqyw0hK1x0SdqA">月租金（¥）</label><input class="num t-in" id="rp0" type="number" value="2500" min="0" inputmode="decimal" data-page-node-id="l9PP3M3nVa8Z3Yn2JnILhC"></div>
+        <div class="t-row" data-page-node-id="NmIB1EEAaF3N5RvHy9BNCQ"><label data-page-node-id="5fazYB2Rv0oLRBoUHDQBkw">租期（年）</label><input class="num t-in" id="rpn" type="number" value="5" min="1" inputmode="numeric" data-page-node-id="97qkdfUalHDOz083pg0Ha5"></div>
+        <div class="t-row" data-page-node-id="VVRbQB4pdegCyuCyHO0w9x"><label data-page-node-id="L9kATYzGY2rjErkBDnErVi">租金年涨幅（%）</label><input class="num t-in" id="rpg" type="number" value="3" min="0" inputmode="decimal" data-page-node-id="nYE7py5PDnfSToE1HeEVKJ"></div>
+        <div class="t-row" data-page-node-id="wxkCCB6HdY79cHNGV4pk4A"><label data-page-node-id="rWPYY70jaYrK2TERzrvYBX">每月管理费/物业费（¥）</label><input class="num t-in" id="rpf" type="number" value="0" min="0" inputmode="decimal" data-page-node-id="r1lDSPTTy1dHK3U05pmYdx"></div>
+        <div class="t-row" data-page-node-id="hF30yCQiMd16oagG5VRg7F"><label data-page-node-id="80fWC5KkETsOZi8XsNsGGm">每月停车费（¥，0=无）</label><input class="num t-in" id="rpp" type="number" value="0" min="0" inputmode="decimal" data-page-node-id="hkpvfnRB29M1hTDKM3yw5h"></div>
+        <div class="t-row" data-page-node-id="IiD8e8sT7WDV2MLrdhkTOm"><label data-page-node-id="LCNqGUrYQ3aRzdb2gsyx13">搬家费（¥，一次性）</label><input class="num t-in" id="rpmv" type="number" value="0" min="0" inputmode="decimal" data-page-node-id="pM7C2ay6tCfAqMT3KWk5Ed"></div>
+        <div class="t-row" data-page-node-id="mg12cE3PaDZGD9WOyCxR4j"><label data-page-node-id="AQpR6DkRD3hcGwG7rKfb9b">中介费（月数，1=1个月租金）</label><input class="num t-in" id="rpa" type="number" value="1" min="0" inputmode="decimal" data-page-node-id="QL3gOyYrDNJfDxw2rdSJBC"></div>
+        <button class="btn-primary" onclick="calcRentCost()" style="width:100%;margin-top:6px" data-page-node-id="YfXd03DEu67ynp5C0A0Kpp">计算租房总成本</button>
+        <div class="t-out" id="rpo" data-page-node-id="5BrhEfeEsMD2KaJVpWYsiG"><div class="muted" data-page-node-id="UzGDv87qTDKbh0ckbLmO7I">输入参数后点「计算租房总成本」，看租期总支出与年均成本。</div></div>
       </div>
-      <div class="tool-card tool-wide">
-        <div class="tl"><span class="tl-ic"><svg class="i"><use href="#i-bar-chart"/></svg></span>租售比 & 买房决策（珠海参考）<span class="tl-tag">租售比 · 租买决策 · 合理买价</span></div>
-        <div class="t-note" style="margin:0 0 8px">输入你关注房源的<b>总房价</b>、<b>面积</b>与<b>月租金</b>（用真实成交/挂牌信息，避免区域均价失真），系统一次性测算：租金回报率与回本年数、租划算还是买划算、多少钱买才划算，并结合珠海真实挂牌走势判断房价是否企稳。</div>
-        <div class="t-2col">
-          <div class="t-row"><label>房源总房价（¥）</label><input class="num t-in" id="rbPrice" type="number" value="1500000" min="0" inputmode="decimal"></div>
-          <div class="t-row"><label>面积（㎡）</label><input class="num t-in" id="rbArea" type="number" value="75" min="1" inputmode="decimal"></div>
+      <div class="tool-card tool-wide" data-page-node-id="toH2T7ysusvScnKOMNTm6S">
+        <div class="tl" data-page-node-id="PZ0YlHxFlnodlrc86ehPND"><span class="tl-ic" data-page-node-id="yCRESbiQAsY0tZMeFlQfSc"><svg class="i" data-page-node-id="kPZ5UI8DSwUBZJmpUJj7Px"><use href="#i-bar-chart" data-page-node-id="bojUPC5CXaYlyfGMMqbOar"/></svg></span>租售比 & 买房决策（珠海参考）<span class="tl-tag" data-page-node-id="2k2FsjP4jGM7gXSdUD4Lpj">租售比 · 租买决策 · 合理买价</span></div>
+        <div class="t-note" style="margin:0 0 8px" data-page-node-id="LhOIxxXG230Qz2rTEWZhFo">输入你关注房源的<b data-page-node-id="btuCF5X09BhZk8545rZCS8">总房价</b>、<b data-page-node-id="arytb3TbStxfFa8HPkPRMK">面积</b>与<b data-page-node-id="9A38Bl5f6V65FPhaCCePA9">月租金</b>（用真实成交/挂牌信息，避免区域均价失真），系统一次性测算：租金回报率与回本年数、租划算还是买划算、多少钱买才划算，并结合珠海真实挂牌走势判断房价是否企稳。</div>
+        <div class="t-2col" data-page-node-id="yIWaibUJJsOPdM1Fdbqhhe">
+          <div class="t-row" data-page-node-id="QZKqJOuQZ9vAFNVUi1MEJG"><label data-page-node-id="dIVWpL5TP587tx5HVFm1Ua">房源总房价（¥）</label><input class="num t-in" id="rbPrice" type="number" value="1500000" min="0" inputmode="decimal" data-page-node-id="gSoWgFUeCLHyL4DQ9eiO3B"></div>
+          <div class="t-row" data-page-node-id="CRwlTOnSWOxdCi6hFwkt0N"><label data-page-node-id="z147uRqEVipxurJ7BjCHja">面积（㎡）</label><input class="num t-in" id="rbArea" type="number" value="75" min="1" inputmode="decimal" data-page-node-id="SvKggVDIWcWl8Ft8bD9TNM"></div>
         </div>
-        <div class="t-row"><label>该房源月租金（¥）</label><input class="num t-in" id="rbRent" type="number" value="3000" min="0" inputmode="decimal"></div>
-        <details class="rb-fin">
-          <summary>财务参数（默认：首付 30% · 30 年 · 利率 3.0% · 首付理财机会成本 3.0%，可按需调整）</summary>
-          <div class="t-2col">
-            <div class="t-row"><label>首付比例（%）</label><input class="num t-in" id="rbDown" type="number" value="30" min="0" max="100" inputmode="decimal"></div>
-            <div class="t-row"><label>贷款年限（年）</label><input class="num t-in" id="rbYears" type="number" value="30" min="1" max="40" inputmode="decimal"></div>
-            <div class="t-row"><label>房贷利率（%）</label><input class="num t-in" id="rbRate" type="number" value="3.0" min="0" step="0.05" inputmode="decimal"></div>
-            <div class="t-row"><label>首付理财机会成本（%）</label><input class="num t-in" id="rbRinv" type="number" value="3.0" min="0" step="0.05" inputmode="decimal"></div>
-            <div class="t-row"><label>物业费（元/㎡/月）</label><input class="num t-in" id="rbpf" type="number" value="3" min="0" step="0.5" inputmode="decimal"></div>
+        <div class="t-row" data-page-node-id="C5CeLyCGPAucgiWrgOGBz4"><label data-page-node-id="CIM0yU8L4RnB5SIfnbFs8D">该房源月租金（¥）</label><input class="num t-in" id="rbRent" type="number" value="3000" min="0" inputmode="decimal" data-page-node-id="6G2Xwbypz0f0lj94nJrXeT"></div>
+        <details class="rb-fin" data-page-node-id="rnOY4pHgRGNv3yOadjhBBh">
+          <summary data-page-node-id="VNfFFnoolBuLVQJKHFGvbU">财务参数（默认：首付 30% · 30 年 · 利率 3.0% · 首付理财机会成本 3.0%，可按需调整）</summary>
+          <div class="t-2col" data-page-node-id="lqEAUu6DlOZxnaCFjScrZs">
+            <div class="t-row" data-page-node-id="BYFigKu4d65ZuXT5vtywcY"><label data-page-node-id="VLeF3nbMbAdA7shJmiA5NK">首付比例（%）</label><input class="num t-in" id="rbDown" type="number" value="30" min="0" max="100" inputmode="decimal" data-page-node-id="uflxyeOEFGatDETfhD8jTw"></div>
+            <div class="t-row" data-page-node-id="x9L1yUZXnvnNcR9FIGnbPg"><label data-page-node-id="dsrYEpMHJFU6sFwcUnGALG">贷款年限（年）</label><input class="num t-in" id="rbYears" type="number" value="30" min="1" max="40" inputmode="decimal" data-page-node-id="6LzHSTA0GJDKMrudsRwLZe"></div>
+            <div class="t-row" data-page-node-id="2iJj6B1gG2yEZacHr5udwa"><label data-page-node-id="6orf44shFlQhbbmL1WOBFC">房贷利率（%）</label><input class="num t-in" id="rbRate" type="number" value="3.0" min="0" step="0.05" inputmode="decimal" data-page-node-id="WDwE7j3cxZnHvDgXaDZQyR"></div>
+            <div class="t-row" data-page-node-id="YrixXvT454JOEkYLsHIyGt"><label data-page-node-id="tgm0SmonMpW3c2PJsft5tA">首付理财机会成本（%）</label><input class="num t-in" id="rbRinv" type="number" value="3.0" min="0" step="0.05" inputmode="decimal" data-page-node-id="FXHaSc7LFscdDMFqCwCYbW"></div>
+            <div class="t-row" data-page-node-id="nRgUHgqqEOVNv9xQxeEurA"><label data-page-node-id="18nqEFMHt8vAr511L6TWPD">物业费（元/㎡/月）</label><input class="num t-in" id="rbpf" type="number" value="3" min="0" step="0.5" inputmode="decimal" data-page-node-id="2ui29VPFejN7Bg7elH5EzA"></div>
           </div>
         </details>
-        <button class="btn-primary" onclick="calcRent()" style="width:100%;margin-top:6px">测算租售比 / 租买决策 / 合理买价</button>
-        <div class="t-out" id="ypo"><div class="muted">输入房源总房价、面积与月租金，点上方按钮测算。</div></div>
-        <div class="zh-market" id="zhMarket"><div class="muted">正在获取珠海实时挂牌行情…</div></div>
+        <button class="btn-primary" onclick="calcRent()" style="width:100%;margin-top:6px" data-page-node-id="8peYeRpOMPFCWUPIx99ABX">测算租售比 / 租买决策 / 合理买价</button>
+        <div class="t-out" id="ypo" data-page-node-id="M7IqQE5rx6uBni4w4xB0vE"><div class="muted" data-page-node-id="j8uiIHbMEPv6OQenGlLswW">输入房源总房价、面积与月租金，点上方按钮测算。</div></div>
+        <div class="zh-market" id="zhMarket" data-page-node-id="4X2jsyrdoSBDR9DyW0DmdL"><div class="muted" data-page-node-id="uyjuCGR4qcip2p3lW1opvx">正在获取珠海实时挂牌行情…</div></div>
       </div>
     </div>
   </div></div></div>
   </section>
 
   </div></main>
-<aside class="rail">
-  <div class="card rail-card">
-    <div class="rail-sec">📊 持仓速览</div>
-    <div id="railBody"></div>
-    <div class="rail-acts">
-      <button class="btn-primary" onclick="runAnalysis()">开始分析</button>
-      <button class="btn-ghost btn-sm" onclick="refreshNav()">刷新行情</button>
+<aside class="rail" data-page-node-id="Pu4pRjRMTo5hnMeSeAPLaA">
+  <div class="card rail-card" data-page-node-id="ylK7IkU2xQUz7ed1auDdoF">
+    <div class="rail-sec" data-page-node-id="bKov6gB4wvtbC80NQITHaE">📊 持仓速览</div>
+    <div id="railBody" data-page-node-id="LDL8vIok0bR9jcI3f6W8Pz"></div>
+    <div class="rail-acts" data-page-node-id="aRDXj632NuEVWEWUeSc0Ub">
+      <button class="btn-primary" onclick="runAnalysis()" data-page-node-id="IUJ7EeMdH5m1JZESjAMkK4">开始分析</button>
+      <button class="btn-ghost btn-sm" onclick="refreshNav()" data-page-node-id="XGWHRL9UeGJwjLTbRPybIA">刷新行情</button>
     </div>
   </div>
 </aside>
 </div>
-<nav class="tabbar">
-  <button class="tb-item on" data-view="portfolio" onclick="switchView('portfolio')"><span class="ni-ic"><svg class="i"><use href="#i-layers"/></svg></span>组合</button>
-  <button class="tb-item" data-view="tools" onclick="switchView('tools')"><span class="ni-ic"><svg class="i"><use href="#i-compass"/></svg></span>决策</button>
-  <button class="tb-item" data-view="report" onclick="switchView('report')"><span class="ni-ic"><svg class="i"><use href="#i-file-text"/></svg></span>报告</button>
-  <button class="tb-item" data-view="calc" onclick="switchView('calc')"><span class="ni-ic"><svg class="i"><use href="#i-calculator"/></svg></span>工具</button>
+<nav class="tabbar" data-page-node-id="dFLQB5KKD89Ycyxl2Fwe25">
+  <button class="tb-item on" data-view="portfolio" onclick="switchView('portfolio')" data-page-node-id="O4BK4eFRwlbTvGqvg6EC36"><span class="ni-ic" data-page-node-id="zGS2ZHP4EPuJ1gZFJetvlx"><svg class="i" data-page-node-id="YsiYJvW37WB6sjTufhInAg"><use href="#i-layers" data-page-node-id="oIhEil8PC4CWySRAxC4RRW"/></svg></span>组合</button>
+  <button class="tb-item" data-view="tools" onclick="switchView('tools')" data-page-node-id="qj6yZut8UeWWHZTDIfwQWZ"><span class="ni-ic" data-page-node-id="abAkNzvc8L0HMk8EkVJJsv"><svg class="i" data-page-node-id="CQWWn2U2dKOSXlfXHGBmi9"><use href="#i-compass" data-page-node-id="CTMMODiZy1hRHL7Cpkj7Wo"/></svg></span>决策</button>
+  <button class="tb-item" data-view="report" onclick="switchView('report')" data-page-node-id="lq3uqEB1loygJ3O6WTNm9l"><span class="ni-ic" data-page-node-id="EErEKVerHD5vHmrvnS2cZO"><svg class="i" data-page-node-id="KUCG1PuaABe2LY6phmkrw0"><use href="#i-file-text" data-page-node-id="EKASDH6e26GcZtlZm0yzPz"/></svg></span>报告</button>
+  <button class="tb-item" data-view="calc" onclick="switchView('calc')" data-page-node-id="FisdwkfU0FRiRcfBMuItaQ"><span class="ni-ic" data-page-node-id="4RXpbBLuAeVRvIj9oFkZRe"><svg class="i" data-page-node-id="3vMmaW2l3W61z3H7kZNWY3"><use href="#i-calculator" data-page-node-id="zYJsct5Dq3BNV61XQkJUFB"/></svg></span>工具</button>
 </nav>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" data-page-node-id="a1k9U1DBQEh9gGYGjl7O22"></div>
 
 <!-- 一键配资：浮动栏 + 弹窗 -->
-<div class="alloc-bar" id="allocBar">
-  <span class="cnt">已选 <b id="selCnt">0</b> 只 · 合计权重 <b id="selW">0%</b></span>
-  <button class="btn-primary btn-sm" onclick="openAllocate()"><svg class="i"><use href="#i-zap"/></svg> 一键配资</button>
-  <button class="rf-sel" style="border-color:var(--muted);color:var(--muted)" onclick="clearSel()">清空</button>
+<div class="alloc-bar" id="allocBar" data-page-node-id="qEyXBVYL2by0rQzMmIbEGX">
+  <span class="cnt" data-page-node-id="pYmedJPPgwPLQjZQNMde1H">已选 <b id="selCnt" data-page-node-id="AGB2aflAmDYwnPiy7eCq34">0</b> 只 · 合计权重 <b id="selW" data-page-node-id="A55uyOzyJ6sHfEPhSTOUNA">0%</b></span>
+  <button class="btn-primary btn-sm" onclick="openAllocate()" data-page-node-id="wUJawmoitUan5UIHYtZjcb"><svg class="i" data-page-node-id="CjIDPSQakp7GqP6sEgpzBv"><use href="#i-zap" data-page-node-id="DgPkclhsOwDwqN3ZPXW7MX"/></svg> 一键配资</button>
+  <button class="rf-sel" style="border-color:var(--muted);color:var(--muted)" onclick="clearSel()" data-page-node-id="g8F9MbmIiqNMZTerANsf12">清空</button>
 </div>
 
-<div class="overlay" id="allocOverlay" onclick="if(event.target===this)closeAllocate()">
-  <div class="modal" id="allocModal">
-    <div class="modal-head">
-      <h2><svg class="i"><use href="#i-zap"/></svg> 一键配资</h2>
-      <button class="modal-close" onclick="closeAllocate()" aria-label="关闭">×</button>
+<div class="overlay" id="allocOverlay" onclick="if(event.target===this)closeAllocate()" data-page-node-id="HdHu2XP3C9RWrDYJdfhLW9">
+  <div class="modal" id="allocModal" data-page-node-id="1OqRfvNqP9Ub8edLP95Qlf">
+    <div class="modal-head" data-page-node-id="yrmINfJH8XQ4GwI37EYAZF">
+      <h2 data-page-node-id="D6SLJe6mAJ9TZUrq8aG8EN"><svg class="i" data-page-node-id="8gEXDew9xUhc5QEBB1GVGe"><use href="#i-zap" data-page-node-id="f78Qdp5YpBn3KAEH6ZNfLT"/></svg> 一键配资</h2>
+      <button class="modal-close" onclick="closeAllocate()" aria-label="关闭" data-page-node-id="GbGLiUcvV2Hgj0orwDn2tS">×</button>
     </div>
-    <div class="sub">从推荐选入的基金，结合实时多因子、相关性、估值分位，给出具体买入金额与可执行优化方案。</div>
-    <div class="modal-body">
-      <div class="sel-list" id="selList"></div>
-      <div class="principal-card">
-        <div class="pc-top"><span>投资本金（¥）</span><span class="pv" id="principalPreview">¥100,000</span></div>
-        <input id="principalInput2" type="number" value="100000" min="0" step="1000" inputmode="decimal" oninput="syncPrincipalPreview()">
-        <div class="principal-presets">
-          <span class="preset-btn" onclick="setPrincipal(50000)">5 万</span>
-          <span class="preset-btn" onclick="setPrincipal(100000)">10 万</span>
-          <span class="preset-btn" onclick="setPrincipal(500000)">50 万</span>
-          <span class="preset-btn" onclick="setPrincipal(1000000)">100 万</span>
+    <div class="sub" data-page-node-id="5oK8FFdvJMsaZcj04Yo2MS">从推荐选入的基金，结合实时多因子、相关性、估值分位，给出具体买入金额与可执行优化方案。</div>
+    <div class="modal-body" data-page-node-id="6CY1tw19CAp4xtaVM0FYn8">
+      <div class="sel-list" id="selList" data-page-node-id="XxRBRZbafc9A8GsFRpUa3V"></div>
+      <div class="principal-card" data-page-node-id="IESPBD6oczpAXporAFuhbR">
+        <div class="pc-top" data-page-node-id="aAOEkBLznDF8acXXXep47T"><span data-page-node-id="dONqSVKGYZTg2UIBshM8ly">投资本金（¥）</span><span class="pv" id="principalPreview" data-page-node-id="xC1ctkhtwmjuJVO2gx2HxB">¥100,000</span></div>
+        <input id="principalInput2" type="number" value="100000" min="0" step="1000" inputmode="decimal" oninput="syncPrincipalPreview()" data-page-node-id="ZoFUJjgwFDCOdzTXwSPFEd">
+        <div class="principal-presets" data-page-node-id="flFlO5aPIFx6ExGNmAp4tv">
+          <span class="preset-btn" onclick="setPrincipal(50000)" data-page-node-id="eHB6PtAVvPGdO0q8tnw6mt">5 万</span>
+          <span class="preset-btn" onclick="setPrincipal(100000)" data-page-node-id="23FNn5CNJN93T1YKrfvZlo">10 万</span>
+          <span class="preset-btn" onclick="setPrincipal(500000)" data-page-node-id="seGBN2nDuaeWwWuWVdH28f">50 万</span>
+          <span class="preset-btn" onclick="setPrincipal(1000000)" data-page-node-id="Td1Bcy3S7yEDHFg8ek5egP">100 万</span>
         </div>
       </div>
-      <button class="btn-primary" onclick="genPlan()" style="width:100%">生成配资方案</button>
-      <div id="planBox"></div>
+      <button class="btn-primary" onclick="genPlan()" style="width:100%" data-page-node-id="wr34sot4VP8H7mURXochWV">生成配资方案</button>
+      <div id="planBox" data-page-node-id="n81cD60xPwmgmzSKa7qi9C"></div>
     </div>
   </div>
 </div>
 
 <!-- 智能配置推荐结果弹窗：点完"生成推荐"后，完整结果在弹窗里展示（市场环境/配置比例/估值/精选基金/一键配置），避免在卡片里铺开长长的内容 -->
-<div class="overlay" id="recoOverlay" onclick="if(event.target===this)closeRecoModal()">
-  <div class="modal" id="recoModal" style="width:min(980px,96vw)">
-    <div class="modal-head">
-      <h2><svg class="i"><use href="#i-sparkles"/></svg> 智能配置推荐</h2>
-      <button class="modal-close" onclick="closeRecoModal()" aria-label="关闭">×</button>
+<div class="overlay" id="recoOverlay" onclick="if(event.target===this)closeRecoModal()" data-page-node-id="W0CHWsagTindKPZ0LTEi26">
+  <div class="modal" id="recoModal" style="width:min(980px,96vw)" data-page-node-id="WwBX424nGGvCApoNQklg63">
+    <div class="modal-head" data-page-node-id="Fp8JaVBC8SZ3AebmQ4QEaz">
+      <h2 data-page-node-id="AG5l6mJpUxzTu2oraPZH0v"><svg class="i" data-page-node-id="5CbZKYIWJYiaPsORyTw4kh"><use href="#i-sparkles" data-page-node-id="tglK5UgO7tJNYTTbHjRycg"/></svg> 智能配置推荐</h2>
+      <button class="modal-close" onclick="closeRecoModal()" aria-label="关闭" data-page-node-id="jTiu0itSrLcOlE2pHwKdSt">×</button>
     </div>
-    <div class="sub">结合当前市场温度，给出大类配置比例与精选基金，弹窗内可直接完成一键配置建仓</div>
-    <div class="modal-body" id="recoModalBody"></div>
+    <div class="sub" data-page-node-id="I2wtYyoiCftooCHwLXgY16">结合当前市场温度，给出大类配置比例与精选基金，弹窗内可直接完成一键配置建仓</div>
+    <div class="modal-body" id="recoModalBody" data-page-node-id="Ae6vK1KPw7cm0xOpgYMow6"></div>
   </div>
 </div>
 
 <!-- 推荐效果回测弹窗：模拟"从过去买入推荐组合持有至今"，验证能否盈利 -->
-<div class="overlay" id="btOverlay" onclick="if(event.target===this)closeBtModal()">
-  <div class="modal" id="btModal" style="width:min(960px,96vw)">
-    <div class="modal-head">
-      <h2><svg class="i"><use href="#i-trending-up"/></svg> 推荐效果回测</h2>
-      <button class="modal-close" onclick="closeBtModal()" aria-label="关闭">×</button>
+<div class="overlay" id="btOverlay" onclick="if(event.target===this)closeBtModal()" data-page-node-id="XhBYBtFjzQjfWJVDipZO28">
+  <div class="modal" id="btModal" style="width:min(960px,96vw)" data-page-node-id="5I0MVoIOI1wtSMhdxED5qI">
+    <div class="modal-head" data-page-node-id="Jm1O9LlnzUdoIJ1V5HZZKf">
+      <h2 data-page-node-id="q0OXuPEcEVz62KmYZrh97t"><svg class="i" data-page-node-id="yHxlVhRgGcTkTdCxAydPlI"><use href="#i-trending-up" data-page-node-id="NqH1eNkfA8UAfYGUCjT47S"/></svg> 推荐效果回测</h2>
+      <button class="modal-close" onclick="closeBtModal()" aria-label="关闭" data-page-node-id="p8nFshq9Y6FID4mmZEFp7S">×</button>
     </div>
-    <div class="sub">模拟从过去买入持有至今，看能否盈利、盈利多少（对比沪深300）。可在弹窗内切换回测对象：推荐组合 / 你选的 N 只 / 我的持仓。</div>
-    <div class="modal-body" id="btModalBody"></div>
+    <div class="sub" data-page-node-id="eBmyt3H8avJZrOr4eltjtH">模拟从过去买入持有至今，看能否盈利、盈利多少（对比沪深300）。可在弹窗内切换回测对象：推荐组合 / 你选的 N 只 / 我的持仓。</div>
+    <div class="modal-body" id="btModalBody" data-page-node-id="NXH0xLHO3joL5WeQR6zQju"></div>
   </div>
 </div>
 
 <!-- 单基金诊断结果弹窗：卡片化核心指标 + 图表 -->
-<div class="overlay" id="adviseOverlay" onclick="if(event.target===this)closeAdvise()">
-  <div class="modal" id="adviseModal" style="width:min(920px,96vw)">
-    <div class="modal-head">
-      <h2><svg class="i"><use href="#i-activity"/></svg> 基金诊断</h2>
-      <button class="modal-close" onclick="closeAdvise()" aria-label="关闭">×</button>
+<div class="overlay" id="adviseOverlay" onclick="if(event.target===this)closeAdvise()" data-page-node-id="xkCPkDggNHDFIKdHY1rbhG">
+  <div class="modal" id="adviseModal" style="width:min(920px,96vw)" data-page-node-id="AGNMmajCKl9nGVJFEQTOYg">
+    <div class="modal-head" data-page-node-id="SSHGafvoRLIYY67NjznbCr">
+      <h2 data-page-node-id="JpFf7dZiexhgMq3LCQ4HmC"><svg class="i" data-page-node-id="EuNSYqITCBzDu4Py32Ix7K"><use href="#i-activity" data-page-node-id="TGKMcJXDRX12s9F96YQm6l"/></svg> 基金诊断</h2>
+      <button class="modal-close" onclick="closeAdvise()" aria-label="关闭" data-page-node-id="Atis46YtX71HQGFuEeKF14">×</button>
     </div>
-    <div class="sub" id="adviseSub">输入基金代码后点击「开始诊断」，自动分析收益/波动/回撤/估值分位/盈利概率。</div>
-    <div class="modal-body" id="adviseModalBody"></div>
+    <div class="sub" id="adviseSub" data-page-node-id="dHEE52tQOxJUVqX7VymIP7">输入基金代码后点击「开始诊断」，自动分析收益/波动/回撤/估值分位/盈利概率。</div>
+    <div class="modal-body" id="adviseModalBody" data-page-node-id="4hpifRPC6r4ZvACO9XqyBg"></div>
   </div>
 </div>
 
 <!-- 应用内确认弹窗（替代浏览器原生 confirm） -->
-<div class="overlay" id="confirmOverlay" onclick="if(event.target===this)closeConfirm()">
-  <div class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="cfTitle">
-    <p class="ct" id="cfTitle">⚠ 请确认</p>
-    <p class="cm" id="cfMsg"></p>
-    <div class="cf-actions">
-      <button class="btn-ghost btn-sm" onclick="closeConfirm()">取消</button>
-      <button class="btn-danger btn-sm" id="cfYes">确认</button>
+<div class="overlay" id="confirmOverlay" onclick="if(event.target===this)closeConfirm()" data-page-node-id="jAYILogREYlThEWUrr8eFD">
+  <div class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="cfTitle" data-page-node-id="IyfZG6wlUxRQfIGst3RsEJ">
+    <p class="ct" id="cfTitle" data-page-node-id="4TglrXSbF36MVpiFg63NaJ">⚠ 请确认</p>
+    <p class="cm" id="cfMsg" data-page-node-id="RkbSguv0jXapyMk2UQUJqg"></p>
+    <div class="cf-actions" data-page-node-id="oQyd94hXK7Sb5EvSGzEZ1Y">
+      <button class="btn-ghost btn-sm" onclick="closeConfirm()" data-page-node-id="ZF6G5137TKMFiNwoa9qy3G">取消</button>
+      <button class="btn-danger btn-sm" id="cfYes" data-page-node-id="8r1bqcYSJFcFBVwVDgCg3g">确认</button>
     </div>
   </div>
 </div>
 
-<button class="to-top" id="toTop" aria-label="回到顶部" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+<button class="to-top" id="toTop" aria-label="回到顶部" onclick="window.scrollTo({top:0,behavior:'smooth'})" data-page-node-id="JQs0OTGJUWtJF3fduQWkUB">↑</button>
 
 <script>
 const FMT = n => (n==null||isNaN(n)) ? "—" : n;
@@ -4426,11 +4426,11 @@ function updateSummaries(){
     kt.textContent = n ? "¥"+Math.round(total).toLocaleString("en-US") : "¥0";
     const kp=document.getElementById("kpiPl");
     if(kp){
-      kp.textContent = n ? (pl>=0?"+":"")+yuan2(pl) : "¥0.00";
-      kp.style.color = n ? (pl>=0?"var(--up)":"var(--down)") : "";
+      kp.textContent = n ? (pl>0?"+":pl<0?"-":"")+yuan2(pl) : "¥0.00";
+      kp.style.color = n ? (pl>0?"var(--up)":pl<0?"var(--down)":"var(--muted)") : "";
     }
     const kps=document.getElementById("kpiPlSub");
-    if(kps) kps.textContent = n ? ((plpct>=0?"+":"")+plpct.toFixed(1)+"%") : "添加基金后显示盈亏";
+    if(kps) kps.textContent = n ? ((plpct>0?"+":plpct<0?"-":"")+Math.abs(plpct).toFixed(1)+"%") : "添加基金后显示盈亏";
     const ks=document.getElementById("kpiScore");
     if(ks){
       if(window.__score==null){ ks.textContent="—"; ks.style.color=""; }
@@ -4532,13 +4532,13 @@ function renderRail(){
   const pl=total-cost;
   const plpct= cost>0 ? (pl/cost*100) : 0;
   const plCol = n ? (pl>0?"var(--up)":(pl<0?"var(--down)":"var(--muted)")) : "var(--muted)";  // 红涨绿跌
-  const plTxt = n ? ((pl>=0?"+":"-")+"¥"+Math.abs(Math.round(pl)).toLocaleString("en-US")) : "—";
+  const plTxt = n ? ((pl>0?"+":pl<0?"-":"")+"¥"+Math.abs(Math.round(pl)).toLocaleString("en-US")) : "—";
   const sc=window.__score;
   const scCol = sc==null?"var(--muted)":(sc>=75?"var(--good)":sc>=55?"var(--warn)":"var(--bad)");
   box.innerHTML=`
     <div class="rail-row"><span class="rl">总市值</span><span class="rv">${n?"¥"+Math.round(total).toLocaleString("en-US"):"—"}</span></div>
     <div class="rail-row"><span class="rl">累计盈亏</span><span class="rv" style="color:${plCol}">${plTxt}</span></div>
-    <div class="rail-row"><span class="rl">收益率</span><span class="rv" style="color:${plCol}">${n?(plpct>=0?"+":"")+plpct.toFixed(2)+"%":"—"}</span></div>
+    <div class="rail-row"><span class="rl">收益率</span><span class="rv" style="color:${plCol}">${n?(plpct>0?"+":plpct<0?"-":"")+Math.abs(plpct).toFixed(2)+"%":"—"}</span></div>
     <div class="rail-row"><span class="rl">持仓数量</span><span class="rv">${n} 只</span></div>
     <div class="rail-row"><span class="rl">组合健康分</span><span class="rv" style="color:${scCol}">${sc==null?"—":sc}</span></div>
     <div class="rail-row"><span class="rl">沪深300</span><span id="railQuote"><span class="rv muted">—</span></span></div>`;
@@ -4600,6 +4600,6 @@ scheduleRefresh();
   }, true);
 })();
 </script>
-<div id="tipBox" class="tip-box" role="tooltip"></div>
+<div id="tipBox" class="tip-box" role="tooltip" data-page-node-id="cg50PXGBK7bXfRtMWDSisU"></div>
 </body>
 </html>
