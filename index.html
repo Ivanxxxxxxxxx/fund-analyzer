@@ -1226,6 +1226,8 @@ function getDca(){
   if(!s.freq || !FREQ[s.freq]) s.freq="month";
   if(s.day==null || isNaN(s.day)) s.day=10;
   if(s.day<1||s.day>28) s.day=10;
+  if(!s.dcaMode) s.dcaMode="ratio";        // 定投分配方式：按比例 / 智能
+  if(s.smartTarget==null || isNaN(s.smartTarget)) s.smartTarget=15;
   return s;
 }
 function dcaMonthly(){               // 每月投入当量（用于复利公式）
@@ -1237,10 +1239,13 @@ function dcaPeriods(months){         // 持有期内总定投期数
   return Math.max(1, Math.round(months/12*FREQ[s.freq].perYear));
 }
 
-// 定投计划：告诉用户"怎么投、投哪只、投多少"（按持仓市值占比分配）
+// 定投计划：告诉用户"怎么投、投哪只、投多少"
+// 两种分配方式：① 按比例（持仓市值占比，默认）② 智能（按目标年化波动做均值-方差优化，最大化预期年化收益）
 function renderDcaGuide(){
   const box=document.getElementById("dcaGuide"); if(!box) return;
   const s=getDca();
+  if(!s.dcaMode) s.dcaMode="ratio";
+  if(s.smartTarget==null) s.smartTarget=15;
   const amount=Math.max(0,+(s.amount)||0);
   const freq=s.freq;
   const head=`<div class="sec-h" style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
@@ -1269,33 +1274,73 @@ function renderDcaGuide(){
     <button class="btn-ghost btn-sm" onclick="saveDcaAmt()">保存</button>
     <span class="muted" style="font-size:11px">${amount>0?("当前 "+FREQ[freq].label+"合计 "+yuan(amount)):"未设置定投"}</span>
   </div>`;
+  const modes=`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0 8px">
+    <span class="muted" style="font-size:11.5px">分配方式</span>
+    <button class="btn-ghost btn-sm" onclick="setDcaMode('ratio')" style="${s.dcaMode!=='smart'?'background:var(--gold);color:#15130c;border-color:var(--gold)':''}">按比例（市值）</button>
+    <button class="btn-ghost btn-sm" onclick="setDcaMode('smart')" style="${s.dcaMode==='smart'?'background:var(--gold);color:#15130c;border-color:var(--gold)':''}">🎯 智能分配</button>
+  </div>`;
   let body="";
-  if(!amount){
-    body=amtRow+dayHtml+`<div class="note" style="margin-top:8px;font-size:11.5px">填好金额点「保存」，会按当前持仓市值比例自动分配到每只基金（市值大的多投）。</div>`;
-  } else {
-    const total=holdings.reduce((s,h)=>s+(+h.value||0),0)||1;
-    const parts=holdings.map(h=>{ const w=(+h.value||0)/total; return {h,w,amt:Math.round(amount*w)}; });
-    const sum=parts.reduce((s,p)=>s+p.amt,0);
-    if(parts.length){
-      const mi=parts.reduce((a,b,i)=>((+b.h.value||0)>(+parts[a].h.value||0)?i:a),0);
-      parts[mi].amt += amount-sum;   // 四舍五入差额补到市值最大的一只，保证总和精确
+  if(s.dcaMode!=='smart'){
+    // —— 按比例（持仓市值占比）——
+    if(!amount){
+      body=amtRow+dayHtml+`<div class="note" style="margin-top:8px;font-size:11.5px">填好金额点「保存」，会按当前持仓市值比例自动分配到每只基金（市值大的多投）。</div>`;
+    } else {
+      const total=holdings.reduce((a,h)=>a+(+h.value||0),0)||1;
+      const parts=holdings.map(h=>{ const w=(+h.value||0)/total; return {h,w,amt:Math.round(amount*w)}; });
+      const sum=parts.reduce((a,p)=>a+p.amt,0);
+      if(parts.length){
+        const mi=parts.reduce((a,b,i)=>((+b.h.value||0)>(+parts[a].h.value||0)?i:a),0);
+        parts[mi].amt += amount-sum;   // 四舍五入差额补到市值最大的一只，保证总和精确
+      }
+      const rows=parts.map(p=>{
+        const pct=(p.w*100).toFixed(0);
+        return `<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px dashed var(--line)">
+          <div style="min-width:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.h.name||p.h.code}</div>
+          <div class="muted" style="font-size:11px">${p.h.code} · 占组合 ${pct}%</div></div>
+          <div style="text-align:right;white-space:nowrap"><div style="font-size:13.5px;font-weight:700;color:var(--gold)">${yuan(p.amt)}</div>
+          <div class="muted" style="font-size:11px">${FREQ[freq].label}定投</div></div></div>`;
+      }).join("");
+      body=amtRow+dayHtml+
+        `<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:6px 0 8px">
+          <span style="font-size:13px;font-weight:700">${FREQ[freq].label}合计 <b style="color:var(--gold)">${yuan(amount)}</b></span>
+        </div>
+        ${rows}
+        <div class="note" style="margin-top:8px;font-size:11.5px">按当前持仓市值比例分配（市值大的多投），与你的组合配置保持一致；金额或频率随时可在上方修改。如果某只涨太多想少投，可在「持仓明细」调小它的市值，分配会实时更新。</div>`;
     }
-    const rows=parts.map(p=>{
-      const pct=(p.w*100).toFixed(0);
-      return `<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px dashed var(--line)">
+  } else {
+    // —— 智能分配（目标波动约束下的均值-方差最优）——
+    const swMap={}; (s.smartWeights||[]).forEach(x=>swMap[x.code]=x.weight);
+    const codesMatch = s.smartWeights && s.smartWeights.length===holdings.length && holdings.every(h=>swMap[h.code]!=null);
+    const tvRow=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0">
+      <label style="font-size:12.5px">目标年化波动</label>
+      <input id="dcaSmartVol" class="num" type="number" min="5" max="30" step="1" value="${s.smartTarget}" style="width:60px" oninput="saveSmartVol(this.value)" onchange="saveSmartVol(this.value)">%
+      <button class="btn-primary btn-sm" onclick="smartDcaAllocate()">📈 智能计算分配</button>
+      <span class="muted" style="font-size:11px">在目标波动内把预期年化收益最大化（均值-方差）</span>
+    </div>`;
+    if(!amount){
+      body=amtRow+dayHtml+tvRow+`<div class="note" style="margin-top:8px;font-size:11.5px">先填每月定投金额，再点「智能计算分配」：系统会按你设的目标波动，把每月定投金额拆到各基金，使整组定投的预期年化收益最大化。</div>`;
+    } else if(codesMatch && s.smartRet!=null){
+      const parts=holdings.map(h=>{ const w=swMap[h.code]||0; return {h, w, amt:Math.round(amount*w)}; });
+      const sum=parts.reduce((a,p)=>a+p.amt,0);
+      if(parts.length){ const mi=parts.reduce((a,b,i)=>((b.w)>(parts[a].w)?i:a),0); parts[mi].amt+=amount-sum; }
+      const rows=parts.map(p=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px dashed var(--line)">
         <div style="min-width:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.h.name||p.h.code}</div>
-        <div class="muted" style="font-size:11px">${p.h.code} · 占组合 ${pct}%</div></div>
+        <div class="muted" style="font-size:11px">${p.h.code} · 智能权重 ${(p.w*100).toFixed(0)}%</div></div>
         <div style="text-align:right;white-space:nowrap"><div style="font-size:13.5px;font-weight:700;color:var(--gold)">${yuan(p.amt)}</div>
-        <div class="muted" style="font-size:11px">${FREQ[freq].label}定投</div></div></div>`;
-    }).join("");
-    body=amtRow+dayHtml+
-      `<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:6px 0 8px">
-        <span style="font-size:13px;font-weight:700">${FREQ[freq].label}合计 <b style="color:var(--gold)">${yuan(amount)}</b></span>
-      </div>
-      ${rows}
-      <div class="note" style="margin-top:8px;font-size:11.5px">按当前持仓市值比例分配（市值大的多投），与你的组合配置保持一致；金额或频率随时可在上方修改。如果某只涨太多想少投，可在「持仓明细」调小它的市值，分配会实时更新。</div>`;
+        <div class="muted" style="font-size:11px">${FREQ[freq].label}定投</div></div></div>`).join("");
+      const smRet=(s.smartRet*100).toFixed(1), smVol=(s.smartVol*100).toFixed(1);
+      const rmRet=(s.smartRatioRet!=null?(s.smartRatioRet*100).toFixed(1):"—"), rmVol=(s.smartRatioVol!=null?(s.smartRatioVol*100).toFixed(1):"—");
+      const cmp=`<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:6px 0 8px;font-size:12.5px">
+        <span>智能分配：预期年化 <b style="color:var(--up)">+${smRet}%</b> · 波动 <b>${smVol}%</b></span>
+        <span class="muted">（按比例：年化 +${rmRet}% · 波动 ${rmVol}%）</span>
+      </div>`;
+      body=amtRow+dayHtml+tvRow+cmp+rows+
+        `<div class="note" style="margin-top:8px;font-size:11.5px">智能分配基于各基金近 2 年历史，在「目标年化波动 ${s.smartTarget}%」约束下用均值-方差有效前沿求最大预期年化收益（只做多、单只 5%~55%）。目标波动越低越稳但收益上限越低；想更激进就调高目标波动再算一次。</div>`;
+    } else {
+      body=amtRow+dayHtml+tvRow+`<div class="note" style="margin-top:8px;font-size:11.5px">持仓有变动或首次使用，点「智能计算分配」重新按目标波动优化定投分配。</div>`;
+    }
   }
-  box.innerHTML=head+body;
+  box.innerHTML=head+modes+body;
 }
 
 function setDcaFreq(v){
@@ -1326,7 +1371,76 @@ function saveDcaAmt(){
   s.amount=v; s.at=Date.now();
   localStorage.setItem("fp_dca", JSON.stringify(s));
   renderDcaGuide(); renderHoldings(); renderPlanOverview();
-  toast("已设置"+FREQ[s.freq].label+"定投 ¥"+yuan(v)+"，按持仓比例分配到每只基金");
+  const modeTxt = (s.dcaMode==='smart' && s.smartWeights) ? "智能分配已按新金额更新" : "按持仓比例分配到每只基金";
+  toast("已设置"+FREQ[s.freq].label+"定投 ¥"+yuan(v)+"，"+modeTxt);
+}
+
+// 定投分配方式：按比例 / 智能（目标波动约束均值-方差）
+function setDcaMode(m){
+  const s=getDca();
+  s.dcaMode=m;
+  if(s.smartTarget==null) s.smartTarget=15;
+  localStorage.setItem("fp_dca", JSON.stringify(s));
+  renderDcaGuide();
+  if(m==='smart'){ const amt=Math.max(0,+(s.amount)||0); if(amt>0) smartDcaAllocate(); }
+}
+// 智能分配目标波动：键入即存，且金额>0 时即时重算（不依赖 onchange 时机）
+function saveSmartVol(v){
+  const s=getDca();
+  s.smartTarget=Math.max(5,Math.min(30,+(v||15)));
+  localStorage.setItem("fp_dca", JSON.stringify(s));
+  const amt=Math.max(0,+(s.amount)||0);
+  if(amt>0) smartDcaAllocate();
+}
+// 智能定投分配：在用户设定的目标年化波动内，用均值-方差有效前沿把组合预期年化收益最大化，
+// 再按最优权重把每月定投金额拆到各基金；同时算出"按市值比例"方案作对比。
+let __dcaBusy=false, __dcaPending=false;
+async function smartDcaAllocate(){
+  if(__dcaBusy){ __dcaPending=true; return; }
+  __dcaBusy=true;
+  try{
+    const s=getDca();
+    if(s.dcaMode!=='smart'){ renderDcaGuide(); return; }
+    const codes=holdings.map(h=>h.code);
+    if(!codes.length){ toast("还没有持仓"); return; }
+    const tvPct=Math.max(5,Math.min(30, +(s.smartTarget||15)));
+    const targetVol=tvPct/100;
+    toast("正在按目标波动 "+tvPct+"% 计算智能定投分配…");
+    if(!window.__histCache) window.__histCache={};
+    for(const h of holdings){
+      if(!window.__histCache[h.code]){
+        const r=await api("/api/history/"+h.code+"?days=730").catch(()=>({data:[]}));
+        window.__histCache[h.code]=r.data||[];
+      }
+    }
+    const n=codes.length;
+    const navs=holdings.map(h=>(window.__histCache[h.code]||[]).map(d=>d.nav).filter(v=>v>0));
+    const rets=navs.map(dailyReturns);
+    const L=Math.min(...rets.map(r=>r.length));
+    if(L<10){ toast("部分基金历史不足（需≥10个交易日），已退回按比例分配"); s.dcaMode='ratio'; localStorage.setItem("fp_dca",JSON.stringify(s)); renderDcaGuide(); return; }
+    const aligned=rets.map(r=> r.slice(r.length-L));               // 尾部对齐
+    const mu=aligned.map(r=>{ const g=r.reduce((a,x)=>a*(1+x),1); return Math.pow(g,252/L)-1; });   // 年化几何收益
+    const mean=aligned.map(r=> r.reduce((a,x)=>a+x,0)/L);
+    const Sigma=[]; for(let i=0;i<n;i++){ Sigma[i]=[]; for(let j=0;j<n;j++){ let s2=0; for(let k=0;k<L;k++) s2+=(aligned[i][k]-mean[i])*(aligned[j][k]-mean[j]); Sigma[i][j]=s2/(L-1)*252; } }   // 年化协方差
+    const validMu=mu.filter(v=>isFinite(v)); const avgMu=validMu.length?validMu.reduce((a,b)=>a+b,0)/validMu.length:0;
+    const maxVar=Math.max(...Sigma.map((row,i)=>Math.max(row[i],1e-6)));
+    for(let i=0;i<n;i++){ if(!isFinite(mu[i])){ mu[i]=avgMu; for(let j=0;j<n;j++) Sigma[i][j]=Sigma[j][i]=(i===j?maxVar:0); } }
+    const w=solveMaxRetAtVol(mu, Sigma, 0.05, 0.55, targetVol);   // 最优权重（最大预期年化收益 @ 目标波动）
+    const totalVal=holdings.reduce((a,h)=>a+(+h.value||0),0)||1;
+    const wRatio=holdings.map(h=>(+h.value||0)/totalVal);         // 市值比例权重（对比用）
+    const portStats=(ww)=>{ let ret=0; for(let i=0;i<n;i++) ret+=(+ww[i]||0)*mu[i];
+      let sv=0; for(let i=0;i<n;i++){ let t=0; for(let j=0;j<n;j++) t+=Sigma[i][j]*(+ww[j]||0); sv+=(+ww[i]||0)*t; }
+      return {ret:ret, vol:Math.sqrt(Math.max(0,sv))}; };
+    const sm=portStats(w), rm=portStats(wRatio);
+    const sw=holdings.map((h,i)=>({code:h.code, name:h.name, weight:+w[i].toFixed(4)}));
+    s.smartWeights=sw; s.smartRet=sm.ret; s.smartVol=sm.vol; s.smartRatioRet=rm.ret; s.smartRatioVol=rm.vol; s.at=Date.now();
+    localStorage.setItem("fp_dca", JSON.stringify(s));
+    renderDcaGuide();
+    toast("已按目标波动 "+tvPct+"% 计算：智能分配预期年化 "+(sm.ret*100).toFixed(1)+"%、波动 "+(sm.vol*100).toFixed(1)+"%");
+  } finally {
+    __dcaBusy=false;
+    if(__dcaPending){ __dcaPending=false; smartDcaAllocate(); }
+  }
 }
 
 // 组合历史收益统计：按【实际持仓】市值加权计算年化收益/年化波动（一键配置选的 N 只基金）
