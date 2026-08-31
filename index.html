@@ -706,7 +706,7 @@ button:focus-visible,.zd-btn:focus-visible,.zhd-row:focus-visible{outline:2px so
       </div>
       <div class="ov-p-row" style="margin-top:8px">
         <label>我能接受的年化波动</label>
-        <input id="rebalVol" class="num" type="number" min="3" max="40" step="1" value="15" style="width:64px">%
+        <input id="rebalVol" class="num" type="number" min="3" max="40" step="1" value="15" style="width:64px" oninput="saveRebalVol(this.value)" onchange="saveRebalVol(this.value)">%
         <button class="btn-primary btn-sm" onclick="rebalanceAdvise()">🎯 生成调仓建议</button>
         <span class="muted" style="font-size:11px">范围 5%~30%（与计划收益最大化一致）；默认 15%。</span>
       </div>
@@ -1663,6 +1663,11 @@ function saveTargetVol(v){
   sim.targetVol=Math.max(5,Math.min(30,+(v||15)));
   localStorage.setItem("fp_sim",JSON.stringify(sim));
 }
+// 持仓明细「调仓建议」面板的目标波动：同样即时持久化，避免点击时读不到刚输入的值
+function saveRebalVol(v){
+  const n=Math.max(3,Math.min(40,+(v||15)));
+  localStorage.setItem("fp_rebal_vol", String(n));
+}
 // 均值-方差求解：在「组合波动 ≤ 目标波动」且「只做多、权重和=1、单只[lo,hi]」约束下，最大化组合年化收益。
 // 做法：对风险厌恶系数 λ 做二分；每个 λ 用「暴力枚举所有边界激活组合 + 精确矩阵求逆」求该 λ 下 QP 的精确最优解
 // （凸 QP 的全局最优必是某个 KKT 点，对应一组边界激活组合），组合波动随 λ 单调下降；命中目标波动即停。
@@ -1970,8 +1975,13 @@ async function rebalanceAdvise(){
   const box=document.getElementById("rebalBox"); if(!box) return;
   if(holdings.length<2){ toast("调仓建议至少需要 2 只持仓基金"); return; }
   const tvEl=document.getElementById("rebalVol");
-  const tvPct=Math.max(5,Math.min(30, tvEl?(+tvEl.value||15):15));
+  // 先把输入框当前值提交到 localStorage，再读取——不依赖 onchange 触发时机（同计划概览修复），
+  // 否则键入后未先 blur、或面板被重绘时，刚输入的数字会丢失、回退成默认 15。
+  const _rv = tvEl ? tvEl.value : "";
+  const tvRaw = (_rv!==""? _rv : (localStorage.getItem("fp_rebal_vol")||"15"));
+  const tvPct=Math.max(3,Math.min(40, +tvRaw||15));
   if(tvEl) tvEl.value=tvPct;
+  localStorage.setItem("fp_rebal_vol", String(tvPct));
   const targetVol=tvPct/100;
   box.innerHTML='<div class="empty">正在拉取各基金历史净值、计算协方差与最低申购规则…</div>';
   if(!window.__histCache) window.__histCache={};
@@ -4255,6 +4265,8 @@ function renderOverview(){
 
 // 初始化
 renderHoldings();
+// 恢复「调仓建议」面板的目标波动（持久化，刷新不丢）
+(function(){ const _rv=localStorage.getItem("fp_rebal_vol"); const e=document.getElementById("rebalVol"); if(_rv&&e) e.value=Math.max(3,Math.min(40,+(+_rv||15))); })();
 initFolds();
 updateSummaries();
 const toTop=document.getElementById("toTop");
