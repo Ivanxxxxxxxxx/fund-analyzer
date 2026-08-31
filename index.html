@@ -1018,6 +1018,8 @@ const signPct = (n,d=2) => (n==null||isNaN(n)) ? "—" : (n>=0?"+":"")+(n*100).t
 // 已是百分比数值(如 -1.46 表示 -1.46%)的字段用此函数，避免被 signPct 再乘 100
 const signPctPct = (n,d=2) => (n==null||isNaN(n)) ? "—" : (n>=0?"+":"")+n.toFixed(d)+"%";
 const yuan = n => "¥"+(Math.round(n||0)).toLocaleString("en-US");
+// 累计盈亏等需精确到小数点后两位时使用：保留 2 位小数，负数符号前置（如 -¥1,234.56）
+const yuan2 = n => { const v=n||0; const s=v<0?"-":""; return s+"¥"+Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); };
 const cls = n => n>0?"up":(n<0?"down":"muted");
 
 let holdings = loadHoldings();
@@ -2097,7 +2099,7 @@ function renderHoldings(){
       <td class="num" data-label="持仓市值(¥)"><input class="num" type="number" min="0" step="100" value="${h.value}" inputmode="decimal" onchange="setVal(${i},this.value)"></td>
       <td class="num" data-label="占比">${pct(w)}</td>
       <td class="num" data-label="成本(¥)"><input class="num" type="number" min="0" step="100" value="${h.cost}" inputmode="decimal" onchange="setCost(${i},this.value)"></td>
-      <td class="num ${cls(pl)}" data-label="累计盈亏(¥)">${pl>=0?"+":""}${yuan(pl)}</td>
+      <td class="num ${cls(pl)}" data-label="累计盈亏(¥)">${pl>=0?"+":""}${yuan2(pl)}</td>
       <td class="num ${cls(plpct)}" data-label="收益率">${signPct(plpct)}</td>
       <td class="num del" data-label="" onclick="delFund(${i})">✕</td>
     </tr>`;
@@ -2108,7 +2110,7 @@ function renderHoldings(){
     <th class="num">累计盈亏(¥)</th><th class="num">收益率</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     <div class="note">合计市值 ${yuan(total)} · 总投入 ${yuan(totalCost)} ·
-      <b class="${cls(totalPL)}">累计盈亏 ${totalPL>=0?"+":""}${yuan(totalPL)}（${signPct(totalPLpct)}）</b>
+      <b class="${cls(totalPL)}">累计盈亏 ${totalPL>=0?"+":""}${yuan2(totalPL)}（${signPct(totalPLpct)}）</b>
       ${dcaAmt>0?` · ${FREQ[dca.freq].label}定投 <b style="color:var(--gold)">${yuan(dcaAmt)}</b>`:""}
       · 修改市值/成本后重新点「开始分析」即可更新占比与组合指标</div>`;
   updateSummaries();
@@ -4194,7 +4196,7 @@ function updateSummaries(){
     kt.textContent = n ? "¥"+Math.round(total).toLocaleString("en-US") : "¥0";
     const kp=document.getElementById("kpiPl");
     if(kp){
-      kp.textContent = n ? (pl>=0?"+":"")+"¥"+Math.round(pl).toLocaleString("en-US") : "¥0";
+      kp.textContent = n ? (pl>=0?"+":"")+yuan2(pl) : "¥0.00";
       kp.style.color = n ? (pl>=0?"var(--up)":"var(--down)") : "";
     }
     const kps=document.getElementById("kpiPlSub");
