@@ -2961,7 +2961,7 @@ async function loadBacktest(mode){
       // 后端 /api/recommend-backtest 返回的 portRet/benchRet/univRet 已是【百分比口径】
       // （如 13.7 即 +13.7%、-2.5 即 -2.5%），此处直接格式化即可，严禁再次 ×100——
       // 旧代码多乘一次 100，导致组合收益显示 1370%、沪深300 显示 -250% 等离谱数字。
-      const pv=v=>v==null?"—":((+v>=0?"+":"")+(+v).toFixed(1)+"%";
+      const pv=v=>v==null?"—":(((+v>=0?"+":"")+(+v).toFixed(1))+"%");
       const chips=(r.picks||[]).map(p=>{
         const nm=p.code?(p.name||p.code):((p.asset||"")+"·"+(p.name||""));
         if(p.fwdRet==null) return `<div class="bt-f"><span class="bt-fn">${nm}</span><span class="muted" style="white-space:nowrap">${p.note||"无数据"}</span></div>`;
