@@ -1567,7 +1567,7 @@ async function renderOverviewTo(box, canvasId, opt){
   // 理想（无波动复利），按月
   const idealY=[];
   for(let mm=0;mm<=months;mm++){
-    idealY.push([mm, Math.round(P*Math.pow(1+rm,mm) + (A>0?A*((Math.pow(1+rm,mm)-1)/Math.max(rm,1e-9)):0))]);
+    idealY.push([mm, Math.round(P*Math.pow(1+rm,mm) + (A>0?A*((Math.pow(1+rm,mm)-1)/(Math.abs(rm)<1e-9?1e-9:rm)):0))]);
   }
   // 解析近似（对数正态几何分位）：T 个月后终值分位 = P·e^(μT+z·σ√T) + Σ 定投 e^(μk+z·σ√k)
   // 波动项 z·σ√t（随平方根增长，非线性）——线性累加会导致乐观指数爆炸，这是对数正态的正确闭式
@@ -3954,7 +3954,7 @@ function calcCompound(){
   const vol=Math.max(0,+document.getElementById("cpv").value||0)/100;
   const mr=r/12, m=n*12;
   const fvMain=P*Math.pow(1+mr,m);
-  const fvInv=A>0?A*((Math.pow(1+mr,m)-1)/Math.max(mr,1e-9)):0;
+  const fvInv=A>0?A*((Math.pow(1+mr,m)-1)/(Math.abs(mr)<1e-9?1e-9:mr)):0;
   const fv=fvMain+fvInv;
   const totalIn=P+A*m, gain=fv-totalIn;
   const gainPct=totalIn>0?gain/totalIn*100:0;
@@ -3998,7 +3998,7 @@ function calcCompound(){
   const pts=[], pts5=[], pts95=[], yrs=[];
   for(let y=0;y<=n;y++){
     const mm=y*12;
-    const f=P*Math.pow(1+mr,mm)+(A>0?A*((Math.pow(1+mr,mm)-1)/Math.max(mr,1e-9)):0);
+    const f=P*Math.pow(1+mr,mm)+(A>0?A*((Math.pow(1+mr,mm)-1)/(Math.abs(mr)<1e-9?1e-9:mr)):0);
     pts.push(+f.toFixed(0));
     const yy=Math.max(1,y);
     const yy5=yrPts[yy-1].p5, yy95=yrPts[yy-1].p95;
