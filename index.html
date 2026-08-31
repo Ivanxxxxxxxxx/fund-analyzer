@@ -2082,10 +2082,13 @@ function planDiag(annRet,annVol,maxDD,corrAvg,score,rc){
   return parts.join('；')+'。';
 }
 function savePlanSim(){
+  const sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
   const P=Math.max(0,+document.getElementById("simP").value||0);
   const d=Math.max(0,+document.getElementById("simD").value||0);
   const m=Math.max(1,Math.min(360,+document.getElementById("simY").value||60));
-  localStorage.setItem("fp_sim", JSON.stringify({principal:P, dca:d, months:m, at:Date.now()}));
+  // 关键：合并写入，保留已有的 targetVol / 其他字段，避免改本金时把目标波动清掉回退成 15%
+  sim.principal=P; sim.dca=d; sim.months=m; sim.at=Date.now();
+  localStorage.setItem("fp_sim", JSON.stringify(sim));
   renderPlanSim();
 }
 
@@ -3139,7 +3142,10 @@ async function quickSetup(nIn, principalIn, dcaIn, monthsIn, freqIn){
   const planFunds=picked.map((f,i)=>({code:f.code, name:f.name, weight:+(amts[i]/principal).toFixed(4)}));
   localStorage.setItem("fp_sim_funds", JSON.stringify(planFunds));
   if(dca>0) localStorage.setItem("fp_dca", JSON.stringify({amount:dca, freq, day:10, at:Date.now()}));
-  localStorage.setItem("fp_sim", JSON.stringify({principal:principal, months:months, dca:dca, at:Date.now()}));
+  // 合并写入：保留已有的 targetVol，避免「一键配置」把用户已设的目标波动清掉
+  const _sim=JSON.parse(localStorage.getItem("fp_sim")||"{}");
+  _sim.principal=principal; _sim.months=months; _sim.dca=dca; _sim.at=Date.now();
+  localStorage.setItem("fp_sim", JSON.stringify(_sim));
   if(window.renderPlanSim) renderPlanSim();   // 计划概览联动（计划基金+金额）
   // 组合平均 1 年盈利概率（基于推荐时的 prob12，均值回归口径）
   const probs=picked.map(f=>f.prob12).filter(p=>p!=null&&p>0);
