@@ -1337,7 +1337,9 @@ function renderDcaGuide(){
       body=amtRow+dayHtml+tvRow+cmp+rows+
         `<div class="note" style="margin-top:8px;font-size:11.5px">智能分配基于各基金近 2 年历史，在「目标年化波动 ${s.smartTarget}%」约束下用均值-方差有效前沿求最大预期年化收益（只做多、单只 5%~55%）。目标波动越低越稳但收益上限越低；想更激进就调高目标波动再算一次。</div>`;
     } else {
-      body=amtRow+dayHtml+tvRow+`<div class="note" style="margin-top:8px;font-size:11.5px">持仓有变动或首次使用，点「智能计算分配」重新按目标波动优化定投分配。</div>`;
+      body=amtRow+dayHtml+tvRow+`<div class="note" style="margin-top:8px;font-size:11.5px">持仓有变动或首次使用，正在按目标波动重新优化定投分配…</div>`;
+      // 持仓变动 / 首次使用：金额已设则自动重算（防抖由 __dcaBusy 保证，不会重复拉取）
+      if(!__dcaBusy) smartDcaAllocate();
     }
   }
   box.innerHTML=head+modes+body;
