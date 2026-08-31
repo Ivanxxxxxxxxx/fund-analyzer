@@ -4426,7 +4426,7 @@ function updateSummaries(){
     kt.textContent = n ? "¥"+Math.round(total).toLocaleString("en-US") : "¥0";
     const kp=document.getElementById("kpiPl");
     if(kp){
-      kp.textContent = n ? (pl>0?"+":pl<0?"-":"")+yuan2(pl) : "¥0.00";
+      kp.textContent = n ? (pl>0?"+":"")+yuan2(pl) : "¥0.00";
       kp.style.color = n ? (pl>0?"var(--up)":pl<0?"var(--down)":"var(--muted)") : "";
     }
     const kps=document.getElementById("kpiPlSub");
