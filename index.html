@@ -26,7 +26,7 @@
   --radius:14px;
   --shadow:0 16px 44px rgba(0,0,0,.5);
   --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,Consolas,"Courier New",monospace;
-  --tb-h:0px;
+  --tb-h:56px;   /* 顶部常驻栏高度（0=无顶栏） */
   --nav-w:76px;
 }
 *{box-sizing:border-box}
@@ -47,6 +47,28 @@ body{
 .live .dot{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 rgba(34,197,139,.6);animation:pulse 2s infinite}
 .live.offline .dot{background:var(--muted);box-shadow:none;animation:none}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,139,.5)}70%{box-shadow:0 0 0 7px rgba(34,197,139,0)}100%{box-shadow:0 0 0 0 rgba(34,197,139,0)}}
+/* ---------- 顶部常驻栏 ---------- */
+.topbar{
+  position:sticky;top:0;z-index:60;height:var(--tb-h);
+  display:flex;align-items:center;gap:14px;padding:0 20px;
+  border-bottom:1px solid var(--line);
+  background:rgba(11,11,13,.80);backdrop-filter:blur(14px);
+}
+.tb-brand{display:flex;align-items:center;gap:9px;font-weight:750;font-size:14.5px;letter-spacing:.3px;white-space:nowrap}
+.tb-brand .tb-logo{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font-size:15px;
+  background:linear-gradient(135deg,rgba(232,179,57,.22),rgba(232,179,57,.07));border:1px solid rgba(232,179,57,.30)}
+.tb-view{font-size:12px;color:var(--muted);padding-left:13px;border-left:1px solid var(--line);white-space:nowrap}
+.tb-spacer{flex:1}
+.tb-quote{display:flex;align-items:baseline;gap:7px;font-size:12px;color:var(--muted);white-space:nowrap}
+.tb-quote .tq-name{color:var(--text);font-weight:600}
+.tb-quote .tq-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text)}
+.tb-quote .tq-chg{font-family:var(--mono);font-size:12px;font-weight:700}
+@media(max-width:640px){
+  .tb-brand span.tb-name{display:none}
+  .topbar{padding:0 12px;gap:10px}
+  .tb-quote{font-size:11px}
+  .tb-view{padding-left:9px;font-size:11px}
+}
 /* ---------- 主体骨架 ---------- */
 .shell{display:flex;min-height:calc(100vh - var(--tb-h))}
 /* 左侧导航 */
@@ -54,7 +76,7 @@ body{
   width:var(--nav-w);flex:none;padding:14px 10px;display:flex;flex-direction:column;gap:6px;
   border-right:1px solid var(--line);background:rgba(13,13,16,.5);
   /* 侧边栏常驻：页面下滑时工具栏固定在左侧，不用滑回顶部再切换 */
-  position:sticky;top:0;align-self:flex-start;height:calc(100vh - var(--tb-h));
+  position:sticky;top:var(--tb-h);align-self:flex-start;height:calc(100vh - var(--tb-h));
   overflow-y:auto;z-index:30;backdrop-filter:blur(8px);
 }
 .nav-item{
@@ -68,6 +90,24 @@ body{
 /* 舞台（视图区） */
 .stage{flex:1;min-width:0;padding:22px 26px 48px}
 .stage-inner{max-width:1360px;margin:0 auto}
+/* ---------- 超宽屏右栏：≥1500px 才出现，把右侧留白变成常驻速览 ---------- */
+.rail{display:none}
+@media(min-width:1500px){
+  .rail{display:block;width:300px;flex:none;padding:22px 22px 40px 0;
+    position:sticky;top:var(--tb-h);align-self:flex-start;height:calc(100vh - var(--tb-h));overflow-y:auto}
+}
+.rail::-webkit-scrollbar{width:6px}
+.rail::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
+.rail-card{padding:16px}
+.rail-sec{font-size:11.5px;font-weight:750;color:var(--muted);letter-spacing:.5px;
+  display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.rail-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  padding:8px 0;border-bottom:1px solid var(--line)}
+.rail-row:last-of-type{border-bottom:none}
+.rail-row .rl{font-size:12px;color:var(--muted);white-space:nowrap}
+.rail-row .rv{font-family:var(--mono);font-size:13.5px;font-weight:700;white-space:nowrap}
+.rail-acts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.rail-acts button{width:100%;padding:9px 12px;font-size:12.5px}
 .view{display:none;animation:viewIn .3s cubic-bezier(.22,1,.36,1)}
 .view.active{display:block}
 @keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -644,6 +684,13 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
 <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
 </defs></svg>
 
+<header class="topbar">
+  <div class="tb-brand"><span class="tb-logo">📊</span><span class="tb-name">基金组合健康度分析</span></div>
+  <span class="tb-view" id="tbView">组合工作台</span>
+  <span class="tb-spacer"></span>
+  <span class="tb-quote" id="tbQuote"><span class="tq-name">沪深300</span><span class="tq-val muted">加载中…</span></span>
+</header>
+
 <div class="shell">
   <aside class="nav">
     <div class="nav-logo" title="基金工作台">📊</div>
@@ -945,6 +992,16 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
   </section>
 
   </div></main>
+<aside class="rail">
+  <div class="card rail-card">
+    <div class="rail-sec">📊 持仓速览</div>
+    <div id="railBody"></div>
+    <div class="rail-acts">
+      <button class="btn-primary" onclick="runAnalysis()">开始分析</button>
+      <button class="btn-ghost btn-sm" onclick="refreshNav()">刷新行情</button>
+    </div>
+  </div>
+</aside>
 </div>
 <nav class="tabbar">
   <button class="tb-item on" data-view="portfolio" onclick="switchView('portfolio')"><span class="ni-ic"><svg class="i"><use href="#i-layers"/></svg></span>组合</button>
@@ -3910,6 +3967,9 @@ function switchView(key){
   try{ localStorage.setItem("fp_view", key); }catch(e){}
   window.scrollTo({top:0, behavior:"auto"});
   if(key==="calc") loadZhMarket(false);  // 进入工具视图时自动加载珠海实时行情
+  // 顶部常驻栏：同步当前视图名；超宽屏右栏：同步持仓速览
+  try{ if(window.renderTopbar) renderTopbar(key); }catch(e){}
+  try{ if(window.renderRail) renderRail(); }catch(e){}
   // 修复：在隐藏视图里创建的 canvas 图表尺寸为 0，切回后需重新布局
   setTimeout(()=>{
     try{ if(typeof donutChart!=="undefined" && donutChart) donutChart.resize(); }catch(e){}
@@ -4383,6 +4443,7 @@ function updateSummaries(){
     const kc=document.getElementById("kpiCount");
     if(kc) kc.textContent = String(n);
   }
+  try{ if(window.renderRail) renderRail(); }catch(e){}   // 同步超宽屏右栏速览
 }
 
 function renderOverview(){
@@ -4418,12 +4479,80 @@ function renderOverview(){
     </div>`;
 }
 
+// ---------- 顶部常驻栏 / 超宽屏右栏 ----------
+const VIEW_NAME={portfolio:"组合工作台", tools:"智能决策", report:"深度分析报告", calc:"投资工具箱"};
+function renderTopbar(key){
+  const el=document.getElementById("tbView");
+  if(!el) return;
+  let k=key;
+  if(!k){ try{ k=localStorage.getItem("fp_view"); }catch(e){} }
+  el.textContent=VIEW_NAME[k]||"组合工作台";
+}
+// 沪深300 实时迷你行情：顶栏与右栏共用同一份数据
+window.__benchQuote=null;
+async function loadBenchQuote(){
+  try{
+    const b=await api("/api/index/000300", 20000).catch(()=>null);
+    const vals=(b&&b.values||[]).filter(v=>v!=null&&isFinite(v));
+    if(!vals.length) throw new Error("empty");
+    const last=vals[vals.length-1], prev=vals.length>1?vals[vals.length-2]:last;
+    window.__benchQuote={name:b.name||"沪深300", last:last, chg: prev?(last/prev-1)*100:0};
+  }catch(e){ window.__benchQuote=null; }
+  renderBenchQuote();
+}
+function renderBenchQuote(){
+  const bq=window.__benchQuote;
+  const q=document.getElementById("tbQuote");
+  if(q){
+    if(!bq){ q.innerHTML='<span class="tq-name">沪深300</span><span class="tq-val muted">—</span>'; }
+    else{
+      const c=bq.chg;
+      const col=c>0?"var(--up)":(c<0?"var(--down)":"var(--muted)");   // 红涨绿跌（A股习惯）
+      q.innerHTML=`<span class="tq-name">${bq.name}</span>`
+        +`<span class="tq-val">${bq.last.toFixed(2)}</span>&nbsp;`
+        +`<span class="tq-chg" style="color:${col}">${c>=0?"+":""}${c.toFixed(2)}%</span>`;
+    }
+  }
+  const rq=document.getElementById("railQuote");
+  if(rq){
+    if(!bq){ rq.innerHTML='<span class="rv muted">—</span>'; }
+    else{
+      const c=bq.chg;
+      const col=c>0?"var(--up)":(c<0?"var(--down)":"var(--muted)");
+      rq.innerHTML=`<span class="rv" style="color:${col}">${c>=0?"+":""}${c.toFixed(2)}%</span>`;
+    }
+  }
+}
+function renderRail(){
+  const box=document.getElementById("railBody");
+  if(!box) return;
+  const n=holdings.length;
+  const total=holdings.reduce((s,h)=>s+(+h.value||0),0);
+  const cost=holdings.reduce((s,h)=>s+(+h.cost||0),0);
+  const pl=total-cost;
+  const plpct= cost>0 ? (pl/cost*100) : 0;
+  const plCol = n ? (pl>0?"var(--up)":(pl<0?"var(--down)":"var(--muted)")) : "var(--muted)";  // 红涨绿跌
+  const plTxt = n ? ((pl>=0?"+":"-")+"¥"+Math.abs(Math.round(pl)).toLocaleString("en-US")) : "—";
+  const sc=window.__score;
+  const scCol = sc==null?"var(--muted)":(sc>=75?"var(--good)":sc>=55?"var(--warn)":"var(--bad)");
+  box.innerHTML=`
+    <div class="rail-row"><span class="rl">总市值</span><span class="rv">${n?"¥"+Math.round(total).toLocaleString("en-US"):"—"}</span></div>
+    <div class="rail-row"><span class="rl">累计盈亏</span><span class="rv" style="color:${plCol}">${plTxt}</span></div>
+    <div class="rail-row"><span class="rl">收益率</span><span class="rv" style="color:${plCol}">${n?(plpct>=0?"+":"")+plpct.toFixed(2)+"%":"—"}</span></div>
+    <div class="rail-row"><span class="rl">持仓数量</span><span class="rv">${n} 只</span></div>
+    <div class="rail-row"><span class="rl">组合健康分</span><span class="rv" style="color:${scCol}">${sc==null?"—":sc}</span></div>
+    <div class="rail-row"><span class="rl">沪深300</span><span id="railQuote"><span class="rv muted">—</span></span></div>`;
+  renderBenchQuote();
+}
+
 // 初始化
 renderHoldings();
 // 恢复「调仓建议」面板的目标波动（持久化，刷新不丢）
 (function(){ const _rv=localStorage.getItem("fp_rebal_vol"); const e=document.getElementById("rebalVol"); if(_rv&&e) e.value=Math.max(3,Math.min(40,+(+_rv||15))); })();
 initFolds();
 updateSummaries();
+renderTopbar();            // 顶栏当前视图名
+loadBenchQuote();          // 顶栏 / 右栏的沪深300 实时迷你行情
 const toTop=document.getElementById("toTop");
 window.addEventListener("scroll", ()=>{ if(toTop) toTop.classList.toggle("show", window.scrollY>600); }, {passive:true});
 // 方案A：按基金交易规则调度自动刷新（北京时间，无夏令时）
