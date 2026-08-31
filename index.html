@@ -111,8 +111,8 @@ body{
 .view{display:none;animation:viewIn .3s cubic-bezier(.22,1,.36,1)}
 .view.active{display:block}
 @keyframes viewIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.view-h{display:flex;align-items:baseline;gap:10px;margin:2px 2px 18px}
-.view-h .vt{font-size:21px;font-weight:750;letter-spacing:.4px}
+.view-h{display:flex;align-items:baseline;gap:10px;margin:2px 2px 18px;flex-wrap:wrap}
+.view-h .vt{font-size:21px;font-weight:750;letter-spacing:.4px;word-break:keep-all}
 .view-h .vs{font-size:12.5px;color:var(--muted)}
 .view-h .vline{flex:1;height:1px;background:linear-gradient(90deg,var(--line2),transparent);margin-left:6px}
 /* 移动端底部导航 */
@@ -203,6 +203,20 @@ table.holdings .num{text-align:right}
 table.holdings td .code{font-family:var(--mono);font-size:12px;color:var(--gold)}
 table.holdings td.del{cursor:pointer;color:var(--muted);text-align:center;width:36px}
 table.holdings td.del:hover{color:var(--bad)}
+/* 手机端持仓卡片（替代横向滚动表格，信息完整可见） */
+.hc-mobile{display:none}
+.hc-card{background:linear-gradient(180deg, rgba(24,24,30,.9), rgba(16,16,20,.92));border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin-bottom:10px}
+.hc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:11px}
+.hc-code{font-family:var(--mono);font-size:13px;color:var(--gold)}
+.hc-name{font-size:13px;font-weight:600;color:var(--text);line-height:1.45;word-break:keep-all}
+.hc-del{flex:none;width:30px;height:30px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.hc-del:hover{color:var(--bad);border-color:rgba(244,83,107,.4)}
+.hc-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 10px}
+.hc-cell{display:flex;flex-direction:column;gap:3px}
+.hc-l{font-size:11px;color:var(--muted)}
+.hc-v{font-size:13px;font-weight:700;font-family:var(--mono);color:var(--text)}
+.hc-v .muted{font-size:10.5px;font-weight:500;color:var(--muted);display:block;margin-top:1px}
+.hc-v input{width:100%;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-family:var(--mono);text-align:right}
 table.plan{width:100%;border-collapse:collapse;font-size:12.5px}
 table.plan th,table.plan td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left}
 table.plan th{color:var(--muted);font-weight:600}
@@ -414,9 +428,10 @@ table.plan th{color:var(--muted);font-weight:600}
   box-shadow:0 14px 36px rgba(0,0,0,.55);max-width:min(92vw,520px);text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .to-top{position:fixed;right:20px;bottom:22px;z-index:50;width:42px;height:42px;border-radius:12px;
-  background:rgba(22,22,28,.9);border:1px solid var(--line2);color:var(--gold);font-size:18px;
-  display:grid;place-items:center;cursor:pointer;opacity:0;pointer-events:none;transition:.2s;backdrop-filter:blur(10px)}
+  background:rgba(22,22,28,.9);border:1px solid var(--line2);color:var(--gold);
+  display:grid;place-items:center;cursor:pointer;opacity:0;pointer-events:none;transition:.2s;backdrop-filter:blur(10px);line-height:1}
 .to-top.show{opacity:1;pointer-events:auto}
+.to-top svg{width:22px;height:22px;display:block}
 /* 确认弹窗 */
 .confirm-modal{max-width:min(420px,94vw)}
 .confirm-modal .ct{font-size:16px;font-weight:700;margin:0 0 8px;color:var(--text)}
@@ -621,6 +636,14 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
   .kpi-row{grid-template-columns:1fr 1fr}
   .fold-inner{padding:13px 11px}
   .card{padding:15px 13px}
+  .hc-desktop{display:none !important}
+  .hc-mobile{display:block}
+  /* 工具箱表单手机端单列，避免标签与输入框挤作一团 */
+  .t-row{flex-direction:column;align-items:stretch;gap:6px;margin:10px 0}
+  .t-row label{flex:none;font-size:12px}
+  .t-row .t-in{width:100%;text-align:left;font-size:14px;padding:9px 11px}
+  .view-h .vt{font-size:18px;word-break:keep-all}
+  .trend-wrap{height:230px}
 }
 /* 工作台左栏场景（兼容旧结构不适用，保留占位） */
 
@@ -1092,7 +1115,7 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
   </div>
 </div>
 
-<button class="to-top" id="toTop" aria-label="回到顶部" onclick="window.scrollTo({top:0,behavior:'smooth'})" data-page-node-id="JQs0OTGJUWtJF3fduQWkUB">↑</button>
+<button class="to-top" id="toTop" aria-label="回到顶部" onclick="window.scrollTo({top:0,behavior:'smooth'})" data-page-node-id="JQs0OTGJUWtJF3fduQWkUB"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;display:block"><path d="M18 15l-6-6-6 6"/></svg></button>
 
 <script>
 const FMT = n => (n==null||isNaN(n)) ? "—" : n;
@@ -2012,7 +2035,7 @@ async function renderPlanSim(){
   const P=Math.max(0,+sim.principal||0);
   const months=Math.max(1,Math.min(360,+sim.months||60));
   const dca=Math.max(0,+sim.dca||0);
-  const freq=(JSON.parse(localStorage.getItem("fp_dca")||"{}")).freq||"month";
+  const freq=(getDca()||{}).freq||"month";
   const tv=Math.max(5,Math.min(30,+(sim.targetVol||15)));
   const pf=getPlanFunds();
   // 投资计划永远使用【计划自身】的仓位权重（f.weight），不借用实际持仓占比。
@@ -2307,7 +2330,7 @@ function renderHoldings(){
   const totalCost=holdings.reduce((s,h)=>s+(+h.cost||0),0);
   const totalPL=total-totalCost;
   const totalPLpct=totalCost>0?totalPL/totalCost:null;
-  let rows="";
+  let rows="", cards="";
   holdings.forEach((h,i)=>{
     const w=(+h.value||0)/total;
     const pl=(+h.value||0)-(+h.cost||0);
@@ -2325,15 +2348,36 @@ function renderHoldings(){
       <td class="num ${cls(plpct)}" data-label="收益率">${signPct(plpct)}</td>
       <td class="num del" data-label="" onclick="delFund(${i})">✕</td>
     </tr>`;
+    cards+=`<div class="hc-card">
+      <div class="hc-top">
+        <div>
+          <div class="hc-code">${h.code}</div>
+          <div class="hc-name">${h.name||"—"}</div>
+        </div>
+        <button class="hc-del" onclick="delFund(${i})" aria-label="删除">✕</button>
+      </div>
+      <div class="hc-grid">
+        <div class="hc-cell"><span class="hc-l">类型</span><span class="hc-v"><span class="tag ${tcls}">${h.type||"?"}</span></span></div>
+        <div class="hc-cell"><span class="hc-l">最新净值</span><span class="hc-v">${h.nav!=null?h.nav.toFixed(4):"—"}<span class="muted">${h.navDate||""}</span></span></div>
+        <div class="hc-cell"><span class="hc-l">日涨跌</span><span class="hc-v ${cls(h.changePct)}">${signPctPct(h.changePct)}</span></div>
+        <div class="hc-cell"><span class="hc-l">持仓市值</span><span class="hc-v"><input class="num" type="number" min="0" step="100" value="${h.value}" inputmode="decimal" onchange="setVal(${i},this.value)"></span></div>
+        <div class="hc-cell"><span class="hc-l">占比</span><span class="hc-v">${pct(w)}</span></div>
+        <div class="hc-cell"><span class="hc-l">成本</span><span class="hc-v"><input class="num" type="number" min="0" step="100" value="${h.cost}" inputmode="decimal" onchange="setCost(${i},this.value)"></span></div>
+        <div class="hc-cell"><span class="hc-l">累计盈亏</span><span class="hc-v ${cls(pl)}">${pl>=0?"+":""}${yuan2(pl)}</span></div>
+        <div class="hc-cell"><span class="hc-l">收益率</span><span class="hc-v ${cls(plpct)}">${signPct(plpct)}</span></div>
+      </div>
+    </div>`;
   });
-  box.innerHTML=`<div class="table-scroll"><table>
+  const dcaLabel=(FREQ[dca.freq]||{}).label||"每月";
+  box.innerHTML=`<div class="table-scroll hc-desktop"><table>
     <thead><tr><th>基金</th><th>类型</th><th class="num">最新净值</th><th class="num">日涨跌</th>
     <th class="num">持仓市值(¥)</th><th class="num">占比</th><th class="num">成本(¥)</th>
     <th class="num">累计盈亏(¥)</th><th class="num">收益率</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>
+    <div class="hc-mobile">${cards}</div>
     <div class="note">合计市值 ${yuan(total)} · 总投入 ${yuan(totalCost)} ·
       <b class="${cls(totalPL)}">累计盈亏 ${totalPL>=0?"+":""}${yuan2(totalPL)}（${signPct(totalPLpct)}）</b>
-      ${dcaAmt>0?` · ${FREQ[dca.freq].label}定投 <b style="color:var(--gold)">${yuan(dcaAmt)}</b>`:""}
+      ${dcaAmt>0?` · ${dcaLabel}定投 <b style="color:var(--gold)">${yuan(dcaAmt)}</b>`:""}
       · 修改市值/成本后重新点「开始分析」即可更新占比与组合指标</div>`;
   updateSummaries();
 }
