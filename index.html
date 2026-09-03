@@ -684,10 +684,30 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
 .pk-block{background:rgba(15,15,18,.6);border:1px solid var(--line);border-radius:12px;padding:14px}
 .pk-block h4{margin:0 0 12px;font-size:13px;font-weight:650;color:var(--gold);display:flex;align-items:center;gap:8px}
 .pk-cards{display:flex;flex-wrap:wrap;gap:10px}
-.pk-pick{display:flex;gap:8px;align-items:center}
-.pk-sel{display:flex;gap:6px;align-items:center}
-.pk-sel select{appearance:none;-webkit-appearance:none;background:var(--bg2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 24px 7px 9px;font-size:13px;cursor:pointer;color-scheme:dark;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e8e8ec' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;background-size:10px auto;min-width:60px}
-.pk-sel select:focus{border-color:var(--gold);outline:none}
+.pk-cards{display:flex;flex-wrap:wrap;gap:10px}
+.pk-slot{width:54px;height:74px;border-radius:10px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));color:var(--muted);font-size:22px;font-weight:800;font-family:var(--mono);cursor:pointer;display:grid;place-items:center;transition:.15s;letter-spacing:1px}
+.pk-slot:hover{border-color:var(--gold);transform:translateY(-1px)}
+.pk-slot.pk-empty{color:var(--muted);font-size:26px;font-weight:400}
+.pk-slot.pk-red{color:#f5607b}
+.pk-slot.pk-blk{color:var(--text)}
+.pk-tip{font-size:11.5px;color:var(--muted);line-height:1.6;margin-top:12px;padding:9px 12px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px}
+/* 选牌弹层 */
+.pk-picker{position:fixed;inset:0;z-index:90;background:rgba(5,5,7,.66);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:18px}
+.pk-picker-box{width:100%;max-width:360px;background:linear-gradient(180deg,rgba(26,26,32,.98),rgba(18,18,22,.98));border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+.pk-ph{font-size:13px;color:var(--muted);margin-bottom:4px}
+.pk-hint{font-size:12px;color:var(--gold);margin-bottom:12px}
+.pk-suits{display:flex;gap:10px;justify-content:center;margin-bottom:14px}
+.pk-suit{width:60px;height:60px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:30px;font-weight:800;cursor:pointer;transition:.15s}
+.pk-suit.pk-red{color:#f5607b}.pk-suit.pk-blk{color:var(--text)}
+.pk-suit.on{border-color:var(--gold);background:rgba(232,179,57,.16);box-shadow:0 0 0 2px rgba(232,179,57,.3)}
+.pk-suit:hover{transform:translateY(-1px)}
+.pk-ranks{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:14px}
+.pk-rank{padding:11px 0;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font-size:14px;font-weight:700;font-family:var(--mono);cursor:pointer;transition:.13s}
+.pk-rank.on{border-color:var(--gold);background:rgba(232,179,57,.16)}
+.pk-rank:hover:not([disabled]){border-color:var(--gold)}
+.pk-rank[disabled]{opacity:.3;cursor:not-allowed}
+.pk-picker-acts{display:flex;gap:10px;justify-content:flex-end}
+.pk-picker-acts button{flex:0 0 auto}
 .pk-bar{display:flex;height:22px;border-radius:11px;overflow:hidden;background:var(--line2);margin:10px 0 8px;font-size:10px;font-weight:700}
 .pk-bar span{display:flex;align-items:center;justify-content:center;min-width:0;color:#0a0a0d;white-space:nowrap;transition:width .3s ease}
 .pk-bar .w{background:#3fe0a3}.pk-bar .t{background:#f6bd4a}.pk-bar .l{background:#f5607b}
@@ -704,6 +724,19 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
 .pk-advice.raise .act{color:#3fe0a3}.pk-advice.call .act{color:#a78bfa}.pk-advice.fold .act{color:#f5607b}
 .pk-note{font-size:11.5px;color:var(--muted);line-height:1.7}
 .pk-advice .pk-note{margin-top:6px;color:var(--muted)}
+/* 下注建议分段控件 + 牌力读牌 */
+.pk-seg{display:flex;gap:8px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:11px;padding:4px}
+.pk-seg button{flex:1;padding:9px 6px;border:none;background:transparent;color:var(--muted);border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;transition:.15s}
+.pk-seg button.on{background:linear-gradient(135deg,rgba(232,179,57,.22),rgba(232,179,57,.08));color:var(--gold)}
+.pk-myhand{font-size:13px;color:var(--muted);margin-bottom:12px}
+.pk-myhand b{color:var(--text);font-size:14px}
+.pk-read-title{font-size:12px;color:var(--muted);margin-bottom:8px}
+.pk-read{display:flex;flex-direction:column;gap:7px}
+.pk-read-row{display:flex;align-items:center;gap:10px;font-size:12.5px}
+.pk-rc{width:54px;flex:none;color:var(--text)}
+.pk-rb{height:10px;border-radius:5px;background:linear-gradient(90deg,#f5607b,#f6bd4a);min-width:6px;flex:none}
+.pk-rp{width:48px;flex:none;text-align:right;font-family:var(--mono);color:var(--muted)}
+.pk-read-row.muted{color:var(--muted);font-size:12px}
 
 </style>
 </head>
@@ -1047,8 +1080,9 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
   </section>
 
   <section class="view" id="view-poker" data-key="poker">
-    <div class="view-h"><span class="vt"><svg class="i"><use href="#i-poker"/></svg> 德州扑克胜率 &amp; 下注策略</span><span class="vs">蒙特卡洛模拟 · 含底池赔率决策</span><span class="vline"></span></div>
+    <div class="view-h"><span class="vt"><svg class="i"><use href="#i-poker"/></svg> 德州扑克胜率 &amp; 下注策略</span><span class="vs">蒙特卡洛模拟 · 凯利公式 · 牌力读牌</span><span class="vline"></span></div>
     <div class="pk-wrap">
+
       <div class="tool-card">
         <div class="pk-grid">
           <div class="pk-block">
@@ -1060,7 +1094,8 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
             <div class="pk-cards" id="pkBoard"></div>
           </div>
         </div>
-        <div class="t-row" style="margin-top:14px"><label>对手数量（人）</label>
+        <div class="pk-tip">点牌位 → 先选花色再选点数（手机也能轻松选）；同一张牌不能重复选。</div>
+        <div class="t-row" style="margin-top:12px"><label>对手数量（人）</label>
           <select class="num t-in" id="pkOpp">
             <option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option>
           </select>
@@ -1088,15 +1123,39 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
           <div class="pill">权益 Equity <b id="pkEq">–</b></div>
           <div class="pill">样本数 <b id="pkN">–</b></div>
         </div>
+
+        <h4 style="margin:18px 0 10px;font-size:14px;font-weight:650">下注建议（胜率一出即给出）</h4>
+        <div class="pk-seg" id="pkAct">
+          <button type="button" class="on" data-act="lead">我先手（主动下注）</button>
+          <button type="button" data-act="face">我面对下注（需跟注）</button>
+        </div>
+        <div class="t-row" style="margin-top:12px"><label>当前底池</label><input class="num t-in" id="pkPot" type="number" value="100" min="0" inputmode="decimal"></div>
+        <div class="t-row"><label id="pkWagerLbl">你的下注</label><input class="num t-in" id="pkCall" type="number" value="20" min="0" inputmode="decimal"></div>
+        <div class="t-row"><label>我的筹码（可选）</label><input class="num t-in" id="pkStack" type="number" value="" min="0" placeholder="用于算凯利金额" inputmode="decimal"></div>
+        <div class="pk-advice" id="pkAdvice" style="display:none"></div>
       </div>
 
-      <div class="tool-card">
-        <h4 style="margin:0 0 12px;font-size:14px;font-weight:650">下注策略（底池赔率）</h4>
-        <div class="t-row"><label>当前底池（¥/筹码）</label><input class="num t-in" id="pkPot" type="number" value="100" min="0" inputmode="decimal"></div>
-        <div class="t-row"><label>对手下注 / 你需跟注（¥/筹码）</label><input class="num t-in" id="pkCall" type="number" value="20" min="0" inputmode="decimal"></div>
-        <button class="btn-ghost btn-sm" onclick="runPokerStrategy()" style="margin-top:4px">基于胜率给出建议</button>
-        <div class="pk-advice" id="pkAdvice" style="display:none"></div>
-        <div class="pk-note">底池赔率 = 需跟注 ÷（底池 + 需跟注）。当你的胜率（权益）高于底池赔率，跟注有正期望值；远高于时可在合理范围内加注施压；低于则可考虑弃牌。本建议仅作数学参考，实战还需结合隐含赔率、对手倾向与位置。</div>
+      <div class="tool-card" id="pkRead" style="display:none">
+        <h4 style="margin:0 0 12px;font-size:14px;font-weight:650">牌力读牌（结合公共牌）</h4>
+        <div class="pk-myhand" id="pkMyHand">—</div>
+        <div class="pk-read-title">你落后时，对手可能用这些牌型击败你（占你落后局面的比例）：</div>
+        <div class="pk-read" id="pkOppBreakdown"></div>
+        <div class="pk-note">概率基于随机发牌模拟。公共牌若出现对子 / 同花面，对手凑两对、葫芦、同花的概率会上升，需更谨慎。</div>
+      </div>
+
+    </div>
+
+    <!-- 选牌弹层 -->
+    <div class="pk-picker" id="pkPicker" style="display:none">
+      <div class="pk-picker-box">
+        <div class="pk-ph">选择第 <span id="pkPickIdx">1</span> 张 · <span id="pkPickZone">底牌</span></div>
+        <div class="pk-hint" id="pkPickHint">请先选择花色</div>
+        <div class="pk-suits" id="pkSuits"></div>
+        <div class="pk-ranks" id="pkRanks"></div>
+        <div class="pk-picker-acts">
+          <button class="btn-ghost btn-sm" onclick="pkPickClear()">清除此张</button>
+          <button class="btn-primary btn-sm" onclick="pkPickClose()">完成</button>
+        </div>
       </div>
     </div>
   </section>
@@ -4095,6 +4154,8 @@ function switchView(key){
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   const el=document.getElementById(map[key]);
   if(el) el.classList.add("active");
+  // 扑克工具不展示顶部组合走势区（与基金无关）
+  try{ const td=document.querySelector('.trend-dock'); if(td) td.style.display=(key==='poker'?'none':''); }catch(e){}
   document.querySelectorAll(".nav-item,.tb-item").forEach(b=>b.classList.toggle("on", b.dataset.view===key));
   try{ localStorage.setItem("fp_view", key); }catch(e){}
   window.scrollTo({top:0, behavior:"auto"});
@@ -4735,40 +4796,73 @@ scheduleRefresh();
 /* ===== 德州扑克胜率 & 下注策略 ===== */
 const PK_RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 const PK_SUITS=[{s:'s',g:'♠',c:'B'},{s:'h',g:'♥',c:'R'},{s:'d',g:'♦',c:'R'},{s:'c',g:'♣',c:'B'}];
-function initPoker(){
-  const hole=document.getElementById('pkHole');
-  const board=document.getElementById('pkBoard');
-  if(hole) hole.innerHTML=pkPickHTML('h',2);
-  if(board) board.innerHTML=pkPickHTML('b',5);
-  ['h','b'].forEach(p=>{ const n=p==='h'?2:5; for(let i=0;i<n;i++) pkSyncColor(p,i); });
-}
-function pkPickHTML(prefix,n){
-  let h='';
-  for(let i=0;i<n;i++){
-    h+=`<div class="pk-pick"><div class="pk-sel">`
-      +`<select id="${prefix}r${i}" onchange="pkSyncColor('${prefix}',${i})"><option value="">牌</option>`
-      +PK_RANKS.map((r,ri)=>`<option value="${ri}">${r}</option>`).join('')
-      +`</select>`
-      +`<select id="${prefix}s${i}" onchange="pkSyncColor('${prefix}',${i})"><option value="">花</option>`
-      +PK_SUITS.map((x,si)=>`<option value="${si}">${x.g}</option>`).join('')
-      +`</select></div></div>`;
+const PK_CAT=['高牌','一对','两对','三条','顺子','同花','葫芦','四条','同花顺'];
+// 已选牌：PK_SEL.h / PK_SEL.b，每项为 {r,s} 或 null（用于去重 + 点选渲染）
+const PK_SEL={h:[null,null], b:[null,null,null,null,null]};
+let pkCur=null; // 当前打开的选牌槽 {prefix,i,zone,pendingSuit,pendingRank}
+function pkKey(r,s){ return r+'*'+s; }
+function pkUsedSet(except){
+  const set=new Set();
+  for(const k of ['h','b']){
+    PK_SEL[k].forEach((c,idx)=>{ if(c && !(except&&except.k===k&&except.i===idx)) set.add(pkKey(c.r,c.s)); });
   }
-  return h;
+  return set;
 }
-function pkSyncColor(prefix,i){
-  const sEl=document.getElementById(prefix+'s'+i);
-  if(!sEl) return;
-  sEl.style.color = sEl.value!=='' ? (PK_SUITS[+sEl.value].c==='R'?'var(--up)':'var(--text)') : 'var(--muted)';
+function pkRenderSlots(){
+  ['h','b'].forEach(p=>{
+    const box=document.getElementById(p==='h'?'pkHole':'pkBoard'); if(!box) return;
+    const n=p==='h'?2:5, zone=p==='h'?'底牌':'公共牌'; let h='';
+    for(let i=0;i<n;i++){
+      const c=PK_SEL[p][i];
+      const label=c?(PK_RANKS[c.r]+PK_SUITS[c.s].g):'？';
+      const col=c?(PK_SUITS[c.s].c==='R'?'pk-red':'pk-blk'):'pk-empty';
+      h+=`<button type="button" class="pk-slot ${col}" onclick="pkOpenPicker('${p}',${i})">${label}</button>`;
+    }
+    box.innerHTML=h;
+  });
 }
-function pkGetCards(prefix,n){
-  const out=[];
-  for(let i=0;i<n;i++){
-    const r=document.getElementById(prefix+'r'+i).value;
-    const s=document.getElementById(prefix+'s'+i).value;
-    if(r!==''&&s!=='') out.push({r:+r,s:+s});
-  }
-  return out;
+function pkOpenPicker(prefix,i){
+  pkCur={prefix,i,zone:prefix==='h'?'底牌':'公共牌',pendingSuit:null,pendingRank:null};
+  document.getElementById('pkPickIdx').textContent=(i+1);
+  document.getElementById('pkPickZone').textContent=pkCur.zone;
+  pkRenderPicker();
+  document.getElementById('pkPicker').style.display='flex';
 }
+function pkRenderPicker(){
+  const used=pkUsedSet({k:pkCur.prefix,i:pkCur.i});
+  document.getElementById('pkSuits').innerHTML=PK_SUITS.map((x,si)=>
+    `<button type="button" class="pk-suit ${PK_SUITS[si].c==='R'?'pk-red':'pk-blk'} ${pkCur.pendingSuit===si?'on':''}" onclick="pkPickSuit(${si})">${x.g}</button>`).join('');
+  document.getElementById('pkRanks').innerHTML=PK_RANKS.map((r,ri)=>{
+    const dis=(pkCur.pendingSuit!=null && used.has(pkKey(ri,pkCur.pendingSuit)))?'disabled':'';
+    const on=pkCur.pendingRank===ri?'on':'';
+    return `<button type="button" class="pk-rank ${on}" ${dis} onclick="pkPickRank(${ri})">${r}</button>`;
+  }).join('');
+  document.getElementById('pkPickHint').textContent = pkCur.pendingSuit==null
+    ? '请先选择花色' : '已选花色，再点点数（也可先点点数再选花色）';
+}
+function pkPickSuit(si){
+  pkCur.pendingSuit = (pkCur.pendingSuit===si)?null:si;
+  if(pkCur.pendingSuit!=null && pkCur.pendingRank!=null) return pkPickCommit();
+  pkRenderPicker();
+}
+function pkPickRank(ri){
+  pkCur.pendingRank = (pkCur.pendingRank===ri)?null:ri;
+  if(pkCur.pendingSuit!=null && pkCur.pendingRank!=null) return pkPickCommit();
+  pkRenderPicker();
+}
+function pkPickCommit(){
+  const r=pkCur.pendingRank, s=pkCur.pendingSuit;
+  if(r==null||s==null){ pkRenderPicker(); return; }
+  if(pkUsedSet({k:pkCur.prefix,i:pkCur.i}).has(pkKey(r,s))){ toast('这张牌已经被选过了'); return; }
+  PK_SEL[pkCur.prefix][pkCur.i]={r,s};
+  pkPickClose(); pkRenderSlots();
+}
+function pkPickClear(){
+  PK_SEL[pkCur.prefix][pkCur.i]=null;
+  pkCur.pendingSuit=pkCur.pendingRank=null;
+  pkRenderSlots(); pkRenderPicker();
+}
+function pkPickClose(){ document.getElementById('pkPicker').style.display='none'; pkCur=null; }
 function pkEval5(cards){
   const ranks=cards.map(c=>c.r).sort((a,b)=>b-a);
   const suits=cards.map(c=>c.s);
@@ -4782,46 +4876,60 @@ function pkEval5(cards){
   let tb=[]; groups.forEach(g=>{ for(let k=0;k<g.n;k++) tb.push(g.r); }); while(tb.length<5) tb.push(0);
   const B=15;
   const sc=(t,tb)=>t*B*B*B*B*B+tb[0]*B*B*B*B+tb[1]*B*B*B+tb[2]*B*B+tb[3]*B+tb[4];
-  if(isFlush&&sh!==null) return {score:sc(8,[sh])};
-  if(groups[0].n===4) return {score:sc(7,tb)};
-  if(groups[0].n===3&&groups[1]&&groups[1].n===2) return {score:sc(6,tb)};
-  if(isFlush) return {score:sc(5,tb)};
-  if(sh!==null) return {score:sc(4,[sh])};
-  if(groups[0].n===3) return {score:sc(3,tb)};
-  if(groups[0].n===2&&groups[1]&&groups[1].n===2) return {score:sc(2,tb)};
-  if(groups[0].n===2) return {score:sc(1,tb)};
-  return {score:sc(0,tb)};
+  let cat;
+  if(isFlush&&sh!==null) cat=8;
+  else if(groups[0].n===4) cat=7;
+  else if(groups[0].n===3&&groups[1]&&groups[1].n===2) cat=6;
+  else if(isFlush) cat=5;
+  else if(sh!==null) cat=4;
+  else if(groups[0].n===3) cat=3;
+  else if(groups[0].n===2&&groups[1]&&groups[1].n===2) cat=2;
+  else if(groups[0].n===2) cat=1;
+  else cat=0;
+  return {score:sc(cat,tb), cat};
 }
 function pkEval7(cards){
-  let best=null;
-  for(let a=0;a<7;a++)for(let b=a+1;b<7;b++)for(let c=a+1;c<7;c++)for(let d=c+1;d<7;d++)for(let e=d+1;e<7;e++){
-    const s=pkEval5([cards[a],cards[b],cards[c],cards[d],cards[e]]).score;
-    if(best===null||s>best) best=s;
+  const n=cards.length;
+  if(n<5) return {score:0, cat:-1};
+  // 枚举所有 5 张组合，取最优（兼容 5/6/7 张输入）
+  const comb=[];
+  (function rec(start,cur){ if(cur.length===5){ comb.push(cur.slice()); return; } for(let i=start;i<n;i++){ cur.push(i); rec(i+1,cur); cur.pop(); } })(0,[]);
+  let best=null, bestCat=-1;
+  for(const c5 of comb){
+    const r=pkEval5([cards[c5[0]],cards[c5[1]],cards[c5[2]],cards[c5[3]],cards[c5[4]]]);
+    if(best===null||r.score>best){ best=r.score; bestCat=r.cat; }
   }
-  return best;
+  return {score:best, cat:bestCat};
 }
 function pkShuffle(arr){ for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=arr[i];arr[i]=arr[j];arr[j]=t;} return arr; }
+function pkSizing(eq){
+  if(eq>=0.66) return {pct:0.70, name:'价值下注（重锤）'};
+  if(eq>=0.50) return {pct:0.50, name:'持续下注'};
+  if(eq>=0.40) return {pct:0.30, name:'小额试探下注'};
+  if(eq>=0.30) return {pct:0.18, name:'极小诈唬（多数情况过牌）'};
+  return {pct:0, name:'过牌 / 弃牌'};
+}
 function runPoker(){
-  const myHole=pkGetCards('h',2);
+  const myHole=PK_SEL.h.filter(Boolean);
   if(myHole.length!==2){ toast('请先选好你的 2 张底牌'); return; }
-  const board=pkGetCards('b',5);
+  const board=PK_SEL.b.filter(Boolean);
   const nOpp=Math.max(1,Math.min(9,+(document.getElementById('pkOpp').value)||1));
   const iters=Math.max(500,Math.min(50000,+(document.getElementById('pkIters').value)||10000));
-  const used=new Set(); myHole.forEach(c=>used.add(c.r*4+c.s)); board.forEach(c=>used.add(c.r*4+c.s));
-  const deck=[]; for(let r=0;r<13;r++)for(let s=0;s<4;s++){ if(!used.has(r*4+s)) deck.push({r:r,s:s}); }
+  const used=new Set(); PK_SEL.h.forEach(c=>c&&used.add(pkKey(c.r,c.s))); PK_SEL.b.forEach(c=>c&&used.add(pkKey(c.r,c.s)));
+  const deck=[]; for(let r=0;r<13;r++)for(let s=0;s<4;s++){ if(!used.has(pkKey(r,s))) deck.push({r:r,s:s}); }
   const btn=document.getElementById('pkRun'); const txt=btn.textContent;
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span>模拟中…';
   ['pkW','pkT','pkL','pkEq','pkN'].forEach(id=>{const e=document.getElementById(id); if(e) e.textContent='–';});
   const barEl=document.getElementById('pkBar'); if(barEl) barEl.innerHTML='';
   setTimeout(()=>{
-    let win=0,tie=0,lose=0; const need=5-board.length;
+    let win=0,tie=0,lose=0; const need=5-board.length; const oppCat=new Array(9).fill(0);
     for(let it=0;it<iters;it++){
       const d=pkShuffle(deck.slice()); let idx=0;
       const opps=[]; for(let o=0;o<nOpp;o++){ opps.push([d[idx++],d[idx++]]); }
       const community=board.concat(d.slice(idx,idx+need));
       const my=pkEval7(myHole.concat(community));
-      let best=-1; for(const h of opps){ const x=pkEval7(h.concat(community)); if(x>best) best=x; }
-      if(my>best) win++; else if(my===best) tie++; else lose++;
+      let best=-1,bestCat=0; for(const h of opps){ const x=pkEval7(h.concat(community)); if(x.score>best){best=x.score;bestCat=x.cat;} }
+      if(my.score>best) win++; else if(my.score===best) tie++; else { lose++; oppCat[bestCat]++; }
     }
     const W=win/iters,T=tie/iters,L=lose/iters,eq=W+T*0.5;
     window.__pokerEquity=eq;
@@ -4837,39 +4945,98 @@ function runPoker(){
       `<span class="w" style="width:${pct(W)}%">${lbl(W)}</span>`
       +`<span class="t" style="width:${pct(T)}%">${lbl(T)}</span>`
       +`<span class="l" style="width:${pct(L)}%">${lbl(L)}</span>`;
-    const adv=document.getElementById('pkAdvice'); adv.style.display='none'; adv.innerHTML='';
+    pkRenderRead(myHole, board, oppCat, lose);
+    pkStrategy();
     btn.disabled=false; btn.textContent=txt;
   }, 25);
 }
-function runPokerStrategy(){
+function pkRenderRead(myHole, board, oppCat, lose){
+  const box=document.getElementById('pkRead'); box.style.display='';
+  let myLabel='—';
+  if(board.length>=3){ myLabel=PK_CAT[pkEval7(myHole.concat(board)).cat]; }
+  else { myLabel='（公共牌不足 3 张，暂无法判定成牌）'; }
+  document.getElementById('pkMyHand').innerHTML = `你当前牌力：<b>${myLabel}</b>` + (board.length>=3?` <span class="muted">（基于已发的 ${board.length} 张公共牌）</span>`:'');
+  const bd=document.getElementById('pkOppBreakdown');
+  if(lose===0){ bd.innerHTML='<div class="pk-read-row muted">模拟中没有落后 —— 你始终领先，对手无法用任何牌型击败你。</div>'; return; }
+  const rows=[];
+  for(let cat=8;cat>=0;cat--){ if(oppCat[cat]>0) rows.push({cat, n:oppCat[cat]}); }
+  rows.sort((a,b)=>b.n-a.n);
+  bd.innerHTML=rows.slice(0,6).map(r=>{
+    const p=(r.n/lose*100);
+    return `<div class="pk-read-row"><span class="pk-rc">${PK_CAT[r.cat]}</span>`
+      +`<span class="pk-rb" style="width:${Math.max(6,p)}%"></span>`
+      +`<span class="pk-rp">${p.toFixed(1)}%</span></div>`;
+  }).join('');
+}
+function pkStrategy(){
   const eq=window.__pokerEquity;
-  if(eq==null){ toast('请先计算一次胜率'); return; }
+  const box=document.getElementById('pkAdvice');
+  if(eq==null){ box.style.display='none'; return; }
+  box.style.display='';
+  const actEl=document.getElementById('pkAct').querySelector('.on');
+  const act=actEl?actEl.dataset.act:'lead';
   const pot=Math.max(0,+(document.getElementById('pkPot').value)||0);
-  const call=Math.max(0,+(document.getElementById('pkCall').value)||0);
-  const total=pot+call;
-  const potOdds= total>0 ? call/total : 0;
-  const box=document.getElementById('pkAdvice'); box.style.display='';
-  const margin=eq-potOdds;
-  let cls,act,reason;
-  if(margin>0.12){ cls='raise'; act='建议：加注（Raise）';
-    reason=`你的权益 ${(eq*100).toFixed(1)}% 远高于底池赔率 ${(potOdds*100).toFixed(1)}%（差 ${(margin*100).toFixed(1)} 个百分点），跟注有显著正期望，可适度加注施压、扩大底池。`;
-  } else if(margin>0){ cls='call'; act='建议：跟注（Call）';
-    reason=`你的权益 ${(eq*100).toFixed(1)}% 略高于底池赔率 ${(potOdds*100).toFixed(1)}%，跟注为正期望，但空间有限，按当前赔率跟注即可。`;
-  } else { cls='fold'; act='建议：弃牌（Fold）';
-    reason=`你的权益 ${(eq*100).toFixed(1)}% 低于底池赔率 ${(potOdds*100).toFixed(1)}%，跟注期望为负，长期会亏，建议弃牌（除非有较强隐含赔率或读牌依据）。`;
+  const wager=Math.max(0,+(document.getElementById('pkCall').value)||0);
+  const stack=Math.max(0,+(document.getElementById('pkStack').value)||0);
+  const total=pot+wager;
+  const potOdds= total>0 ? wager/total : 0;
+  const q=1-eq;
+  const b = wager>0 ? pot/wager : 0;
+  const f = b>0 ? (b*eq - q)/b : (eq>=0.5?1:0); // 凯利投入比例
+  const fpct=(f*100);
+  const kellyAmt = (stack>0 && f>0) ? Math.round(f*stack) : 0;
+  let cls, actTxt, detail, kellyTxt;
+  if(act==='face'){
+    const margin=eq-potOdds;
+    if(margin>0.12){ cls='raise'; actTxt='加注（Raise）'; }
+    else if(margin>0){ cls='call'; actTxt='跟注（Call）'; }
+    else { cls='fold'; actTxt='弃牌（Fold）'; }
+    const evPer = wager>0 ? (eq*total-wager)/wager : 0;
+    detail=`<div class="pk-kpi" style="margin-top:8px">
+        <div class="pill">底池赔率 <b>${(potOdds*100).toFixed(1)}%</b></div>
+        <div class="pill">你的权益 <b>${(eq*100).toFixed(1)}%</b></div>
+        <div class="pill">每 1 注期望 <b>${evPer>=0?'+':''}${evPer.toFixed(2)}</b></div>
+      </div>
+      <div class="pk-note" style="margin-top:8px">你的权益 ${(eq*100).toFixed(1)}% ${margin>0?'高于':'低于'}底池赔率 ${(potOdds*100).toFixed(1)}%：${margin>0?'跟注/加注有正期望':'跟注期望为负，长期会亏'}。凯利盈亏平衡胜率即底池赔率 ${(potOdds*100).toFixed(1)}%。</div>`;
+  } else {
+    const sz=pkSizing(eq);
+    const bet=Math.round(sz.pct*pot);
+    if(eq>=0.4){ cls='raise'; actTxt=`下注（${sz.name}）`; }
+    else if(eq>=0.3){ cls='call'; actTxt=`多数过牌，可偶发${sz.name}`; }
+    else { cls='fold'; actTxt='过牌 / 弃牌'; }
+    detail=`<div class="pk-kpi" style="margin-top:8px">
+        <div class="pill">建议尺度 <b>${sz.pct>0?(sz.pct*100).toFixed(0)+'% 底池':'—'}</b></div>
+        <div class="pill">≈ 下注 <b>${bet>0?'¥'+bet.toLocaleString('en-US'):'—'}</b></div>
+        <div class="pill">你的权益 <b>${(eq*100).toFixed(1)}%</b></div>
+      </div>
+      <div class="pk-note" style="margin-top:8px">按胜率 ${(eq*100).toFixed(1)}% 建议<b>${sz.name}</b>。凯利盈亏平衡胜率 = 底池赔率 ${(potOdds*100).toFixed(1)}%：你胜率${eq>potOdds?'高于平衡线 → 价值下注长期有利':'低于平衡线 → 不宜下注'}。</div>`;
   }
-  const evPer = call>0 ? (eq*total-call)/call : 0;
+  kellyTxt = f>0
+    ? `凯利建议投入比例 <b>${(fpct).toFixed(1)}%</b>${kellyAmt>0?`，约 <b>¥${kellyAmt.toLocaleString('en-US')}</b>（按你的筹码）`:''}；超过此比例长期资金增长会下降。`
+    : `凯利比例为负（${(fpct).toFixed(1)}%），当前不应投入，建议过牌/弃牌。`;
   box.className='pk-advice '+cls;
-  box.innerHTML=`<div class="act">${act}</div>
-    <div class="pk-kpi" style="margin-top:8px">
-      <div class="pill">底池赔率 <b>${(potOdds*100).toFixed(1)}%</b></div>
-      <div class="pill">你的权益 <b>${(eq*100).toFixed(1)}%</b></div>
-      <div class="pill">每 1 注期望收益 <b>${evPer>=0?'+':''}${evPer.toFixed(2)}</b></div>
-    </div>
-    <div class="pk-note" style="margin-top:8px">${reason}</div>`;
+  box.innerHTML=`<div class="act">建议（${act==='lead'?'我先手':'我面对下注'}）：${actTxt}</div>${detail}
+    <div class="pk-note" style="margin-top:8px">${kellyTxt}</div>
+    <div class="pk-note" style="margin-top:4px">本建议仅作数学参考，实战还需结合隐含赔率、对手倾向与位置。</div>`;
+}
+function initPoker(){
+  pkRenderSlots();
+  // 先手 / 面对下注 切换
+  document.querySelectorAll('#pkAct button').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('#pkAct button').forEach(x=>x.classList.remove('on'));
+      btn.classList.add('on');
+      document.getElementById('pkWagerLbl').textContent = btn.dataset.act==='lead' ? '你的下注' : '需跟注';
+      if(window.__pokerEquity!=null) pkStrategy();
+    });
+  });
+  // 底池 / 下注 / 筹码 变动即重算建议（胜率已有时）
+  ['pkPot','pkCall','pkStack'].forEach(id=>{
+    document.getElementById(id).addEventListener('input',()=>{ if(window.__pokerEquity!=null) pkStrategy(); });
+  });
 }
 
-initPoker();               // 德州扑克工具：生成牌选择器（必须在 PK_RANKS 等定义之后）
+initPoker();               // 德州扑克工具：初始化牌选择器与下注建议联动（必须在 PK_RANKS 等定义之后）
 
 </script>
 <div id="tipBox" class="tip-box" role="tooltip" data-page-node-id="cg50PXGBK7bXfRtMWDSisU"></div>
