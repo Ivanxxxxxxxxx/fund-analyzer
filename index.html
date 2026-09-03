@@ -30,7 +30,10 @@
   --nav-w:76px;
 }
 *{box-sizing:border-box}
-html,body{height:100%}
+/* 关键：body 必须随内容增高，position:sticky 才有"可吸附空间"，
+   否则 body 被锁在 100vh，长页面内容溢出后顶栏/左栏会跟着滚走 */
+html{height:100%}
+body{min-height:100%}
 body{
   margin:0;color:var(--text);
   font-family:"Inter","PingFang SC","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
@@ -73,19 +76,23 @@ body{
 .shell{display:flex;min-height:calc(100vh - var(--tb-h))}
 /* 左侧导航 */
 .nav{
-  width:var(--nav-w);flex:none;padding:14px 10px;display:flex;flex-direction:column;gap:6px;
-  border-right:1px solid var(--line);background:rgba(13,13,16,.5);
+  width:var(--nav-w);flex:none;padding:20px 9px 14px;display:flex;flex-direction:column;gap:7px;
+  border-right:1px solid var(--line);background:rgba(13,13,16,.55);
   /* 侧边栏常驻：页面下滑时工具栏固定在左侧，不用滑回顶部再切换 */
   position:sticky;top:var(--tb-h);align-self:flex-start;height:calc(100vh - var(--tb-h));
   overflow-y:auto;z-index:30;backdrop-filter:blur(8px);
 }
 .nav-item{
-  display:flex;flex-direction:column;align-items:center;gap:5px;padding:11px 4px;border-radius:12px;
-  color:var(--muted);cursor:pointer;border:none;background:transparent;transition:.16s;font-size:11px;font-weight:500;
+  position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 4px;border-radius:13px;
+  color:var(--muted);cursor:pointer;border:none;background:transparent;transition:.18s;font-size:11px;font-weight:600;
 }
-.nav-item .ni-ic{font-size:19px;line-height:1}
+.nav-item .ni-ic{font-size:19px;line-height:1;transition:.18s}
 .nav-item:hover{background:rgba(255,255,255,.05);color:var(--text)}
-.nav-item.on{background:linear-gradient(180deg,rgba(232,179,57,.16),rgba(232,179,57,.06));color:var(--gold)}
+.nav-item:hover .ni-ic{transform:translateY(-1px)}
+/* 选中态：左侧金色指示条 + 渐变底，像"被点亮的标签"而不再是方块高亮 */
+.nav-item.on{background:linear-gradient(180deg,rgba(232,179,57,.18),rgba(232,179,57,.05));color:var(--gold)}
+.nav-item.on::before{content:"";position:absolute;left:-9px;top:50%;transform:translateY(-50%);
+  width:3px;height:26px;border-radius:0 4px 4px 0;background:var(--gold);box-shadow:0 0 10px rgba(232,179,57,.6)}
 .nav-item.on .ni-ic{filter:drop-shadow(0 0 8px rgba(232,179,57,.5))}
 /* 舞台（视图区） */
 .stage{flex:1;min-width:0;padding:22px 26px 48px}
@@ -438,10 +445,6 @@ table.plan th{color:var(--muted);font-weight:600}
 .confirm-modal .cm{font-size:13px;color:var(--muted);margin:0 0 18px;line-height:1.7}
 .cf-actions{display:flex;justify-content:flex-end;gap:10px}
 
-/* ---------- 导航 logo ---------- */
-.nav-logo{width:40px;height:40px;margin:2px auto 12px;border-radius:12px;display:grid;place-items:center;font-size:19px;
-  background:linear-gradient(135deg,#f2c558,#c9921f);
-  box-shadow:0 6px 18px rgba(232,179,57,.32), inset 0 1px 0 rgba(255,255,255,.3)}
 /* ---------- 全局常驻走势区 ---------- */
 .trend-dock{background:linear-gradient(180deg, rgba(24,24,30,.9), rgba(16,16,20,.92));
   border:1px solid var(--line);border-radius:16px;padding:14px 18px 12px;margin-bottom:16px;
@@ -745,7 +748,6 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
 
 <div class="shell" data-page-node-id="hhduAd4jiALt8iqIdex2dp">
   <aside class="nav" data-page-node-id="BZLmaXHxWGtSlI5YgEC3vP">
-    <div class="nav-logo" title="基金工作台" data-page-node-id="pT45WRiEoHQDBFXPbGEWV1">📊</div>
     <button class="nav-item on" data-view="portfolio" onclick="switchView('portfolio')" data-page-node-id="wtJBUbqVAwOBc3F8fWE9Dh"><span class="ni-ic" data-page-node-id="aAfKpV7t08RULJ2DgdLoR7"><svg class="i" data-page-node-id="xtkbHGwwynUR8fAWc0D7jV"><use href="#i-layers" data-page-node-id="qcyLQfNAC0HMP8TTIfbjhV"/></svg></span>组合</button>
     <button class="nav-item" data-view="tools" onclick="switchView('tools')" data-page-node-id="AYZU1q1RsRQRtv0ybSCwsq"><span class="ni-ic" data-page-node-id="pGAnhwDi6izjdFKCelyyUa"><svg class="i" data-page-node-id="Az0BccGyoc6sBqgi8lAakM"><use href="#i-compass" data-page-node-id="fpkHMWgfZnn0Jc2Ek7RNyc"/></svg></span>决策</button>
     <button class="nav-item" data-view="report" onclick="switchView('report')" data-page-node-id="FDFhnnB1N8HoZCqnSLqmXR"><span class="ni-ic" data-page-node-id="eJfvK53esCYy2rj1CiGKhU"><svg class="i" data-page-node-id="jjHMFJhJSKL165fSz48X0D"><use href="#i-file-text" data-page-node-id="NEFShF3AXBUcq61spHheTb"/></svg></span>报告</button>
