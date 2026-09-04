@@ -101,11 +101,11 @@ def push_file(repo, f, msg):
 
 print("\n[1/2] 前端 → Pages 仓库 %s" % FRONT_REPO)
 for f in FRONT_FILES:
-  push_file(FRONT_REPO, f, f"poker: 凯利最终修正-负值解释+判决与凯利同源+多人平局分池 ({f})")
+  push_file(FRONT_REPO, f, f"poker: 策略驱动建议(先手AK开池加注/翻后价值·半诈唬)+对手数语义澄清(剩余对手不含你·切换即重算) ({f})")
 
 print("\n[2/2] 后端源码 → 仓库 %s" % BACK_REPO)
 for f in BACK_FILES:
-  push_file(BACK_REPO, f, f"poker: 凯利最终修正-负值解释+判决与凯利同源+多人平局分池 ({f})")
+  push_file(BACK_REPO, f, f"poker: 策略驱动建议(先手AK开池加注/翻后价值·半诈唬)+对手数语义澄清(剩余对手不含你·切换即重算) ({f})")
 
 print("\n完成。")
 print("· 前端：GitHub Pages 监听 fund-analyzer-web 会自动重建（几十秒~几分钟），刷新 https://ivanxxxxxxxxx.github.io/fund-analyzer-web/ 即可见。")
