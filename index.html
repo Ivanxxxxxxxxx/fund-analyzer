@@ -1138,7 +1138,7 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
         </div>
 
         <h4 style="margin:18px 0 4px;font-size:14px;font-weight:650">下注建议（胜率一出即给出）</h4>
-        <div class="pk-help">权益 Equity = 这手牌摊牌获胜的概率（平局算一半）。把它和「底池赔率」比一比，就知道该跟还是该弃。</div>
+        <div class="pk-help">权益 Equity = 这手牌摊牌获胜的概率（平局算一半）。下注额由凯利公式解出：在你当前的权益、底池、筹码下，让长期资金增长最快的那笔投入。</div>
         <div class="pk-seg" id="pkAct">
           <button type="button" class="on" data-act="lead">我先手 · 主动下注</button>
           <button type="button" data-act="face">我面对下注 · 要跟注</button>
@@ -1146,7 +1146,7 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
         <div id="pkActHint" class="pk-note" style="margin:8px 0 0"></div>
         <div class="t-row" style="margin-top:10px"><label>当前底池<span class="pk-lab-sub">面对下注时含对手下注</span></label><input class="num t-in" id="pkPot" type="number" value="100" min="0" inputmode="decimal"></div>
         <div class="t-row" id="rowCall"><label>需跟注</label><input class="num t-in" id="pkCall" type="number" value="20" min="0" inputmode="decimal"></div>
-        <div class="t-row"><label>我的筹码（可选）</label><input class="num t-in" id="pkStack" type="number" value="" min="0" placeholder="用于算凯利金额" inputmode="decimal"></div>
+        <div class="t-row"><label>我的筹码<span class="pk-lab-sub">凯利公式需要，用来算下注额</span></label><input class="num t-in" id="pkStack" type="number" value="" min="0" placeholder="例如 1000" inputmode="decimal"></div>
         <div class="pk-advice" id="pkAdvice" style="display:none"></div>
       </div>
 
@@ -5017,6 +5017,17 @@ function pkRenderRead(myHole, board){
       +`<span class="pk-rp">${totalPct.toFixed(2)}%</span></div>`;
   }).join('');
 }
+/* ============ 统一凯利模型（先手 / 面对下注 共用） ============
+   符号：P=当前底池（面对下注时含对手下注）；C=我必须投入才能继续的金额（先手 C=0）；
+        X=我这局总共投入的金额；S=我的筹码（可动用资金）；eq=我的权益
+   本局我投入 X：赢 → 净赚 (P + X − C)；输 → 净亏 X
+   凯利准则 = 最大化长期资金对数增长：
+        g(X) = eq·ln(S + P + X − C) + (1−eq)·ln(S − X)
+   令 g'(X)=0 得解析最优解：  X* = (2·eq − 1)·S − (1 − eq)·(P − C)
+   X* ≤ 0 表示凯利不主张主动投入资金（先手→过牌；面对下注→别加注）
+   假设：对手会跟注到底、不计弃牌率与隐含赔率。
+=============================================================== */
+function pkKellyX(eq, S, P, C){ return (2*eq-1)*S - (1-eq)*(P-C); }
 function pkStrategy(){
   const eq=window.__pokerEquity;
   const box=document.getElementById('pkAdvice');
@@ -5024,50 +5035,85 @@ function pkStrategy(){
   box.style.display='';
   const actEl=document.getElementById('pkAct').querySelector('.on');
   const act=actEl?actEl.dataset.act:'lead';
-  const pot=Math.max(0,+(document.getElementById('pkPot').value)||0);
-  const callAmt=Math.max(0,+(document.getElementById('pkCall').value)||0);
-  const stack=Math.max(0,+(document.getElementById('pkStack').value)||0);
-  const eqPct=eq*100;
-  const q=1-eq;
+  const P=Math.max(0,+(document.getElementById('pkPot').value)||0);
+  const C=act==='face'?Math.max(0,+(document.getElementById('pkCall').value)||0):0;
+  const S=Math.max(0,+(document.getElementById('pkStack').value)||0);
+  const eqPct=eq*100, q=1-eq;
+  const fmt=n=>{ const v=Math.round(n); return (v<0?'-¥':'¥')+Math.abs(v).toLocaleString('en-US'); };
   let cls, actTxt, detail;
+  const kellyX=pkKellyX(eq,S,P,C);   // 凯利最优总投入
+
   if(act==='face'){
-    // 面对下注：用「底池赔率 + 凯利公式」判断跟注 / 加注 / 弃牌
-    const total=pot+callAmt;
-    const potOdds= callAmt>0 ? callAmt/total : 0;          // 底池赔率 = 跟注额 ÷ 跟注后总底池
-    const b = callAmt>0 ? pot/callAmt : 0;                 // 净赔率 = 底池 ÷ 跟注额
-    const f = b>0 ? (b*eq - q)/b : 0;                      // 凯利投入比例（仅此模式有效）
+    /* ---------------- 面对下注：跟注额 C 是固定的，只能跟 / 弃 / 加注 ---------------- */
+    const total=P+C;
+    const potOdds=C>0?C/total:0;
     const margin=eq-potOdds;
-    if(margin>0.12){ cls='raise'; actTxt='加注（Raise）'; }
-    else if(margin>0){ cls='call'; actTxt='跟注（Call）'; }
-    else { cls='fold'; actTxt='弃牌（Fold）'; }
-    const fpct=f*100;
-    const kellyAmt=(stack>0 && f>0)?Math.round(f*stack):0;
-    const kellyTxt = f>0
-      ? `凯利公式：你这手牌的正期望优势够大，建议最多投入筹码的 <b>${fpct.toFixed(1)}%</b>${kellyAmt>0?`，约 <b>¥${kellyAmt.toLocaleString('en-US')}</b>`:''}（这是跟注/加注的上限，超过会拉低长期资金增长）。`
-      : `凯利比例为负（${fpct.toFixed(1)}%）：你的权益 <b>${eqPct.toFixed(1)}%</b> 低于底池赔率 <b>${(potOdds*100).toFixed(1)}%</b>，跟注长期必亏，建议过牌/弃牌。`;
+    const ev=eq*P-q*C;                                   // 跟注的期望收益（元）
+    // 严格判据：跟注后的长期资金对数增长 是否优于 弃牌（ln S）
+    let logOK=null;
+    if(S>0 && S>C){ logOK = (eq*Math.log(S+P)+q*Math.log(S-C)) > Math.log(S); }
+    const shortStack=(S>0 && C>S);
+
+    if(shortStack){ cls='fold'; actTxt='筹码不足（只能全下或弃牌）'; }
+    else if(ev<=0){ cls='fold'; actTxt='弃牌（Fold）'; }
+    else if(logOK===false){ cls='fold'; actTxt='弃牌（Fold）'; }
+    else if(margin>0.12){ cls='raise'; actTxt='加注（Raise）'; }
+    else { cls='call'; actTxt='跟注（Call）'; }
+
+    let reason;
+    if(shortStack) reason=`你的筹码 ${fmt(S)} 不够跟注 ${fmt(C)}，只能全下或弃牌。`;
+    else if(ev<=0) reason=`跟注期望 <b>${fmt(ev)}</b> 为负：权益 ${eqPct.toFixed(1)}% 低于底池赔率 ${(potOdds*100).toFixed(1)}%，长期必亏 → 弃牌。`;
+    else if(logOK===false) reason=`这笔跟注期望为正（${fmt(ev)}），但要投入 ${fmt(C)}＝你筹码的 ${(C/S*100).toFixed(0)}%，波动过大，凯利准则下<b>长期资金增长为负</b> → 弃牌。`;
+    else if(margin>0.12) reason=`权益 ${eqPct.toFixed(1)}% 明显高于底池赔率 ${(potOdds*100).toFixed(1)}%，跟注期望 <b>${fmt(ev)}</b>，优势足够大 → 加注。`;
+    else reason=`权益 ${eqPct.toFixed(1)}% 高于底池赔率 ${(potOdds*100).toFixed(1)}%，跟注期望 <b>${fmt(ev)}</b> → 跟注。`;
+
+    let kellyTxt;
+    if(S<=0){
+      kellyTxt=`填入<b>我的筹码</b>后，会额外给出凯利风控判断与最优加注额。`;
+    } else if(kellyX>C){
+      const raiseTo=Math.min(kellyX, 2*P, 0.99*S);
+      kellyTxt=`凯利算出的<b>最优总投入</b>为 ${fmt(kellyX)}，高于当前需跟注 ${fmt(C)} → 说明你优势够大，<b>值得加注</b>；凯利建议加注到 <b>${fmt(raiseTo)}</b>${kellyX>2*P?'（已按 2 倍底池实战封顶）':''}。`;
+    } else {
+      kellyTxt=`凯利算出的最优总投入为 ${fmt(kellyX)}（${kellyX<=0?'≤0，即不该主动投入资金':'低于需跟注额'}）→ <b>不主张加注</b>，按上面的跟注 / 弃牌建议执行即可。`;
+    }
+
     detail=`<div class="pk-kpi" style="margin-top:8px">
-        <div class="pill">底池赔率 <b>${callAmt>0?(potOdds*100).toFixed(1)+'%':'—'}</b></div>
+        <div class="pill">底池赔率 <b>${C>0?(potOdds*100).toFixed(1)+'%':'—'}</b></div>
         <div class="pill">你的权益 <b>${eqPct.toFixed(1)}%</b></div>
-        <div class="pill">需跟注 <b>¥${callAmt.toLocaleString('en-US')}</b></div>
+        <div class="pill">跟注期望 <b>${ev>=0?'+':''}${fmt(ev)}</b></div>
       </div>
-      <div class="pk-note" style="margin-top:8px">底池赔率 ${(potOdds*100).toFixed(1)}% = 需跟注 ¥${callAmt.toLocaleString('en-US')} ÷ 跟注后总底池 ¥${total.toLocaleString('en-US')}。你的权益 ${eqPct.toFixed(1)}% ${margin>0?'高于赔率 → 跟注有正期望':'低于赔率 → 跟注期望为负'}。</div>
+      <div class="pk-note" style="margin-top:8px">底池赔率 ${(potOdds*100).toFixed(1)}% = 需跟注 ${fmt(C)} ÷ 跟注后总底池 ${fmt(total)}。${reason}</div>
       <div class="pk-note" style="margin-top:8px">${kellyTxt}</div>`;
   } else {
-    // 我先手：按胜率自动建议下注尺度（输出，不是输入），实时随底池变化
+    /* ---------------- 我先手：用凯利直接算出「该下注多少」 ---------------- */
     const sz=pkSizing(eq);
-    let bet=Math.round(sz.pct*pot);
-    if(stack>0 && bet>stack) bet=stack;
-    if(eq>=0.4){ cls='raise'; actTxt=`下注（${sz.name}）`; }
-    else if(eq>=0.3){ cls='call'; actTxt='多数过牌，可偶发小额试探'; }
-    else { cls='fold'; actTxt='过牌 / 弃牌'; }
-    const pctOfPot = pot>0 ? (bet/pot*100) : 0;
+    let bet=0, capNote='', headNote='';
+    if(S<=0){
+      // 没填筹码 → 退化成按胜率的常规尺度
+      bet=Math.round(sz.pct*P);
+      cls = eq>=0.4?'raise':(eq>=0.3?'call':'fold');
+      actTxt = eq>=0.4?`下注 · ${sz.name}`:(eq>=0.3?'多数过牌，可偶发小额试探':'过牌 / 弃牌');
+      headNote=`你的权益 ${eqPct.toFixed(1)}%。当前<b>未填筹码</b>，先按胜率给常规尺度。`;
+      capNote=`填入<b>我的筹码</b>，即可用凯利公式算出这笔注该下多少。`;
+    } else if(kellyX<=0){
+      cls='fold'; actTxt='过牌 / 弃牌';
+      headNote=`你的权益 ${eqPct.toFixed(1)}%。`;
+      capNote=`凯利最优投入为 <b>${fmt(kellyX)}</b>（≤0）：在「对手会跟注」的假设下，你这手牌（权益 ${eqPct.toFixed(1)}%）没有足够优势去主动投入资金 → 过牌。想下注获利，需要等更强牌面，或靠对手弃牌率。`;
+    } else {
+      const cap=Math.min(2*P, 0.99*S);
+      const capped=kellyX>cap;
+      bet=Math.round(Math.min(kellyX,cap));
+      cls='raise'; actTxt=`下注 · ${sz.name}`;
+      headNote=`你的权益 ${eqPct.toFixed(1)}%。下注额由凯利公式解出：在你当前的权益、底池、筹码下，让<b>长期资金增长最快</b>的那笔投入（假设对手会跟注、不计弃牌率）。`;
+      capNote=`凯利最优下注 <b>${fmt(kellyX)}</b>（= ${(kellyX/S*100).toFixed(0)}% 筹码 / ${P>0?(kellyX/P*100).toFixed(0):'0'}% 底池）${capped?`，已按实战上限封顶到 <b>${fmt(bet)}</b>（不超过 2 倍底池、且不超过全部筹码）`:''}。改底池或筹码会<b>实时重算</b>。`;
+    }
     detail=`<div class="pk-kpi" style="margin-top:8px">
-        <div class="pill">建议尺度 <b>${sz.pct>0?(sz.pct*100).toFixed(0)+'% 底池':'—'}</b></div>
-        <div class="pill">建议下注 <b>${bet>0?'¥'+bet.toLocaleString('en-US'):'—'}</b></div>
-        <div class="pill">你的权益 <b>${eqPct.toFixed(1)}%</b></div>
+        <div class="pill">建议下注 <b>${bet>0?fmt(bet):'—'}</b></div>
+        <div class="pill">占底池 <b>${P>0&&bet>0?(bet/P*100).toFixed(0)+'%':'—'}</b></div>
+        <div class="pill">占筹码 <b>${S>0&&bet>0?(bet/S*100).toFixed(0)+'%':'—'}</b></div>
       </div>
-      <div class="pk-note" style="margin-top:8px">按胜率 ${eqPct.toFixed(1)}% 自动建议<b>${sz.name}</b>：下注 <b>¥${bet.toLocaleString('en-US')}</b>（= ${pctOfPot.toFixed(0)}% 当前底池）。改底池会实时重算。${stack>0?`你的筹码 ¥${stack.toLocaleString('en-US')}，${bet<=stack?'未超筹码':'已按筹码封顶'}。`:''}</div>
-      <div class="pk-note" style="margin-top:8px">说明：主动下注的尺度按胜率高低给定（胜率越高下注越大）；凯利公式只用于「面对下注要跟多少」的场景，所以此模式不显示凯利比例。</div>`;
+      <div class="pk-note" style="margin-top:8px">${headNote}</div>
+      <div class="pk-note" style="margin-top:8px">${capNote}</div>`;
   }
   box.className='pk-advice '+cls;
   box.innerHTML=`<div class="act">建议动作（${act==='lead'?'我先手':'我面对下注'}）：${actTxt}</div>${detail}
@@ -5082,8 +5128,8 @@ function initPoker(){
     if(rowCall) rowCall.style.display = act==='face' ? '' : 'none';
     const hint=document.getElementById('pkActHint');
     if(hint) hint.textContent = act==='face'
-      ? '面对下注：底池填「含对手下注的总额」，需跟注填对手下注额，工具按底池赔率＋凯利给跟注建议。'
-      : '我先手：只填底池和筹码，工具按胜率自动建议你该下注多少（实时随底池变化）。';
+      ? '面对下注：底池填「含对手下注的总额」，需跟注填对手下注额。工具给跟/弃判决，并用凯利判断该不该加注、加注到多少。'
+      : '我先手：填底池和筹码，工具用凯利公式直接算出你该下注多少（随底池、筹码实时重算）。';
     if(window.__pokerEquity!=null) pkStrategy();
   }
   seg.querySelectorAll('button').forEach(btn=>{
