@@ -1141,9 +1141,8 @@ button,.nav-item,.tb-item,.zd-btn,.zhd-row,.rf-sel,.preset-btn,.pill,.btn-buy,
         </div>
 
         <h4 style="margin:18px 0 4px;font-size:14px;font-weight:650">下注建议（胜率一出即给出）</h4>
-        <div class="pk-help">下注建议按<b>德州扑克策略</b>给出：翻前看<b>起手牌等级</b>（顶级/强牌主动加注，弱牌过牌），翻后看<b>成牌强度 + 听牌</b>（强牌价值下注、听牌半诈唬、弱牌过牌）。<br>
-权益 Equity = 这手牌摊牌获胜的概率（多人平局按平分人数分摊，如 3 人平分只算 1/3），作为参考展示。<br>
-<span style="color:var(--gold)">关于凯利</span>：凯利公式仅作数学对照（假设对手永不弃牌）。强牌靠<b>对手弃牌率</b>本就能盈利，所以凯利为负不代表该过牌——动作以策略为准。</div>
+        <div class="pk-help">下注建议分两层：<b>动作</b>按德州扑克策略给出（翻前看<b>起手牌等级</b>，翻后看<b>成牌强度 + 听牌</b>）；<b>下注尺度</b>按<b>凯利公式</b>算出最优投入——凯利为正直接用，为负（常见于翻前开池，因公式假设对手永不弃牌）则退化为标准尺度并说明原因。<br>
+权益 Equity = 这手牌摊牌获胜的概率（多人平局按平分人数分摊），作为参考展示。</div>
         <div class="pk-seg" id="pkAct">
           <button type="button" class="on" data-act="lead">我先手 · 主动下注</button>
           <button type="button" data-act="face">我面对下注 · 要跟注</button>
@@ -5067,6 +5066,27 @@ function pkSizeName(ratio){
   if(ratio>=0.20) return '小额试探下注';
   return '极小注（多数情况过牌）';
 }
+// 下注尺度：以凯利最优总投入 pkKellyX 为首选；为负或无筹码时退化为德州标准尺度
+// kind: 'open'(翻前开池) / 'value'(翻后价值) / 'semibluff'(翻后半诈唬) / 'raise'(面对下注加注)
+function pkBet(eq,S,P,C,kind){
+  const k=pkKellyX(eq,S,P,C);          // 凯利最优总投入（$），主动下注时 C=0 即下注额
+  let floor,cap,std;
+  if(kind==='open'){       floor=1.5*P; cap=2.5*P;  std=2.5*P; }
+  else if(kind==='value'){ floor=0.4*P; cap=1.5*P;  std=0.6*P; }
+  else if(kind==='semibluff'){ floor=0.4*P; cap=1.0*P; std=0.5*P; }
+  else { floor=C+0.5*P;    cap=C+2.0*P; std=C+2.0*P; }   // raise 面对下注
+  const smax=S>0?0.99*S:Infinity;
+  cap=Math.min(cap,smax); std=Math.min(std,smax);
+  if(S>0 && k>floor){
+    return {bet:Math.round(Math.max(floor,Math.min(k,cap))), src:'kelly', k};
+  }
+  return {bet:Math.round(std), src:'std', k};
+}
+function pkSizeNote(bet,fmt,S){
+  if(S<=0) return `下注尺度（凯利公式）：未填筹码，暂按德州标准尺度 <b>${fmt(bet.bet)}</b>；填入筹码后自动改用凯利最优。`;
+  if(bet.src==='kelly') return `下注尺度（凯利公式）：最优解 <b>${fmt(bet.k)}</b> → 建议 <b>${fmt(bet.bet)}</b>。凯利为正，直接采用（已按合理上限封顶）。`;
+  return `下注尺度（凯利公式）：最优解 <b>${fmt(bet.k)}</b>（≤0）。凯利公式假设对手永不弃牌，会低估加注价值；按德州策略仍要下注，尺度用标准 <b>${fmt(bet.bet)}</b>。`;
+}
 /* ============ 扑克策略辅助：起手牌分级 / 听牌检测 / 顶对判断 ============ */
 function pkHoleTier(hole){
   const a=hole[0], b=hole[1];
@@ -5091,10 +5111,10 @@ function pkHoleTier(hole){
 }
 function pkDetectDraws(hole, board){
   const all=hole.concat(board);
-  const bs={'s':0,'h':0,'d':0,'c':0};
-  all.forEach(c=>{ if(bs[c.s]!=null) bs[c.s]++; });
+  const bs=[0,0,0,0];                 // 按花色索引 0..3 计数（牌的 c.s 存的是索引，不是字符）
+  all.forEach(c=>{ if(c.s>=0&&c.s<4) bs[c.s]++; });
   let flushDraw=false;
-  for(const k in bs){ if(bs[k]===4) flushDraw=true; }
+  for(let k=0;k<4;k++){ if(bs[k]===4) flushDraw=true; }
   const set=new Set(all.map(c=>c.r));
   const set2=new Set(all.map(c=>c.r===12?13:c.r));
   function hasDraw(rs){
@@ -5214,15 +5234,15 @@ function pkStrategy(){
     const isPre=board2.length===0;
     if(isPre){
       const t=pkHoleTier(myHole2);
-      const b=Math.min(Math.round(P*2.5), S>0?Math.floor(0.99*S):1e12);
+      const bet=pkBet(eq,S,P,0,'open');
       if(t.open==='raise'){
         cls='raise'; actTxt='开池加注（Open Raise）';
         detail=`<div class="pk-kpi" style="margin-top:8px">
-            <div class="pill">建议加注到 <b>${fmt(b)}</b></div>
+            <div class="pill">建议加注到 <b>${fmt(bet.bet)}</b></div>
             <div class="pill">权益 <b>${eqPct.toFixed(1)}%</b></div>
           </div>
-          <div class="pk-note" style="margin-top:8px"><b>${t.label}</b> 属${t.tier==='premium'?'<b>顶级</b>':'<b>强</b>'}起手牌（前位开牌范围前 ~15%）。德州逻辑：这类牌<b>不论面对几个对手都该主动加注建立底池</b>，而不是过牌。${S<=0?'（未填筹码，加注额按底池的 2.5 倍估算）':''}</div>
-          <div class="pk-note" style="margin-top:8px">凯利数学参考：原始解 ${fmt(kellyX)} —— 翻前应以「牌力等级 + 标准开牌范围」为准，凯利仅作对照、不主导动作（凯利假设对手永不弃牌，会低估 AK 这类牌的加注价值）。</div>`;
+          <div class="pk-note" style="margin-top:8px"><b>${t.label}</b> 属${t.tier==='premium'?'<b>顶级</b>':'<b>强</b>'}起手牌（标准开牌范围）。德州逻辑：这类牌<b>不论面对几个对手都该主动开池加注建立底池</b>，而不是过牌。</div>
+          <div class="pk-note" style="margin-top:8px">${pkSizeNote(bet,fmt,S)}</div>`;
       } else if(t.open==='call'){
         cls='call'; actTxt='平跟 / 位置加注';
         detail=`<div class="pk-kpi" style="margin-top:8px">
@@ -5242,29 +5262,28 @@ function pkStrategy(){
       const strong=made>=2||(made===1&&top);
       const ml = made>=0?PK_CAT[made]:'牌面未成型';
       if(strong){
-        const frac=eq>=0.7?0.7:eq>=0.5?0.55:0.4;
-        const b=Math.min(Math.round(P*frac), S>0?Math.floor(0.99*S):1e12);
+        const bet=pkBet(eq,S,P,0,'value');
         cls='raise'; actTxt='价值下注（Value Bet）';
         detail=`<div class="pk-kpi" style="margin-top:8px">
-            <div class="pill">建议下注 <b>${fmt(b)}</b></div>
+            <div class="pill">建议下注 <b>${fmt(bet.bet)}</b></div>
             <div class="pill">权益 <b>${eqPct.toFixed(1)}%</b></div>
           </div>
           <div class="pk-note" style="margin-top:8px">你已做成 <b>${ml}</b>${top?'（顶对）':''}，权益 ${eqPct.toFixed(1)}%。德州逻辑：有强牌应<b>下注拿价值</b>，让对手用更差的牌跟注。</div>
-          <div class="pk-note" style="margin-top:8px">凯利数学参考：最优下注 ${fmt(kellyX)}（${kellyX>0?'正数，与价值下注一致':'负数，提示谨慎'}）。</div>`;
+          <div class="pk-note" style="margin-top:8px">${pkSizeNote(bet,fmt,S)}</div>`;
       } else if(dr.flushDraw||dr.straightDraw){
-        const b=Math.min(Math.round(P*0.5), S>0?Math.floor(0.99*S):1e12);
+        const bet=pkBet(eq,S,P,0,'semibluff');
         cls='raise'; actTxt='半诈唬下注（Semi-Bluff）';
         detail=`<div class="pk-kpi" style="margin-top:8px">
-            <div class="pill">建议下注 <b>${fmt(b)}</b></div>
+            <div class="pill">建议下注 <b>${fmt(bet.bet)}</b></div>
             <div class="pill">权益 <b>${eqPct.toFixed(1)}%</b></div>
           </div>
           <div class="pk-note" style="margin-top:8px">你当前未成牌，但听<b>${dr.flushDraw?'同花':''}${dr.flushDraw&&dr.straightDraw?' / ':''}${dr.straightDraw?'顺子':''}</b>。德州逻辑：听牌应<b>半诈唬下注</b>——既能逼对手弃牌直接赢，也能中牌后反超。</div>
-          <div class="pk-note" style="margin-top:8px">凯利数学参考：最优下注 ${fmt(kellyX)}（计入弃牌率时听牌下注通常为正，纯摊牌模型会低估）。</div>`;
+          <div class="pk-note" style="margin-top:8px">${pkSizeNote(bet,fmt,S)}</div>`;
       } else {
         cls='fold'; actTxt='过牌（Check）';
         detail=`<div class="pk-kpi" style="margin-top:8px"><div class="pill">权益 <b>${eqPct.toFixed(1)}%</b></div></div>
           <div class="pk-note" style="margin-top:8px">你当前是 <b>${ml}</b>、无听牌，权益 ${eqPct.toFixed(1)}%。弱牌先手应<b>过牌</b>控制风险，等免费牌或弃牌。</div>
-          <div class="pk-note" style="margin-top:8px">凯利数学参考：最优下注 ${fmt(kellyX)}（负数 = 不该主动投入）。</div>`;
+          <div class="pk-note" style="margin-top:8px">凯利最优解 ${fmt(kellyX)}（负数 = 不该主动投入），与「弱牌过牌」一致。</div>`;
       }
     }
   }
@@ -5282,7 +5301,7 @@ function initPoker(){
     const hint=document.getElementById('pkActHint');
     if(hint) hint.textContent = act==='face'
       ? '面对下注：底池填「含对手下注的总额」，需跟注填对手下注额。工具给跟/弃判决，并用凯利判断该不该加注、加注到多少。'
-      : '我先手：填底池和筹码，工具用凯利公式直接算出你该下注多少（随底池、筹码实时重算）。';
+      : '我先手：动作按德州策略（起手牌等级 / 成牌 / 听牌），下注尺度按凯利公式算出（随底池、筹码实时重算）。';
     if(window.__pokerEquity!=null) pkStrategy();
   }
   seg.querySelectorAll('button').forEach(btn=>{
